@@ -1,0 +1,27 @@
+[theme]
+base = "light"
+primaryColor = "#ee1d52"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f6f7f9"
+textColor = "#111827"
+linkColor = "#c8103e"
+baseRadius = "0.75rem"
+buttonRadius = "0.75rem"
+borderColor = "#e5e7eb"
+dataframeHeaderBackgroundColor = "#f3f4f6"
+showWidgetBorder = true
+metricValueFontSize = "1.75rem"
+metricValueFontWeight = 700
+
+[server]
+address = "127.0.0.1"
+port = 8501
+headless = false
+maxUploadSize = 20
+showEmailPrompt = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
