@@ -16,7 +16,7 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Khi release `v1.1.0` được phát hành, tải installer từ [GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.1.0.exe`.
+Tải installer từ [GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.1.1.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -26,7 +26,19 @@ Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shor
 
 Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\tiktok_affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
 
-Artifact hiện cố ý **không code-sign**; Windows SmartScreen có thể cảnh báo. SHA-256 xác minh integrity, không thay thế publisher trust.
+Mỗi máy cài đặt hoạt động độc lập với database riêng. Người dùng chỉ cần cài full installer rồi chạy local; domain, Cloudflare Tunnel, OIDC và PostgreSQL chỉ cần khi chủ động chuyển sang mô hình dùng chung nhiều người.
+
+Owner có thể dùng mục **Reset Data** trong dashboard. App bắt buộc nhập cụm xác nhận, tạo backup đầy đủ tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\backups`, kiểm tra backup rồi mới xoá lịch sử import, đơn hàng và mục tiêu đã chỉnh sửa. Các target mặc định được khôi phục ngay sau reset.
+
+Mục **Khôi phục backup** liệt kê thời gian, dung lượng và row counts để xem trước. Restore chỉ thay các bảng dữ liệu báo cáo, giữ nguyên user/session đang dùng và luôn tạo thêm một safety backup của trạng thái hiện tại trước khi ghi đè.
+
+Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. Khi có bản mới, app tải đúng installer của latest stable GitHub Release, xác minh cả digest do GitHub cung cấp và `SHA256SUMS.txt`, sau đó đóng app, chạy Inno Setup silent và mở lại. Cài tự động chỉ bật trong bản Windows full installer ở local mode; source dev và shared server không tự thay binary.
+
+Kết quả helper/installer được ghi tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\updater.log` và thư mục `data\updates\v<version>` để chẩn đoán nếu update bị Windows hoặc antivirus chặn.
+
+Repository phát hành hiện là private nên máy nhận update phải có quyền đọc repo và một trong các nguồn xác thực sau: biến môi trường user `TIKTOK_REPORT_GITHUB_TOKEN` (ưu tiên), `GH_TOKEN` hoặc `GITHUB_TOKEN`. GitHub CLI chỉ được dùng khi đã `gh auth login` và chủ động đặt `TIKTOK_REPORT_USE_GH_CLI=1`; bản cài không tự chạy executable tìm thấy trong `PATH`. Dùng fine-grained token chỉ cấp **Contents: Read-only**; app không nhúng token vào EXE hay release. Muốn update hoàn toàn zero-config cho người ngoài GitHub cần tách một public update feed/release repo riêng.
+
+Artifact hiện cố ý **không code-sign**; Windows SmartScreen có thể cảnh báo và làm gián đoạn bước cài tự động cho tới khi người dùng chấp thuận. SHA-256 xác minh integrity, không thay thế publisher trust.
 
 ## Chạy source trên Windows
 
@@ -60,7 +72,7 @@ pnpm --dir web dev
 
 Mở `http://127.0.0.1:3000`; API local ở `http://127.0.0.1:8000`. `AUTH_MODE=local` chỉ được bind loopback và dùng local owner.
 
-## Shared web với OIDC + PostgreSQL
+## Shared web tùy chọn với OIDC + PostgreSQL
 
 Shared multi-user cần PostgreSQL, OIDC provider thật, TLS/reverse proxy và secret injection ngoài Git:
 
@@ -100,7 +112,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v1.1.0.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v1.1.1.exe`
 - `artifacts\installer\SHA256SUMS.txt`
 
 Không phát hành portable EXE. `BUILD_EXE.bat` chỉ tạo runtime staging nội bộ để Inno Setup đóng gói, đồng thời chạy privacy gate để chặn database người dùng lọt vào installer. Build installer cần Inno Setup 6 trên máy phát triển:

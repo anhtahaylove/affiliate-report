@@ -34,6 +34,14 @@ from sqlalchemy.exc import IntegrityError
 from .parser import file_sha256
 
 DEFAULT_DATABASE_URL = "sqlite:///data/tiktok_affiliate_report.db"
+DEFAULT_MONTHLY_TARGETS = {
+    date(2026, 3, 1): 350000,
+    date(2026, 4, 1): 400000,
+    date(2026, 5, 1): 450000,
+    date(2026, 6, 1): 500000,
+    date(2026, 7, 1): 500000,
+    date(2026, 8, 1): 500000,
+}
 metadata = MetaData()
 
 import_batches = Table(
@@ -191,16 +199,8 @@ def init_db(engine: Engine) -> None:
 
 
 def seed_targets(engine: Engine) -> None:
-    targets = {
-        date(2026, 3, 1): 350000,
-        date(2026, 4, 1): 400000,
-        date(2026, 5, 1): 450000,
-        date(2026, 6, 1): 500000,
-        date(2026, 7, 1): 500000,
-        date(2026, 8, 1): 500000,
-    }
     with engine.begin() as conn:
-        for month, amount in targets.items():
+        for month, amount in DEFAULT_MONTHLY_TARGETS.items():
             values = {"account": "ALL", "month": month, "target_commission": amount}
             if engine.dialect.name == "postgresql":
                 from sqlalchemy.dialects.postgresql import insert

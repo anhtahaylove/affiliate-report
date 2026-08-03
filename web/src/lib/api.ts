@@ -51,6 +51,50 @@ export type ImportHistoryRow = {
   created_at: string;
 };
 
+export type ResetDataResponse = {
+  backup_path: string;
+  deleted_counts: Record<string, number>;
+  default_targets_restored: number;
+};
+
+export type BackupItem = {
+  id: string;
+  filename: string;
+  created_at: string;
+  size_bytes: number;
+  valid: boolean;
+  counts: {
+    business: Record<string, number>;
+    auth: Record<string, number>;
+  };
+  error?: string | null;
+};
+
+export type RestoreBackupResponse = {
+  restored_counts: Record<string, number>;
+  safety_backup_path: string;
+};
+
+export type UpdateStatus = {
+  current_version: string;
+  latest_version: string;
+  available: boolean;
+  installable: boolean;
+  automatic_install_supported: boolean;
+  release_name: string | null;
+  release_url: string | null;
+  published_at: string | null;
+  notes: string | null;
+  source_repo: string | null;
+};
+
+export type InstallUpdateResponse = {
+  version: string;
+  sha256: string;
+  status: string;
+  release_url: string;
+};
+
 export type MetaResponse = {
   accounts: string[];
   statuses: string[];
@@ -200,6 +244,35 @@ export async function saveTarget(account: string, month: string, targetCommissio
 export async function loadImportHistory(limit = 5) {
   const query = queryString({ limit: String(limit) });
   return request<ListResponse<ImportHistoryRow>>(`/api/v1/imports${query}`);
+}
+
+export async function resetData(confirmation: string) {
+  return request<ResetDataResponse>("/api/v1/admin/reset-data", {
+    method: "POST",
+    body: JSON.stringify({ confirmation }),
+  });
+}
+
+export async function loadBackups() {
+  return request<ListResponse<BackupItem>>("/api/v1/admin/backups");
+}
+
+export async function restoreBackup(backupId: string, confirmation: string) {
+  return request<RestoreBackupResponse>("/api/v1/admin/backups/restore", {
+    method: "POST",
+    body: JSON.stringify({ backup_id: backupId, confirmation }),
+  });
+}
+
+export async function checkUpdate() {
+  return request<UpdateStatus>("/api/v1/admin/update");
+}
+
+export async function installUpdate(confirmation: string) {
+  return request<InstallUpdateResponse>("/api/v1/admin/update/install", {
+    method: "POST",
+    body: JSON.stringify({ confirmation }),
+  });
 }
 
 export async function uploadExport(account: string, file: File) {

@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+import sqlite3
+import threading
+import time
 from datetime import date
 from io import BytesIO
 
 import pandas as pd
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 import tiktok_affiliate_report.api as api_module
+import tiktok_affiliate_report.reset_data as reset_data_module
 from tiktok_affiliate_report.api import create_app
-from tiktok_affiliate_report.db import get_engine, import_rows, monthly_targets
+from tiktok_affiliate_report.db import (
+    get_engine,
+    import_batches,
+    import_rows,
+    monthly_targets,
+    order_line_versions,
+)
 from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
+from tiktok_affiliate_report.version import APP_VERSION
 
 
 def api(tmp_path):
@@ -57,12 +69,74 @@ def xlsx_bytes(rows):
 def test_health_and_meta(tmp_path):
     client, _ = api(tmp_path)
 
+    assert client.app.version == APP_VERSION
     assert client.get("/health").json() == {"status": "ok"}
     meta = client.get("/api/v1/meta").json()
 
     assert meta["accounts"] == ["CHIISTORE", "EMLINHNOIY", "THAOBRA"]
     assert meta["statuses"] == ["settled", "ineligible", "pending", "unknown"]
     assert meta["max_upload_mb"] == 20
+
+
+def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatch):
+    client, _ = api(tmp_path)
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.0.exe"
+    installer.write_bytes(b"verified")
+    scheduled = {}
+
+    monkeypatch.setattr(
+        api_module,
+        "check_for_update",
+        lambda: {
+            "current_version": APP_VERSION,
+            "latest_version": "1.2.0",
+            "available": True,
+            "installable": True,
+        },
+    )
+    monkeypatch.setattr(api_module, "_automatic_update_supported", lambda _app: True)
+    monkeypatch.setattr(
+        api_module,
+        "download_latest_update",
+        lambda _data_dir: {
+            "version": "1.2.0",
+            "installer_path": str(installer),
+            "sha256": "A" * 64,
+            "release_url": "https://github.com/example/release",
+        },
+    )
+
+    def capture_schedule(path, sha256, log_path, shutdown):
+        scheduled.update(path=path, sha256=sha256, log_path=log_path, shutdown=shutdown)
+
+    monkeypatch.setattr(api_module, "schedule_installer", capture_schedule)
+    client.app.state.update_shutdown = lambda: None
+
+    checked = client.get("/api/v1/admin/update")
+    wrong = client.post("/api/v1/admin/update/install", json={"confirmation": "UPDATE"})
+    installed = client.post(
+        "/api/v1/admin/update/install",
+        json={"confirmation": "CAP NHAT UNG DUNG"},
+    )
+    duplicate = client.post(
+        "/api/v1/admin/update/install",
+        json={"confirmation": "CAP NHAT UNG DUNG"},
+    )
+
+    assert checked.status_code == 200
+    assert checked.json()["automatic_install_supported"] is True
+    assert wrong.status_code == 422
+    assert installed.status_code == 200
+    assert installed.json() == {
+        "status": "scheduled",
+        "version": "1.2.0",
+        "sha256": "A" * 64,
+        "release_url": "https://github.com/example/release",
+    }
+    assert scheduled["path"] == installer
+    assert scheduled["sha256"] == "A" * 64
+    assert scheduled["log_path"].name == "updater.log"
+    assert duplicate.status_code == 409
 
 
 def test_report_endpoints_return_items_count_and_safe_nulls(tmp_path):
@@ -174,6 +248,103 @@ def test_import_rejects_file_when_stream_crosses_size_limit(tmp_path, monkeypatc
 
     assert response.status_code == 413
     assert response.json() == {"detail": "File exceeds 0 MB"}
+
+
+def test_owner_reset_data_creates_backup_deletes_imports_and_restores_default_targets(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+
+    wrong = client.post("/api/v1/admin/reset-data", json={"confirmation": "RESET DATA"})
+    response = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"})
+
+    assert wrong.status_code == 422
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["deleted_counts"]["import_batches"] == 1
+    assert payload["deleted_counts"]["order_line_versions"] == 1
+    assert payload["backup_path"].endswith(".db")
+    with engine.connect() as conn:
+        assert conn.execute(select(import_batches)).all() == []
+        assert conn.execute(select(order_line_versions)).all() == []
+        assert conn.execute(select(monthly_targets)).all()
+
+
+def test_reset_data_aborts_before_delete_when_backup_check_fails(tmp_path, monkeypatch):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+
+    def fail_backup_check(_backup_path):
+        raise RuntimeError("bad backup")
+
+    monkeypatch.setattr(reset_data_module, "_check_backup", fail_backup_check)
+
+    response = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"})
+
+    assert response.status_code == 500
+    with engine.connect() as conn:
+        assert conn.execute(select(import_batches)).all()
+        assert conn.execute(select(order_line_versions)).all()
+
+
+def test_reset_data_does_not_lose_concurrent_import_after_backup(tmp_path, monkeypatch):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    concurrent_row = normalized(**{"ID đơn hàng": "O2", "ID SKU": "S2"})
+    backup_checked = threading.Event()
+    import_started = threading.Event()
+    original_check_backup = reset_data_module._check_backup
+
+    def slow_backup_check(backup_path):
+        original_check_backup(backup_path)
+        backup_checked.set()
+        import_started.wait(2)
+        time.sleep(0.2)
+
+    monkeypatch.setattr(reset_data_module, "_check_backup", slow_backup_check)
+    reset_result = {}
+    import_result = {}
+
+    def reset():
+        reset_result["response"] = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"})
+
+    def concurrent_import():
+        import_started.set()
+        import_result["summary"] = import_rows(
+            engine,
+            filename="concurrent.xlsx",
+            file_bytes=b"concurrent",
+            account="CHIISTORE",
+            rows=[concurrent_row],
+        )
+
+    reset_thread = threading.Thread(target=reset)
+    reset_thread.start()
+    assert backup_checked.wait(2)
+    import_thread = threading.Thread(target=concurrent_import)
+    import_thread.start()
+    reset_thread.join(2)
+    import_thread.join(2)
+
+    assert not reset_thread.is_alive()
+    assert not import_thread.is_alive()
+    assert reset_result["response"].status_code == 200
+    assert import_result["summary"]["inserted"] == 1
+    business_key = concurrent_row["business_key"]
+    with engine.connect() as conn:
+        in_live_db = bool(
+            conn.execute(
+                select(order_line_versions.c.id).where(order_line_versions.c.business_key == business_key)
+            ).first()
+        )
+    backup_path = reset_result["response"].json()["backup_path"]
+    with sqlite3.connect(backup_path) as conn:
+        in_backup = bool(
+            conn.execute(
+                "SELECT 1 FROM order_line_versions WHERE business_key = ?",
+                (business_key,),
+            ).fetchone()
+        )
+    assert in_live_db or in_backup
 
 
 def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):

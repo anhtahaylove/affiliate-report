@@ -5,9 +5,13 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   apiUrl,
+  BackupItem,
+  checkUpdate,
   CurrentUser,
   DailyRow,
+  installUpdate,
   loadDashboard,
+  loadBackups,
   loadImportHistory,
   loadMonthlyKpi,
   loadCurrentUser,
@@ -17,8 +21,11 @@ import {
   OverviewRow,
   ImportHistoryRow,
   MonthlyKpiRow,
+  resetData,
+  restoreBackup,
   saveTarget,
   TargetRow,
+  UpdateStatus,
   uploadExport,
 } from "@/lib/api";
 
@@ -64,6 +71,27 @@ function formatDateTime(value: string | null | undefined) {
   return Number.isNaN(parsed.getTime()) ? value : dateTime.format(parsed);
 }
 
+function formatBytes(value: number | null | undefined) {
+  if (value == null) return "—";
+  if (value < 1024 * 1024) return `${integer.format(Math.round(value / 1024))} KB`;
+  return `${integer.format(Math.round((value / 1024 / 1024) * 10) / 10)} MB`;
+}
+
+function countsText(counts: Record<string, number>) {
+  const text = Object.entries(counts)
+    .map(([name, count]) => `${name}: ${integer.format(Number(count))}`)
+    .join(" · ");
+  return text || "Không có bảng";
+}
+
+function updateErrorMessage(reason: unknown) {
+  const message = errorMessage(reason, "Không thể kiểm tra cập nhật.");
+  if (reason instanceof ApiError && [401, 403, 404].includes(reason.status)) {
+    return `${message} Kiểm tra token feed private/cấu hình quyền truy cập bản phát hành.`;
+  }
+  return message;
+}
+
 export function Dashboard() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authError, setAuthError] = useState("");
@@ -86,8 +114,22 @@ export function Dashboard() {
   const [savingTarget, setSavingTarget] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
+  const [resetPhrase, setResetPhrase] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
+  const [backups, setBackups] = useState<BackupItem[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [backupMessage, setBackupMessage] = useState("");
+  const [selectedBackupId, setSelectedBackupId] = useState("");
+  const [restorePhrase, setRestorePhrase] = useState("");
+  const [restoring, setRestoring] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [installingUpdate, setInstallingUpdate] = useState(false);
 
   const canWrite = user?.role === "operator" || user?.role === "owner";
+  const isOwner = user?.role === "owner";
   const monthStart = month ? firstDayOfMonth(month) : "";
   const monthEnd = month ? lastDayOfMonth(month) : "";
 
@@ -110,6 +152,10 @@ export function Dashboard() {
   const activeAchievement = activeKpi?.target_achievement ?? null;
   const activeProgress = Math.max(0, Math.min((activeAchievement ?? 0) * 100, 100));
   const gap = activeKpi?.gap == null ? null : Math.max(-Number(activeKpi.gap), 0);
+  const selectedBackup = useMemo(
+    () => backups.find((backup) => backup.id === selectedBackupId),
+    [backups, selectedBackupId],
+  );
 
   const loadRecentImports = useCallback(async () => {
     try {
@@ -132,6 +178,44 @@ export function Dashboard() {
       setTargets([]);
       setTargetDrafts({});
       setTargetError(errorMessage(reason, "Không thể tải mục tiêu tháng."));
+    }
+  }, []);
+
+  const loadBackupRows = useCallback(async () => {
+    setBackupsLoading(true);
+    try {
+      const response = await loadBackups();
+      setBackups(response.items);
+      setSelectedBackupId((current) =>
+        current && response.items.some((backup) => backup.id === current && backup.valid)
+          ? current
+          : (response.items.find((backup) => backup.valid)?.id ?? ""),
+      );
+      setBackupMessage("");
+    } catch (reason) {
+      setBackups([]);
+      setSelectedBackupId("");
+      setBackupMessage(errorMessage(reason, "Không thể tải danh sách backup."));
+    } finally {
+      setBackupsLoading(false);
+    }
+  }, []);
+
+  const loadUpdateStatus = useCallback(async () => {
+    setUpdateLoading(true);
+    try {
+      const response = await checkUpdate();
+      setUpdateStatus(response);
+      setUpdateMessage(
+        response.available
+          ? `Có bản ${response.latest_version}${response.installable ? " sẵn sàng cài." : " nhưng chưa cài tự động được."}`
+          : `Đang ở bản mới nhất (${response.current_version}).`,
+      );
+    } catch (reason) {
+      setUpdateStatus(null);
+      setUpdateMessage(updateErrorMessage(reason));
+    } finally {
+      setUpdateLoading(false);
     }
   }, []);
 
@@ -206,6 +290,13 @@ export function Dashboard() {
     };
   }, [loadRecentImports, loadTargetRows]);
 
+  useEffect(() => {
+    if (user?.role !== "owner") return;
+    async function loadOwnerPanels() {
+      await Promise.all([loadBackupRows(), loadUpdateStatus()]);
+    }
+    void loadOwnerPanels();
+  }, [loadBackupRows, loadUpdateStatus, user?.role]);
 
   function toggleAccount(account: string) {
     setAccounts((current) =>
@@ -233,6 +324,90 @@ export function Dashboard() {
       }
     } finally {
       setSavingTarget("");
+    }
+  }
+
+  async function handleResetData(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isOwner) return;
+    const phrase = resetPhrase.trim();
+    if (phrase !== "XOA DU LIEU") {
+      setResetMessage("Nhập đúng cụm XOA DU LIEU để mở khóa reset.");
+      return;
+    }
+    if (!window.confirm("Xóa toàn bộ dữ liệu import/report? Hệ thống sẽ tạo backup trước khi xóa.")) return;
+
+    setResetting(true);
+    setResetMessage("");
+    try {
+      const result = await resetData(phrase);
+      const deleted = result.deleted_counts;
+      const deletedText = Object.entries(deleted)
+        .map(([name, count]) => `${name}: ${integer.format(Number(count))}`)
+        .join(" · ");
+      setResetPhrase("");
+      setResetMessage(`Đã xóa dữ liệu. Backup: ${result.backup_path}${deletedText ? `. Đã xóa: ${deletedText}` : ""}. Khôi phục ${integer.format(result.default_targets_restored)} target mặc định.`);
+      await Promise.all([refresh(), loadBackupRows()]);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) {
+        setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
+      } else {
+        setResetMessage(errorMessage(reason, "Reset dữ liệu thất bại."));
+      }
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  async function handleRestoreBackup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!isOwner) return;
+    const phrase = restorePhrase.trim();
+    if (!selectedBackup) {
+      setBackupMessage("Hãy chọn một backup hợp lệ để khôi phục.");
+      return;
+    }
+    if (!selectedBackup.valid) {
+      setBackupMessage("Backup đang chọn không hợp lệ; không thể khôi phục.");
+      return;
+    }
+    if (phrase !== "KHOI PHUC DU LIEU") {
+      setBackupMessage("Nhập đúng cụm KHOI PHUC DU LIEU để mở khóa khôi phục.");
+      return;
+    }
+    if (!window.confirm(`Khôi phục backup ${selectedBackup.filename}? Dữ liệu hiện tại sẽ được backup an toàn trước khi ghi đè.`)) return;
+
+    setRestoring(true);
+    setBackupMessage("");
+    try {
+      const result = await restoreBackup(selectedBackup.id, phrase);
+      setRestorePhrase("");
+      setBackupMessage(`Đã khôi phục. Safety backup: ${result.safety_backup_path}. Bảng: ${countsText(result.restored_counts)}.`);
+      await Promise.all([refresh(), loadBackupRows()]);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 401) {
+        setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
+      } else {
+        setBackupMessage(errorMessage(reason, "Khôi phục backup thất bại."));
+      }
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  async function handleInstallUpdate() {
+    if (!isOwner || !updateStatus?.available || !updateStatus.installable || !updateStatus.automatic_install_supported) return;
+    if (!window.confirm("Cài bản cập nhật ngay? Ứng dụng sẽ đóng và mở lại sau khi cài xong.")) return;
+
+    setInstallingUpdate(true);
+    setUpdateMessage("");
+    try {
+      const result = await installUpdate("CAP NHAT UNG DUNG");
+      setUpdateMessage(`Đang cài bản ${result.version} (${result.status}). Ứng dụng sẽ đóng và mở lại sau khi hoàn tất. SHA256: ${result.sha256}.`);
+    } catch (reason) {
+      setUpdateMessage(updateErrorMessage(reason));
+    } finally {
+      setInstallingUpdate(false);
     }
   }
 
@@ -311,6 +486,8 @@ export function Dashboard() {
           <a href="#dashboard" aria-current="page">Dashboard</a>
           <a href="#targets">Mục tiêu</a>
           {canWrite ? <a href="#import">Import</a> : null}
+          {isOwner ? <a href="#backup-restore">Backup</a> : null}
+          {isOwner ? <a href="#app-update">Cập nhật</a> : null}
           <a href="#accounts">Account</a>
         </nav>
         <div className={`health-card${error || metaError ? " offline" : ""}`}>
@@ -327,7 +504,7 @@ export function Dashboard() {
             <p className="subtle">Theo dõi hoa hồng, tiến độ target và import chồng lặp theo từng account.</p>
           </div>
           {user ? (
-            <div className="user-menu" aria-label="Tài khoản hiện tại">
+          <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
               <span>{user.email}</span>
               <strong>{user.role}</strong>
               <button type="button" onClick={handleLogout}>Đăng xuất</button>
@@ -470,6 +647,121 @@ export function Dashboard() {
                 </button>
                 {uploadMessage ? <p className="upload-result" aria-live="polite">{uploadMessage}</p> : null}
               </form>
+            </section>
+          ) : null}
+
+          {isOwner ? (
+            <section className="section danger-zone panel wide" aria-labelledby="reset-data-title">
+              <div className="section-heading">
+                <div>
+                  <p className="section-label danger-label">Danger zone</p>
+                  <h2 id="reset-data-title">Reset dữ liệu</h2>
+                  <p>Xóa dữ liệu import/report hiện tại sau khi backend tạo backup. Chỉ owner được thực hiện.</p>
+                </div>
+              </div>
+              <form className="reset-form" onSubmit={handleResetData}>
+                <div className="field">
+                  <label htmlFor="reset-confirmation">Nhập chính xác <strong>XOA DU LIEU</strong></label>
+                  <input
+                    id="reset-confirmation"
+                    value={resetPhrase}
+                    onChange={(event) => setResetPhrase(event.target.value)}
+                    autoComplete="off"
+                    aria-describedby="reset-help"
+                    disabled={resetting}
+                  />
+                  <span id="reset-help">Reset sẽ refresh dashboard và lịch sử import sau khi hoàn tất.</span>
+                </div>
+                <button className="danger-button" type="submit" disabled={resetting || resetPhrase.trim() !== "XOA DU LIEU"}>
+                  {resetting ? "Đang reset…" : "Reset dữ liệu"}
+                </button>
+                {resetMessage ? <p className="reset-result" role="status" aria-live="polite">{resetMessage}</p> : null}
+              </form>
+            </section>
+          ) : null}
+
+          {isOwner ? (
+            <section className="section danger-zone panel wide" id="backup-restore" aria-labelledby="restore-backup-title">
+              <div className="section-heading">
+                <div>
+                  <p className="section-label danger-label">Owner backup</p>
+                  <h2 id="restore-backup-title">Khôi phục backup</h2>
+                  <p>Chọn backup hợp lệ, xem trước số bảng/dòng, rồi nhập cụm xác nhận để restore.</p>
+                </div>
+                <button type="button" onClick={() => void loadBackupRows()} disabled={backupsLoading || restoring}>
+                  {backupsLoading ? "Đang tải…" : "Tải lại"}
+                </button>
+              </div>
+              <form className="reset-form" onSubmit={handleRestoreBackup}>
+                <div className="backup-list" role="radiogroup" aria-label="Chọn backup để khôi phục">
+                  {backups.length ? backups.map((backup) => (
+                    <label className={`backup-item${backup.valid ? "" : " invalid"}`} key={backup.id}>
+                      <input
+                        type="radio"
+                        name="backup-id"
+                        checked={selectedBackupId === backup.id}
+                        onChange={() => setSelectedBackupId(backup.id)}
+                        disabled={restoring || !backup.valid}
+                      />
+                      <span>
+                        <strong>{backup.filename}</strong>
+                        <small>{formatDateTime(backup.created_at)} · {formatBytes(backup.size_bytes)} · {backup.valid ? "Hợp lệ" : `Không hợp lệ: ${backup.error || "lỗi backup"}`}</small>
+                        <small>Dữ liệu báo cáo: {countsText(backup.counts.business)}</small>
+                        <small>Tài khoản trong backup (chỉ xem trước, không ghi đè): {countsText(backup.counts.auth)}</small>
+                      </span>
+                    </label>
+                  )) : <p className="empty">{backupsLoading ? "Đang tải backup…" : "Chưa có backup."}</p>}
+                </div>
+                <div className="field">
+                  <label htmlFor="restore-confirmation">Nhập chính xác <strong>KHOI PHUC DU LIEU</strong></label>
+                  <input
+                    id="restore-confirmation"
+                    value={restorePhrase}
+                    onChange={(event) => setRestorePhrase(event.target.value)}
+                    autoComplete="off"
+                    aria-describedby="restore-help"
+                    disabled={restoring}
+                  />
+                  <span id="restore-help">Restore sẽ tạo safety backup, sau đó refresh dashboard và danh sách backup.</span>
+                </div>
+                <button className="danger-button" type="submit" disabled={restoring || restorePhrase.trim() !== "KHOI PHUC DU LIEU" || !selectedBackup?.valid}>
+                  {restoring ? "Đang khôi phục…" : "Khôi phục backup"}
+                </button>
+                {backupMessage ? <p className="reset-result" role="status" aria-live="polite">{backupMessage}</p> : null}
+              </form>
+            </section>
+          ) : null}
+
+          {isOwner ? (
+            <section className="section panel" id="app-update" aria-labelledby="app-update-title">
+              <div className="section-heading">
+                <div>
+                  <p className="section-label">Ứng dụng</p>
+                  <h2 id="app-update-title">Cập nhật phiên bản</h2>
+                  <p>Dashboard tự kiểm tra một lần cho owner; có thể kiểm tra lại thủ công.</p>
+                </div>
+                <button type="button" onClick={() => void loadUpdateStatus()} disabled={updateLoading || installingUpdate}>
+                  {updateLoading ? "Đang kiểm tra…" : "Check"}
+                </button>
+              </div>
+              <div className="update-panel" aria-live="polite">
+                <div className="update-versions">
+                  <span>Hiện tại <strong>{updateStatus?.current_version ?? "—"}</strong></span>
+                  <span>Mới nhất <strong>{updateStatus?.latest_version ?? "—"}</strong></span>
+                  <span>Trạng thái <strong>{updateStatus ? (updateStatus.available ? "Có cập nhật" : "Mới nhất") : "Chưa kiểm tra"}</strong></span>
+                </div>
+                {updateStatus?.release_name ? <p><strong>{updateStatus.release_name}</strong></p> : null}
+                {updateStatus?.published_at ? <p>Phát hành: {formatDateTime(updateStatus.published_at)}</p> : null}
+                {updateStatus?.source_repo ? <p>Nguồn: {updateStatus.source_repo}</p> : null}
+                {updateStatus?.notes ? <p className="update-notes" tabIndex={0}>{updateStatus.notes}</p> : null}
+                {updateStatus?.release_url ? <a className="button-link secondary-link" href={updateStatus.release_url} target="_blank" rel="noreferrer">Xem release</a> : null}
+                {updateStatus && !updateStatus.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
+                <button className="primary" type="button" onClick={() => void handleInstallUpdate()} disabled={!updateStatus?.available || !updateStatus.installable || !updateStatus.automatic_install_supported || installingUpdate || updateLoading}>
+                  {installingUpdate ? "Đang cài…" : "Cài cập nhật"}
+                </button>
+                <p className="hint">Khi cài, ứng dụng sẽ đóng và mở lại sau khi updater hoàn tất.</p>
+                {updateMessage ? <p className="upload-result" role="status">{updateMessage}</p> : null}
+              </div>
             </section>
           ) : null}
 
