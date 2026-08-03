@@ -2,7 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
-import { firstDayOfMonth, lastDayOfMonth, currentMonth } from "@/lib/format";
+import { firstDayOfMonth, lastDayOfMonth, currentMonth, statusLabel } from "@/lib/format";
+import { buildFilterHref } from "@/lib/filter-query";
 
 export type UrlFilters = {
   month: string;
@@ -30,31 +31,49 @@ export function useUrlFilters() {
 
 export function FilterBar({ accounts, statuses, showSearch = false }: { accounts: string[]; statuses: string[]; showSearch?: boolean }) {
   const filters = useUrlFilters();
-  const filterKey = JSON.stringify(filters);
-  return <FilterForm key={filterKey} accounts={accounts} statuses={statuses} showSearch={showSearch} initialFilters={filters} />;
+  const initialFilters = {
+    ...filters,
+    accounts: filters.accounts.length ? filters.accounts : accounts,
+    statuses: statuses.length ? (filters.statuses.length ? filters.statuses : statuses) : [],
+  };
+  const filterKey = JSON.stringify({ filters, accounts, statuses });
+  return <FilterForm key={filterKey} accounts={accounts} statuses={statuses} showSearch={showSearch} initialFilters={initialFilters} />;
 }
 
 function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: { accounts: string[]; statuses: string[]; showSearch?: boolean; initialFilters: UrlFilters }) {
   const router = useRouter();
   const pathname = usePathname();
   const [draft, setDraft] = useState(initialFilters);
+  const [error, setError] = useState("");
   const monthStart = draft.month ? firstDayOfMonth(draft.month) : "";
   const monthEnd = draft.month ? lastDayOfMonth(draft.month) : "";
+  const allAccountsSelected = accounts.length > 0 && draft.accounts.length === accounts.length;
+  const allStatusesSelected = statuses.length > 0 && draft.statuses.length === statuses.length;
 
   function toggle(list: "accounts" | "statuses", value: string) {
+    setError("");
     setDraft((current) => ({ ...current, [list]: current[list].includes(value) ? current[list].filter((item) => item !== value) : [...current[list], value] }));
+  }
+
+  function toggleAll(list: "accounts" | "statuses", values: string[]) {
+    setError("");
+    setDraft((current) => ({ ...current, [list]: current[list].length === values.length ? [] : values }));
+  }
+
+  function reset() {
+    const month = currentMonth();
+    const nextDraft = { month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1 };
+    setError("");
+    setDraft(nextDraft);
+    router.replace(buildFilterHref(pathname, nextDraft, accounts, statuses));
   }
 
   function apply(event: FormEvent) {
     event.preventDefault();
-    const query = new URLSearchParams();
-    query.set("month", draft.month);
-    query.set("start", draft.start);
-    query.set("end", draft.end);
-    draft.accounts.forEach((account) => query.append("account", account));
-    draft.statuses.forEach((status) => query.append("status", status));
-    if (draft.search.trim()) query.set("search", draft.search.trim());
-    router.push(`${pathname}?${query.toString()}`);
+    if (!draft.accounts.length) return setError("Hãy chọn ít nhất một tài khoản.");
+    if (statuses.length && !draft.statuses.length) return setError("Hãy chọn ít nhất một trạng thái.");
+    setError("");
+    router.push(buildFilterHref(pathname, draft, accounts, statuses));
   }
 
   return (
@@ -87,9 +106,13 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
           <input id="order-search" value={draft.search} onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Mã đơn, SKU, sản phẩm" />
         </div>
       ) : null}
-      <div className="filter-stack">
-        <span className="field-label">Account</span>
-        <div className="account-options" role="group" aria-label="Lọc theo account">
+      <fieldset className="filter-stack">
+        <legend className="field-label">Tài khoản</legend>
+        <div className="account-options">
+          <label className="account-option select-all-option">
+            <input type="checkbox" checked={allAccountsSelected} onChange={() => toggleAll("accounts", accounts)} />
+            Tất cả tài khoản
+          </label>
           {accounts.map((account) => (
             <label className="account-option" key={account}>
               <input type="checkbox" checked={draft.accounts.includes(account)} onChange={() => toggle("accounts", account)} />
@@ -97,21 +120,29 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
             </label>
           ))}
         </div>
-      </div>
+      </fieldset>
       {statuses.length ? (
-        <div className="filter-stack">
-          <span className="field-label">Trạng thái</span>
-          <div className="account-options" role="group" aria-label="Lọc theo trạng thái đơn">
+        <fieldset className="filter-stack">
+          <legend className="field-label">Trạng thái</legend>
+          <div className="account-options">
+            <label className="account-option select-all-option">
+              <input type="checkbox" checked={allStatusesSelected} onChange={() => toggleAll("statuses", statuses)} />
+              Tất cả trạng thái
+            </label>
             {statuses.map((status) => (
-              <label className="account-option" key={status}>
+              <label className="account-option" key={status} title={`Mã hệ thống: ${status}`}>
                 <input type="checkbox" checked={draft.statuses.includes(status)} onChange={() => toggle("statuses", status)} />
-                {status}
+                {statusLabel(status)}
               </label>
             ))}
           </div>
-        </div>
+        </fieldset>
       ) : null}
-      <button className="primary" type="submit">Áp dụng</button>
+      <div className="filter-actions">
+        <button className="primary" type="submit">Áp dụng bộ lọc</button>
+        <button type="button" onClick={reset}>Đặt lại</button>
+      </div>
+      {error ? <p className="filter-error" role="alert">{error}</p> : null}
     </form>
   );
 }

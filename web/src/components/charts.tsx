@@ -23,7 +23,7 @@ export function BarChart({ title, description, rows }: { title: string; descript
           </div>
         ))}
       </div>
-      <div className="table-wrap chart-fallback">
+      <div className="table-wrap chart-fallback" role="region" aria-label={`${title}, có thể cuộn ngang`} tabIndex={0}>
         <table>
           <caption className="sr-only">Dữ liệu thay thế cho biểu đồ hoa hồng theo ngày</caption>
           <thead><tr><th>Ngày</th><th>Đơn</th><th>Hoa hồng</th><th>Đạt KPI</th></tr></thead>
@@ -37,7 +37,7 @@ export function BarChart({ title, description, rows }: { title: string; descript
 export function ProgressList({ rows }: { rows: MonthlyKpiRow[] }) {
   return (
     <section className="section panel" aria-labelledby="kpi-progress-title">
-      <div className="section-heading"><div><p className="section-label">KPI</p><h2 id="kpi-progress-title">Tiến độ account</h2></div></div>
+      <div className="section-heading"><div><p className="section-label">KPI</p><h2 id="kpi-progress-title">Tiến độ theo tài khoản</h2></div></div>
       <div className="target-list">
         {rows.map((row) => {
           const progress = Math.max(0, Math.min((row.target_achievement ?? 0) * 100, 100));

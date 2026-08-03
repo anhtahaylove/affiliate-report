@@ -5,16 +5,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiUrl, CurrentUser, exitApplication, logout } from "@/lib/api";
+import { roleLabel } from "@/lib/format";
 
 type NavItem = { href: string; label: string; roles?: Array<CurrentUser["role"]> };
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Dashboard" },
+  { href: "/", label: "Tổng quan" },
   { href: "/analytics", label: "Phân tích" },
   { href: "/orders", label: "Đơn hàng" },
-  { href: "/imports", label: "Import", roles: ["operator", "owner"] },
+  { href: "/imports", label: "Nhập dữ liệu", roles: ["operator", "owner"] },
   { href: "/targets", label: "Mục tiêu" },
-  { href: "/accounts", label: "Account", roles: ["owner"] },
+  { href: "/accounts", label: "Tài khoản", roles: ["owner"] },
   { href: "/settings/data", label: "Dữ liệu", roles: ["owner"] },
   { href: "/settings/update", label: "Cập nhật", roles: ["owner"] },
   { href: "/settings/users", label: "Người dùng", roles: ["owner"] },
@@ -25,7 +26,7 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
   const [open, setOpen] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [exitError, setExitError] = useState("");
-  const apiBaseLabel = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "same-origin";
+  const apiBaseLabel = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "Nội bộ ứng dụng";
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
           <Image className="brand-mark" src="/icon-192.png" alt="" width={42} height={42} priority />
           <div>
             <strong>TikTok Affiliate</strong>
-            <span>Operations Cockpit</span>
+            <span>Trung tâm vận hành</span>
           </div>
         </div>
         <nav>
@@ -76,19 +77,20 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
           ))}
         </nav>
         <div className={`health-card${apiError ? " offline" : ""}`}>
-          <span>{apiError ? "API lỗi" : "API online"}</span>
+          <span>{apiError ? "API gặp lỗi" : "API hoạt động"}</span>
           <small>{apiBaseLabel}</small>
         </div>
       </aside>
+      <button className="sidebar-backdrop" type="button" aria-label="Đóng menu điều hướng" onClick={() => setOpen(false)} />
 
       <section className="cockpit-main">
         <header className="cockpit-header">
-          <button className="drawer-button" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="mobile-navigation">
-            Menu
+          <button className="drawer-button" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="mobile-navigation" aria-label={open ? "Đóng menu điều hướng" : "Mở menu điều hướng"}>
+            {open ? "Đóng menu" : "Menu"}
           </button>
           <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
-            <span>{user.email}</span>
-            <strong>{user.role}</strong>
+            <span className="user-email" title={user.email}>{user.email}</span>
+            <strong>{roleLabel(user.role)}</strong>
             <button type="button" onClick={handleLogout}>Đăng xuất</button>
             {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => void handleExit()} disabled={exiting}>{exiting ? "Đang thoát…" : "Thoát ứng dụng"}</button> : null}
             {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
@@ -106,7 +108,7 @@ export function AuthCard({ message }: { message: string }) {
       <section className="auth-card panel">
         <div className="brand-badge">AFF</div>
         <h1>TikTok Affiliate Report</h1>
-        <p>Vui lòng đăng nhập để xem Operations Cockpit.</p>
+        <p>Vui lòng đăng nhập để mở trung tâm báo cáo vận hành.</p>
         <a className="button-link" href={`${apiUrl()}/auth/login`}>Đăng nhập</a>
         <p className="hint">{message}</p>
       </section>
