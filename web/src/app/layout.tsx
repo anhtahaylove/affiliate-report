@@ -11,7 +11,7 @@ const appFont = Be_Vietnam_Pro({
 
 export const metadata: Metadata = {
   title: "TikTok Affiliate Report",
-  description: "Dashboard báo cáo TikTok Affiliate từ dữ liệu export",
+  description: "Báo cáo vận hành TikTok Affiliate từ dữ liệu Excel đã xuất",
   applicationName: "TikTok Affiliate Report",
   appleWebApp: {
     capable: true,

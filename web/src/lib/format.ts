@@ -2,6 +2,19 @@ export const money = new Intl.NumberFormat("vi-VN", { style: "currency", currenc
 export const integer = new Intl.NumberFormat("vi-VN");
 export const dateTime = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
 
+const STATUS_LABELS: Record<string, string> = {
+  settled: "Đã quyết toán",
+  pending: "Đang chờ quyết toán",
+  ineligible: "Không đủ điều kiện",
+  unknown: "Chưa xác định",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: "Chủ sở hữu",
+  operator: "Nhân viên vận hành",
+  viewer: "Chỉ xem",
+};
+
 export function formatMoney(value: number | null | undefined) {
   return value == null || Number.isNaN(Number(value)) ? "—" : money.format(Number(value));
 }
@@ -14,6 +27,20 @@ export function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : dateTime.format(parsed);
+}
+
+export function statusLabel(value: string | null | undefined) {
+  if (!value) return STATUS_LABELS.unknown;
+  return STATUS_LABELS[value.trim().toLowerCase()] ?? value;
+}
+
+export function roleLabel(value: string | null | undefined) {
+  if (!value) return "Chưa xác định";
+  return ROLE_LABELS[value.trim().toLowerCase()] ?? value;
+}
+
+export function accountLabel(value: string | null | undefined) {
+  return value === "ALL" ? "Tất cả tài khoản" : value || "Chưa xác định";
 }
 
 export function formatBytes(value: number | null | undefined) {
