@@ -44,6 +44,8 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     assert "stable.json.sig" in workflow
     assert "Downloaded release checksum mismatch" in workflow
     assert "gh release create $tag @assets --repo $repo --draft --latest=false" in workflow
+    assert "gh release edit $tag --repo $repo --draft=false --prerelease" in workflow
+    assert "gh release edit $tag --repo $repo --prerelease=false --latest" in workflow
     assert "verify_update_manifest_bytes" in workflow
     assert "Public mirror checksum mismatch" in workflow
     assert "Private release $tag is already published" in workflow
@@ -63,5 +65,5 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     feed_push = workflow.index("git push", promote)
     raw_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?', promote)
     private_publish = workflow.index("gh release edit $tag --draft=false", promote)
-    latest = workflow.index("gh release edit $tag --repo $repo --latest", promote)
+    latest = workflow.index("gh release edit $tag --repo $repo --prerelease=false --latest", promote)
     assert anonymous_publish < anonymous_download < feed_push < raw_download < private_publish < latest
