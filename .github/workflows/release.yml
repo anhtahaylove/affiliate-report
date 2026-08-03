@@ -203,7 +203,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not publish public prerelease for anonymous verification" }
             $publicPublished = $true
             $public = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
-            if ($LASTEXITCODE -ne 0 -or $public.isDraft -or $public.isPrerelease -or $public.tagName -ne $tag) { throw "Public release publish verification failed" }
+            if ($LASTEXITCODE -ne 0 -or $public.isDraft -or !$public.isPrerelease -or $public.tagName -ne $tag) { throw "Public release publish verification failed" }
             $publicList = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest | ConvertFrom-Json
             $public = @($publicList | Where-Object tagName -eq $tag)
             if ($LASTEXITCODE -ne 0 -or $public.Count -ne 1 -or $public[0].isDraft -or !$public[0].isPrerelease -or $public[0].isLatest) { throw "Public release must be a published prerelease before verification" }

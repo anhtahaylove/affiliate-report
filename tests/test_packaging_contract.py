@@ -45,6 +45,7 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     assert "Downloaded release checksum mismatch" in workflow
     assert "gh release create $tag @assets --repo $repo --draft --latest=false" in workflow
     assert "gh release edit $tag --repo $repo --draft=false --prerelease" in workflow
+    assert '$public.isDraft -or !$public.isPrerelease -or $public.tagName -ne $tag' in workflow
     assert "gh release edit $tag --repo $repo --prerelease=false --latest" in workflow
     assert "verify_update_manifest_bytes" in workflow
     assert "Public mirror checksum mismatch" in workflow
