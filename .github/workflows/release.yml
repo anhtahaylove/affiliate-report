@@ -199,14 +199,14 @@ jobs:
           $privatePublished = $false
           try {
             $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
-            gh release edit $tag --repo $repo --draft=false
-            if ($LASTEXITCODE -ne 0) { throw "Could not publish public release for anonymous verification" }
+            gh release edit $tag --repo $repo --draft=false --prerelease
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish public prerelease for anonymous verification" }
             $publicPublished = $true
             $public = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0 -or $public.isDraft -or $public.isPrerelease -or $public.tagName -ne $tag) { throw "Public release publish verification failed" }
             $publicList = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest | ConvertFrom-Json
             $public = @($publicList | Where-Object tagName -eq $tag)
-            if ($LASTEXITCODE -ne 0 -or $public.Count -ne 1 -or $public[0].isDraft -or $public[0].isLatest) { throw "Public release must be published but not latest before verification" }
+            if ($LASTEXITCODE -ne 0 -or $public.Count -ne 1 -or $public[0].isDraft -or !$public[0].isPrerelease -or $public[0].isLatest) { throw "Public release must be a published prerelease before verification" }
 
             $releaseVerify = Join-Path $env:RUNNER_TEMP "anonymous-release-verify"
             New-Item -ItemType Directory -Path $releaseVerify -Force | Out-Null
@@ -283,7 +283,7 @@ jobs:
             $private = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0 -or $private.isDraft -or $private.isPrerelease -or $private.tagName -ne $tag) { throw "Private release publish verification failed" }
             $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
-            gh release edit $tag --repo $repo --latest
+            gh release edit $tag --repo $repo --prerelease=false --latest
             if ($LASTEXITCODE -ne 0) { throw "Could not mark public release latest" }
             $publicList = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest,isPrerelease | ConvertFrom-Json
             $public = @($publicList | Where-Object tagName -eq $tag)
@@ -306,7 +306,7 @@ jobs:
             }
             if ($publicPublished) {
               $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
-              gh release edit $tag --repo $repo --draft=true
+              gh release edit $tag --repo $repo --draft=true --prerelease=false
               if ($LASTEXITCODE -ne 0) { Write-Warning "Could not return public release to draft" }
             }
             throw $failure
