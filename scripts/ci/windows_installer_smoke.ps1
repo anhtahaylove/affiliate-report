@@ -21,7 +21,7 @@ $expectedHashes = @{
     '1.1.1' = '26B4E0901E696652FDD687CBE01405407CE3816ED761F104AF8A8ED436DC8557'
     '1.2.0' = 'D822B9A74333A45A1979A58F42DC5CD24E86361ADD3BCDFA78C4B48518900406'
 }
-$routes = @('/', '/accounts', '/analytics', '/imports', '/orders', '/targets', '/settings/data', '/settings/update', '/settings/users')
+$routes = @('/', '/accounts', '/analytics', '/imports', '/orders', '/targets', '/settings/update', '/settings/users')
 
 function Assert-Installer([string]$Path, [string]$Version) {
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {

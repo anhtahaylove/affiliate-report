@@ -4,6 +4,7 @@
 
 - Nâng GitHub Actions lên các major chạy Node.js 24 để loại cảnh báo Node.js 20 trong CI/release.
 - Thêm smoke test installer trên Windows runner sạch cho cài mới v1.2.0 và nâng cấp v1.1.1 lên v1.2.0 có giữ dữ liệu.
+- Khôi phục route **Settings → Data** từng bị rule `.gitignore` loại nhầm khỏi installer v1.2.0.
 - Bổ sung hướng dẫn mở, chạy và xử lý lỗi app local cho người dùng cuối.
 
 ## v1.2.0 - 2026-08-03

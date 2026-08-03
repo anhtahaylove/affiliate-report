@@ -85,3 +85,10 @@ def test_all_workflows_have_no_node20_action_versions():
         assert old_action not in workflows
     assert "fresh-install-v120" in workflows
     assert "upgrade-v111-to-v120" in workflows
+
+
+def test_settings_data_page_is_not_ignored():
+    ignored = Path(".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "/data/" in ignored
+    assert "data/" not in ignored
+    assert Path("web/src/app/settings/data/page.tsx").is_file()

@@ -11,7 +11,7 @@ __pycache__/
 *.xls
 *.db
 *.sqlite*
-data/
+/data/
 artifacts/
 build/
 dist/
