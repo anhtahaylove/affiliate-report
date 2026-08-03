@@ -46,10 +46,22 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     assert "gh release create $tag @assets --repo $repo --draft --latest=false" in workflow
     assert "verify_update_manifest_bytes" in workflow
     assert "Public mirror checksum mismatch" in workflow
+    assert "Private release $tag is already published" in workflow
+    assert "Public release $tag is already published" in workflow
     assert "gh release delete $tag --yes" in workflow
     assert "gh release delete $tag --repo $repo --yes" in workflow
-    assert "Live raw feed does not match release feed assets" in workflow
-    assert "git revert --no-edit HEAD" in workflow
+    assert "Anonymous public release assets did not become available or match the build" in workflow
+    assert "Live raw feed does not match signed build artifacts" in workflow
+    assert 'gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest' in workflow
+    assert '$env:GH_TOKEN = ""' in workflow
+    assert "git revert --no-edit $stableCommit" in workflow
+    assert "gh release edit $tag --repo $repo --draft=true" in workflow
     assert workflow.index("gh release create $tag @assets --repo $repo --draft --latest=false") < workflow.index("Promote public stable feed and releases")
-    assert workflow.index("Invoke-WebRequest -UseBasicParsing") < workflow.index("gh release edit $tag --repo $repo --draft=false --latest")
-    assert workflow.index("gh release edit $tag --draft=false") > workflow.index("Invoke-WebRequest -UseBasicParsing")
+    promote = workflow.index("Promote public stable feed and releases")
+    anonymous_publish = workflow.index("gh release edit $tag --repo $repo --draft=false", promote)
+    anonymous_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/$tag/$asset"', promote)
+    feed_push = workflow.index("git push", promote)
+    raw_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?', promote)
+    private_publish = workflow.index("gh release edit $tag --draft=false", promote)
+    latest = workflow.index("gh release edit $tag --repo $repo --latest", promote)
+    assert anonymous_publish < anonymous_download < feed_push < raw_download < private_publish < latest

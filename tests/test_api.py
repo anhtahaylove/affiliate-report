@@ -211,6 +211,11 @@ def test_import_requires_account_and_imports_xlsx(tmp_path):
     data = xlsx_bytes([raw_export_row()])
 
     missing = client.post("/api/v1/imports", files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    virtual = client.post(
+        "/api/v1/imports",
+        data={"account": "ALL"},
+        files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
     unknown = client.post(
         "/api/v1/imports",
         data={"account": "NOT_ALLOWED"},
@@ -233,6 +238,7 @@ def test_import_requires_account_and_imports_xlsx(tmp_path):
     )
 
     assert missing.status_code == 422
+    assert virtual.status_code == 422
     assert unknown.status_code == 403
     assert wrong_type.status_code == 415
     assert created.status_code == 200
@@ -422,6 +428,14 @@ def test_analytics_and_excel_exports_follow_account_scope(tmp_path):
         "/api/v1/analytics",
         params={"account": "CHIISTORE", "start": "2026-03-01", "end": "2026-03-31"},
     )
+    all_scope = client.get(
+        "/api/v1/analytics",
+        params={"account": "ALL", "start": "2026-03-01", "end": "2026-03-31"},
+    )
+    mixed_all_scope = client.get(
+        "/api/v1/analytics",
+        params=[("account", "ALL"), ("account", "NOT_ALLOWED")],
+    )
     orders_export = client.get("/api/v1/orders/export.xlsx", params={"account": "CHIISTORE"})
     daily_export = client.get(
         "/api/v1/reports/daily.xlsx",
@@ -429,6 +443,9 @@ def test_analytics_and_excel_exports_follow_account_scope(tmp_path):
     )
 
     assert payload.status_code == 200
+    assert all_scope.status_code == 200
+    assert mixed_all_scope.status_code == 422
+    assert all_scope.json()["summary"] == payload.json()["summary"]
     assert payload.json()["summary"]["orders"] == 1
     assert payload.json()["products"][0]["label"] == "Sản phẩm"
     assert orders_export.status_code == 200 and orders_export.content.startswith(b"PK")

@@ -109,27 +109,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe"
-          gh release view $tag *> $null
+          $existingJson = gh release view $tag --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
+            $existing = $existingJson | ConvertFrom-Json
+            if (!$existing.isDraft) { throw "Private release $tag is already published" }
             gh release delete $tag --yes
+            if ($LASTEXITCODE -ne 0) { throw "Could not replace existing private draft release" }
           }
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -ne 0) { gh release create $tag $installer "artifacts\installer\SHA256SUMS.txt" "artifacts\installer\stable.json" "artifacts\installer\stable.json.sig" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag }
-          $draft = gh release view $tag --json isDraft,tagName | ConvertFrom-Json
-          if ($draft.tagName -ne $tag) { throw "Private release tag verification failed" }
+          gh release create $tag $installer "artifacts\installer\SHA256SUMS.txt" "artifacts\installer\stable.json" "artifacts\installer\stable.json.sig" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag
+          if ($LASTEXITCODE -ne 0) { throw "Could not create private draft release" }
+          $draft = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Private release draft verification failed" }
       - name: Verify private draft release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $verify = Join-Path $env:RUNNER_TEMP "release-verify"
           New-Item -ItemType Directory -Path $verify -Force | Out-Null
           gh release download $tag --dir $verify
+          if ($LASTEXITCODE -ne 0) { throw "Could not download private draft release" }
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
           $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
           if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer, SHA256SUMS.txt, stable.json and stable.json.sig" }
@@ -137,25 +143,30 @@ jobs:
           $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
           if ($actual -ne $expected) { throw "Downloaded release checksum mismatch" }
           $draft = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
-          if ($draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Private release verification failed" }
+          if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Private release verification failed" }
       - name: Create and verify public update release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
         run: |
+          $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
           $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
-          gh release view $tag --repo $repo *> $null
+          $existingJson = gh release view $tag --repo $repo --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
+            $existing = $existingJson | ConvertFrom-Json
+            if (!$existing.isDraft) { throw "Public release $tag is already published" }
             gh release delete $tag --repo $repo --yes
+            if ($LASTEXITCODE -ne 0) { throw "Could not replace existing public draft release" }
           }
-          gh release view $tag --repo $repo *> $null
-          if ($LASTEXITCODE -ne 0) { gh release create $tag @assets --repo $repo --draft --latest=false --title "TikTok Affiliate Report $tag" --notes "Public auto-update feed for $tag" }
+          gh release create $tag @assets --repo $repo --draft --latest=false --title "TikTok Affiliate Report $tag" --notes "Public auto-update feed for $tag"
+          if ($LASTEXITCODE -ne 0) { throw "Could not create public draft release" }
           $verify = Join-Path $env:RUNNER_TEMP "public-release-verify"
           New-Item -ItemType Directory -Path $verify -Force | Out-Null
           gh release download $tag --repo $repo --dir $verify
+          if ($LASTEXITCODE -ne 0) { throw "Could not download public draft release" }
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
           $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
           if (Compare-Object $actualFiles $expectedFiles) { throw "Public mirror must contain exactly four verified assets" }
@@ -163,8 +174,9 @@ jobs:
           $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
           if ($actual -ne $expected) { throw "Public mirror checksum mismatch" }
           .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+          if ($LASTEXITCODE -ne 0) { throw "Public draft manifest verification failed" }
           $draft = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
-          if ($draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
+          if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
       - uses: actions/checkout@v4
         with:
           repository: anhtahaylove/tiktok-affiliate-report-updates
@@ -176,63 +188,126 @@ jobs:
           PRIVATE_GH_TOKEN: ${{ github.token }}
           PUBLIC_GH_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
         run: |
+          $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
-          $stableChanged = $false
+          $assetNames = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig")
           $stableCommitted = $false
+          $stableCommit = ""
           $publicPublished = $false
+          $privatePublished = $false
           try {
+            $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
+            gh release edit $tag --repo $repo --draft=false
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish public release for anonymous verification" }
+            $publicPublished = $true
+            $public = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or $public.isDraft -or $public.isPrerelease -or $public.tagName -ne $tag) { throw "Public release publish verification failed" }
+            $publicList = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest | ConvertFrom-Json
+            $public = @($publicList | Where-Object tagName -eq $tag)
+            if ($LASTEXITCODE -ne 0 -or $public.Count -ne 1 -or $public[0].isDraft -or $public[0].isLatest) { throw "Public release must be published but not latest before verification" }
+
+            $releaseVerify = Join-Path $env:RUNNER_TEMP "anonymous-release-verify"
+            New-Item -ItemType Directory -Path $releaseVerify -Force | Out-Null
+            $env:GH_TOKEN = ""
+            $releaseReady = $false
+            for ($attempt = 1; $attempt -le 12 -and !$releaseReady; $attempt++) {
+              try {
+                Remove-Item (Join-Path $releaseVerify "*") -Force -ErrorAction SilentlyContinue
+                foreach ($asset in $assetNames) {
+                  Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/$tag/$asset" -OutFile (Join-Path $releaseVerify $asset)
+                }
+                $releaseReady = $true
+                foreach ($asset in $assetNames) {
+                  $localHash = (Get-FileHash -Algorithm SHA256 (Join-Path "artifacts\installer" $asset)).Hash
+                  $publicHash = (Get-FileHash -Algorithm SHA256 (Join-Path $releaseVerify $asset)).Hash
+                  if ($localHash -ne $publicHash) { $releaseReady = $false }
+                }
+              } catch {
+                $releaseReady = $false
+              }
+              if (!$releaseReady) { Start-Sleep -Seconds 5 }
+            }
+            if (!$releaseReady) { throw "Anonymous public release assets did not become available or match the build" }
+
             Copy-Item "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig" update-feed\ -Force
             Push-Location update-feed
             git config user.name "github-actions[bot]"
+            if ($LASTEXITCODE -ne 0) { throw "Could not configure update-feed git user" }
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if ($LASTEXITCODE -ne 0) { throw "Could not configure update-feed git email" }
             git add stable.json stable.json.sig
-            if (git diff --cached --quiet) {
+            if ($LASTEXITCODE -ne 0) { throw "Could not stage public stable feed" }
+            git diff --cached --quiet
+            if ($LASTEXITCODE -eq 0) {
               Write-Output "Public stable feed unchanged."
-            } else {
-              $stableChanged = $true
+            } elseif ($LASTEXITCODE -eq 1) {
               git commit -m "Update stable feed $tag"
+              if ($LASTEXITCODE -ne 0) { throw "Could not commit public stable feed" }
               $stableCommitted = $true
+              $stableCommit = (git rev-parse HEAD).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "Could not resolve public stable feed commit" }
               git push
+              if ($LASTEXITCODE -ne 0) { throw "Could not push public stable feed" }
+            } else {
+              throw "Could not inspect public stable feed changes"
             }
             Pop-Location
 
             $verify = Join-Path $env:RUNNER_TEMP "live-update-verify"
             New-Item -ItemType Directory -Path $verify -Force | Out-Null
-            Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json" -OutFile (Join-Path $verify "raw-stable.json")
-            Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json.sig" -OutFile (Join-Path $verify "raw-stable.json.sig")
-            $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
-            gh release download $tag --repo $repo --dir $verify
-            $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | Where-Object Name -notlike "raw-*" | ForEach-Object Name | Sort-Object)
-            $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
-            if (Compare-Object $actualFiles $expectedFiles) { throw "Live release must contain exactly four verified assets" }
-            $rawManifest = Get-Content (Join-Path $verify "raw-stable.json") -Raw
-            $releaseManifest = Get-Content (Join-Path $verify "stable.json") -Raw
-            $rawSignature = Get-Content (Join-Path $verify "raw-stable.json.sig") -Raw
-            $releaseSignature = Get-Content (Join-Path $verify "stable.json.sig") -Raw
-            if ($rawManifest -ne $releaseManifest -or $rawSignature -ne $releaseSignature) { throw "Live raw feed does not match release feed assets" }
-            $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
-            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+            $rawReady = $false
+            for ($attempt = 1; $attempt -le 12 -and !$rawReady; $attempt++) {
+              try {
+                $cacheBust = if ($stableCommit) { $stableCommit } else { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+                Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?commit=$cacheBust&attempt=$attempt" -OutFile (Join-Path $verify "stable.json")
+                Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json.sig?commit=$cacheBust&attempt=$attempt" -OutFile (Join-Path $verify "stable.json.sig")
+                $rawReady = ((Get-FileHash -Algorithm SHA256 (Join-Path $verify "stable.json")).Hash -eq (Get-FileHash -Algorithm SHA256 "artifacts\installer\stable.json").Hash) -and ((Get-FileHash -Algorithm SHA256 (Join-Path $verify "stable.json.sig")).Hash -eq (Get-FileHash -Algorithm SHA256 "artifacts\installer\stable.json.sig").Hash)
+              } catch {
+                $rawReady = $false
+              }
+              if (!$rawReady) { Start-Sleep -Seconds 5 }
+            }
+            if (!$rawReady) { throw "Live raw feed does not match signed build artifacts" }
+            $expected = ((Get-Content (Join-Path $releaseVerify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
+            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $releaseVerify "TikTokAffiliateReportSetup-v$version.exe")).Hash
             if ($actual -ne $expected) { throw "Live release checksum mismatch" }
-            .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\raw-stable.json').read_bytes(), Path(r'$verify\raw-stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+            .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$releaseVerify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+            if ($LASTEXITCODE -ne 0) { throw "Live public updater verification failed" }
 
             $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
             gh release edit $tag --draft=false
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish private release" }
+            $privatePublished = $true
             $private = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
-            if ($private.isDraft -or $private.isPrerelease -or $private.tagName -ne $tag) { throw "Private release publish verification failed" }
+            if ($LASTEXITCODE -ne 0 -or $private.isDraft -or $private.isPrerelease -or $private.tagName -ne $tag) { throw "Private release publish verification failed" }
             $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
-            gh release edit $tag --repo $repo --draft=false --latest
-            $public = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
-            if ($public.isDraft -or $public.isPrerelease -or $public.tagName -ne $tag) { throw "Public release publish verification failed" }
-            $publicPublished = $true
+            gh release edit $tag --repo $repo --latest
+            if ($LASTEXITCODE -ne 0) { throw "Could not mark public release latest" }
+            $publicList = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest,isPrerelease | ConvertFrom-Json
+            $public = @($publicList | Where-Object tagName -eq $tag)
+            if ($LASTEXITCODE -ne 0 -or $public.Count -ne 1 -or $public[0].isDraft -or $public[0].isPrerelease -or !$public[0].isLatest) { throw "Public release latest verification failed" }
           } catch {
+            $failure = $_
             if ((Split-Path -Leaf (Get-Location)) -eq "update-feed") { Pop-Location }
-            if ($stableCommitted -and !$publicPublished) {
+            if ($stableCommitted) {
               Push-Location update-feed
-              git revert --no-edit HEAD
+              git revert --no-edit $stableCommit
+              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not revert public stable feed commit $stableCommit" }
               git push
+              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not push public stable feed rollback" }
               Pop-Location
             }
-            throw
+            if ($privatePublished) {
+              $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
+              gh release edit $tag --draft=true
+              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not return private release to draft" }
+            }
+            if ($publicPublished) {
+              $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
+              gh release edit $tag --repo $repo --draft=true
+              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not return public release to draft" }
+            }
+            throw $failure
           }

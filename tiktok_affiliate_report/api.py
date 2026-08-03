@@ -261,10 +261,14 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         allowed = active if current.role == "owner" else [account for account in active if account in current.accounts]
         if requested is None:
             return allowed
-        requested = [account.strip().upper() for account in requested]
+        requested = list(dict.fromkeys(account.strip().upper() for account in requested))
+        if "ALL" in requested:
+            if requested != ["ALL"]:
+                raise HTTPException(status_code=422, detail="ALL must be the only account filter")
+            return allowed
         if any(account not in allowed for account in requested):
             raise HTTPException(status_code=403, detail="Account access denied")
-        return list(dict.fromkeys(requested))
+        return requested
 
     def permitted_target_accounts(current: Principal, requested: list[str] | None) -> list[str]:
         active = [item["code"] for item in _account_items(_engine(app))]
@@ -618,6 +622,8 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         account = account.strip().upper()
         if not account:
             raise HTTPException(status_code=422, detail="account is required")
+        if account == "ALL":
+            raise HTTPException(status_code=422, detail="ALL is a virtual report scope and cannot receive imports")
         permitted_accounts(current, [account])
         if not (file.filename or "").lower().endswith(".xlsx"):
             raise HTTPException(status_code=415, detail="only .xlsx files are supported")

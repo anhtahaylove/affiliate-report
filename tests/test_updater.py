@@ -21,6 +21,13 @@ TEST_PUBLIC_B64 = base64.b64encode(
         format=serialization.PublicFormat.Raw,
     )
 ).decode("ascii")
+NEXT_PRIVATE = Ed25519PrivateKey.from_private_bytes(bytes(range(33, 65)))
+NEXT_PUBLIC_B64 = base64.b64encode(
+    NEXT_PRIVATE.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+).decode("ascii")
 
 
 class Response(io.BytesIO):
@@ -31,7 +38,14 @@ class Response(io.BytesIO):
         self.close()
 
 
-def stable_feed(installer: bytes = b"installer", version: str = "1.2.0", **overrides):
+def stable_feed(
+    installer: bytes = b"installer",
+    version: str = "1.2.0",
+    *,
+    signing_key: Ed25519PrivateKey = TEST_PRIVATE,
+    key_id: str = TEST_KEY_ID,
+    **overrides,
+):
     name = overrides.pop("name", f"TikTokAffiliateReportSetup-v{version}.exe")
     installer_info = overrides.pop("installer_info", None)
     manifest = {
@@ -51,14 +65,14 @@ def stable_feed(installer: bytes = b"installer", version: str = "1.2.0", **overr
     manifest.update(overrides)
     payload = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
     signature = json.dumps(
-        {"key_id": TEST_KEY_ID, "signature": base64.b64encode(TEST_PRIVATE.sign(payload)).decode("ascii")},
+        {"key_id": key_id, "signature": base64.b64encode(signing_key.sign(payload)).decode("ascii")},
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
     return payload, signature, installer
 
 
-def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: bytes = b"installer"):
+def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: bytes = b"installer", trusted_keys=None):
     seen_headers = []
 
     def fake_urlopen(request, timeout):
@@ -69,7 +83,7 @@ def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: byte
             return Response(signature)
         return Response(installer)
 
-    monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", {TEST_KEY_ID: TEST_PUBLIC_B64})
+    monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", trusted_keys or {TEST_KEY_ID: TEST_PUBLIC_B64})
     monkeypatch.setattr(updater, "urlopen", fake_urlopen)
     monkeypatch.delenv("TIKTOK_REPORT_UPDATE_FEED_URL", raising=False)
     return seen_headers
@@ -99,6 +113,27 @@ def test_download_rejects_tampered_manifest_signature(tmp_path, monkeypatch):
     with pytest.raises(updater.UpdateError, match="Chữ ký"):
         updater.download_latest_update(tmp_path, current_version="1.1.1")
     assert not list(tmp_path.rglob("*.exe"))
+
+
+def test_signing_key_rotation_accepts_a_second_pinned_key(monkeypatch):
+    manifest, signature, installer = stable_feed(signing_key=NEXT_PRIVATE, key_id="next-key")
+    install_feed(
+        monkeypatch,
+        manifest,
+        signature,
+        installer,
+        trusted_keys={TEST_KEY_ID: TEST_PUBLIC_B64, "next-key": NEXT_PUBLIC_B64},
+    )
+
+    assert updater.check_for_update(current_version="1.1.1")["available"] is True
+
+
+def test_signed_feed_rejects_an_unpinned_key_id(monkeypatch):
+    manifest, signature, installer = stable_feed(key_id="unknown-key")
+    install_feed(monkeypatch, manifest, signature, installer)
+
+    with pytest.raises(updater.UpdateError, match="key_id"):
+        updater.check_for_update(current_version="1.1.1")
 
 
 def test_download_rejects_installer_hash_mismatch(tmp_path, monkeypatch):
@@ -135,6 +170,18 @@ def test_manifest_rejects_non_https_bad_filename_size_and_tag(monkeypatch):
             "name": "TikTokAffiliateReportSetup-v1.2.0.exe",
             "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.0.exe",
             "size": 0,
+            "sha256": "0" * 64,
+        }
+    )
+    install_feed(monkeypatch, manifest, signature, installer)
+    with pytest.raises(updater.UpdateError, match="Kích thước"):
+        updater.check_for_update(current_version="1.1.1")
+
+    manifest, signature, installer = stable_feed(
+        installer_info={
+            "name": "TikTokAffiliateReportSetup-v1.2.0.exe",
+            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.0.exe",
+            "size": updater.MAX_INSTALLER_BYTES + 1,
             "sha256": "0" * 64,
         }
     )
