@@ -14,6 +14,7 @@ from tests.test_imports import raw_row
 from tiktok_affiliate_report.db import (
     app_users,
     get_engine,
+    import_batches,
     import_rows,
     init_db,
     monthly_targets,
