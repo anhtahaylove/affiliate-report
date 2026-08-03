@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 import { firstDayOfMonth, lastDayOfMonth, currentMonth, statusLabel } from "@/lib/format";
+import { buildFilterHref } from "@/lib/filter-query";
 
 export type UrlFilters = {
   month: string;
@@ -61,8 +62,10 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
 
   function reset() {
     const month = currentMonth();
+    const nextDraft = { month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1 };
     setError("");
-    setDraft({ month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1 });
+    setDraft(nextDraft);
+    router.replace(buildFilterHref(pathname, nextDraft, accounts, statuses));
   }
 
   function apply(event: FormEvent) {
@@ -70,14 +73,7 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     if (!draft.accounts.length) return setError("Hãy chọn ít nhất một tài khoản.");
     if (statuses.length && !draft.statuses.length) return setError("Hãy chọn ít nhất một trạng thái.");
     setError("");
-    const query = new URLSearchParams();
-    query.set("month", draft.month);
-    query.set("start", draft.start);
-    query.set("end", draft.end);
-    if (!allAccountsSelected) draft.accounts.forEach((account) => query.append("account", account));
-    if (statuses.length && !allStatusesSelected) draft.statuses.forEach((status) => query.append("status", status));
-    if (draft.search.trim()) query.set("search", draft.search.trim());
-    router.push(`${pathname}?${query.toString()}`);
+    router.push(buildFilterHref(pathname, draft, accounts, statuses));
   }
 
   return (
