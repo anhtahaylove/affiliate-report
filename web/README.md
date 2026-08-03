@@ -26,4 +26,4 @@ Mở `http://127.0.0.1:3000`.
 - Manifest: `src/app/manifest.ts`
 - Service worker: `public/sw.js`
 - App shell có thể mở offline; dữ liệu báo cáo vẫn cần kết nối API.
-- Production phải đặt API sau HTTPS/OIDC; API local hiện không phải public security boundary.
+- Production đặt API sau HTTPS với `AUTH_MODE=oidc`; PWA dùng cookie session/CSRF, không lưu token trong `localStorage`.

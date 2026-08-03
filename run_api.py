@@ -1,7 +1,13 @@
+import os
+
+from tiktok_affiliate_report.auth import is_loopback_host
 from tiktok_affiliate_report.api import app
 
-# Local foundation only: bind to localhost; OIDC/auth belongs in the Phase-2 architecture layer.
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    host = os.getenv("API_HOST", "127.0.0.1").strip()
+    auth_mode = os.getenv("AUTH_MODE", "local").strip().lower()
+    if auth_mode != "oidc" and not is_loopback_host(host):
+        raise RuntimeError("AUTH_MODE=local chỉ được bind loopback; dùng AUTH_MODE=oidc trước khi expose API.")
+    uvicorn.run(app, host=host, port=int(os.getenv("API_PORT", "8000")))

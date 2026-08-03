@@ -13,7 +13,11 @@ from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
 
 def api(tmp_path):
     engine = get_engine(f"sqlite:///{(tmp_path / 'api.db').as_posix()}")
-    return TestClient(create_app(engine)), engine
+    return TestClient(
+        create_app(engine),
+        base_url="http://127.0.0.1",
+        client=("127.0.0.1", 50000),
+    ), engine
 
 
 def raw_export_row(**updates):

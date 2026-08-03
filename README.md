@@ -37,7 +37,7 @@ GitHub Release private: https://github.com/anhtahaylove/tiktok-affiliate-report/
 
 - Đăng nhập GitHub bằng account có quyền đọc private repository rồi tải `TikTokAffiliateReportSetup-v1.0.0.exe`.
 - `SHA256SUMS.txt` trong release dùng để kiểm tra file sau khi tải.
-- Bản `v1.0.0` hiện dùng chữ ký self-signed local nên Windows SmartScreen có thể cảnh báo. Chỉ coi là public-trusted sau khi pipeline build chạy với OV/EV hoặc Azure Artifact Signing và timestamp hợp lệ.
+- Bản cài đặt được phân phối không cần code-signing trả phí. Windows SmartScreen có thể cảnh báo; hãy đối chiếu `SHA256SUMS.txt` trước khi chạy.
 
 ## Build installer Windows
 
@@ -55,28 +55,13 @@ winget install --id JRSoftware.InnoSetup --exact
 
 Output: `artifacts\installer\TikTokAffiliateReportSetup.exe`. Máy người dùng không cần cài Inno Setup hoặc Python.
 
-Script sẽ ký `dist\TikTokAffiliateReport.exe` và installer nếu trong `Cert:\CurrentUser\My` có code-signing certificate còn hạn kèm private key. Nếu máy chưa có certificate, dùng signing local/dev:
-
-```powershell
-.\packaging\build_installer.ps1 -CreateSelfSignedCert
-```
-
-Self-signed signature chỉ giúp kiểm tra integrity nội bộ; Windows/SmartScreen vẫn có thể cảnh báo vì không phải certificate public-trusted.
-
-Khi có certificate code-signing public-trusted, chọn đúng certificate và timestamp bản phát hành:
-
-```powershell
-.\packaging\build_installer.ps1 `
-  -CertificateThumbprint "<THUMBPRINT>" `
-  -TimestampServer "http://timestamp.digicert.com" `
-  -RequireTrustedCertificate
-```
-
-Public release gate yêu cầu exact thumbprint, certificate không self-signed, signature hợp lệ trên máy build và RFC 3161/SHA-256 timestamp. Script không tự dùng certificate của ứng dụng khác trên máy.
+Build hiện cố ý không đọc Windows Certificate Store và không code-sign artifact. Integrity được kiểm tra bằng SHA-256; có thể bổ sung signing sau nếu phạm vi phát hành thay đổi.
 
 ## Phase 2 API + Next.js/PWA
 
-Streamlit/EXE vẫn là bản local ổn định. Foundation Phase 2 tái sử dụng cùng parser, dedupe và report core qua FastAPI:
+Streamlit/EXE vẫn là bản local ổn định. Phase 2 tái sử dụng cùng parser, dedupe và report core qua FastAPI.
+
+Chạy local mặc định (anonymous local owner, chỉ được bind loopback):
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-api.txt
@@ -92,7 +77,36 @@ pnpm install
 pnpm dev
 ```
 
-Mở `http://127.0.0.1:3000`. API local tại `http://127.0.0.1:8000`; chưa được expose public trước khi có OIDC.
+Mở `http://127.0.0.1:3000`. API local tại `http://127.0.0.1:8000`.
+
+Gate B hỗ trợ OIDC Authorization Code + PKCE, session/CSRF server-side, roles `owner`/`operator`/`viewer`, account allowlist và PostgreSQL. Ví dụ cấu hình PowerShell trước khi chạy API shared:
+
+```powershell
+$env:DATABASE_URL = 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/tiktok_affiliate_report'
+$env:AUTH_MODE = 'oidc'
+$env:OIDC_ISSUER = 'https://id.example.com'
+$env:OIDC_CLIENT_ID = '<CLIENT_ID>'
+$env:OIDC_CLIENT_SECRET = '<CLIENT_SECRET>'
+$env:OIDC_REDIRECT_URI = 'https://report.example.com/auth/callback'
+$env:AUTH_BOOTSTRAP_OWNER_EMAIL = 'owner@example.com'
+$env:AUTH_ALLOWED_EMAILS = 'owner@example.com,user@example.com'
+$env:WEB_APP_URL = 'https://report.example.com'
+$env:API_CORS_ORIGINS = 'https://report.example.com'
+$env:API_HOST = '0.0.0.0'
+.\.venv\Scripts\python.exe run_api.py
+```
+
+`AUTH_DEFAULT_ACCOUNTS` mặc định rỗng: user mới đăng nhập được nhưng chưa thấy dữ liệu cho đến khi owner cấp account qua `PATCH /api/v1/admin/users/{id}`. Không commit client secret hoặc PostgreSQL password.
+
+Chuyển database local hiện có sang một PostgreSQL rỗng:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\migrate_sqlite_to_postgres.py `
+  --source data\tiktok_affiliate_report.db `
+  --target 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/tiktok_affiliate_report'
+```
+
+Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy session hoặc OIDC login state, rồi kiểm tra row counts và PostgreSQL sequences.
 
 ## Kiểm tra
 

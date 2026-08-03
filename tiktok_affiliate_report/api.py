@@ -2,22 +2,41 @@ from __future__ import annotations
 
 import math
 import os
+import secrets
 from datetime import date, datetime
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
+from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .db import get_engine, import_rows, init_db
 from .parser import DEFAULT_ACCOUNTS, read_xlsx
 from .reports import daily_report, monthly_kpi, orders, overview
 
 MAX_UPLOAD_MB = 20
 STATUSES = ["settled", "ineligible", "pending", "unknown"]
+
+
+class UserUpdate(BaseModel):
+    role: Literal["owner", "operator", "viewer"] | None = None
+    accounts: list[str] | None = None
+    active: bool | None = None
 
 
 def _cors_origins() -> list[str]:
@@ -56,6 +75,18 @@ def _engine(app: FastAPI) -> Engine:
     return app.state.engine
 
 
+def _auth(app: FastAPI) -> AuthService:
+    return app.state.auth
+
+
+def _web_app_url(auth: AuthService) -> str:
+    return getattr(auth.settings, "web_app_url", None) or os.getenv("WEB_APP_URL", "http://127.0.0.1:3000")
+
+
+def _csrf_cookie_name(auth: AuthService) -> str:
+    return getattr(auth.settings, "csrf_cookie_name", "csrf_token")
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     limit = MAX_UPLOAD_MB * 1024 * 1024
     data = bytearray()
@@ -66,21 +97,64 @@ async def _read_upload(file: UploadFile) -> bytes:
     return bytes(data)
 
 
-def create_app(engine: Engine | None = None) -> FastAPI:
+def create_app(engine: Engine | None = None, auth: AuthService | None = None) -> FastAPI:
     app = FastAPI(
         title="TikTok Affiliate Report API",
-        description="Local-only Phase-2 API foundation; runtime auth is intentionally out of scope before OIDC.",
-        version="0.2.0",
+        description="Phase-2 API with local-safe mode, OIDC sessions and account-scoped RBAC.",
+        version="0.3.0",
     )
     app.state.engine = engine or get_engine()
     init_db(app.state.engine)
+    app.state.auth = auth or AuthService(app.state.engine, AuthSettings.from_env())
+    origins = _cors_origins()
+    if "*" in origins:
+        raise ValueError("API_CORS_ORIGINS không được dùng * khi cookie credentials được bật.")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=_cors_origins(),
+        allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
     )
+
+    def principal(request: Request) -> Principal:
+        service = _auth(app)
+        if service.settings.mode == "local" and (
+            request.client is None
+            or not is_loopback_host(request.client.host)
+            or not is_loopback_host(request.url.hostname)
+        ):
+            raise HTTPException(status_code=403, detail="Local auth is restricted to loopback")
+        try:
+            current = service.get_principal(request.cookies.get(service.settings.cookie_name))
+        except (LookupError, PermissionError):
+            current = None
+        if current is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return current
+
+    def csrf(request: Request) -> None:
+        service = _auth(app)
+        if not service.require_csrf(
+            request.cookies.get(service.settings.cookie_name),
+            request.headers.get("X-CSRF-Token"),
+        ):
+            raise HTTPException(status_code=403, detail="CSRF token is invalid")
+
+    def permitted_accounts(current: Principal, requested: list[str] | None) -> list[str]:
+        allowed = list(DEFAULT_ACCOUNTS) if current.role == "owner" else [
+            account for account in DEFAULT_ACCOUNTS if account in current.accounts
+        ]
+        if requested is None:
+            return allowed
+        if any(account not in allowed for account in requested):
+            raise HTTPException(status_code=403, detail="Account access denied")
+        return list(dict.fromkeys(requested))
+
+    def owner(current: Principal = Depends(principal)) -> Principal:
+        if current.role != "owner":
+            raise HTTPException(status_code=403, detail="Owner role required")
+        return current
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -88,9 +162,87 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             conn.execute(select(1))
         return {"status": "ok"}
 
+    @app.get("/auth/login")
+    async def login() -> RedirectResponse:
+        service = _auth(app)
+        if service.settings.mode == "local":
+            return RedirectResponse(_web_app_url(service), status_code=302)
+        try:
+            pending = await service.acreate_login_url()
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        response = RedirectResponse(pending.authorization_url, status_code=302)
+        response.set_cookie(
+            key=f"{service.settings.cookie_name}_oidc_state",
+            value=pending.state,
+            max_age=service.settings.state_ttl_seconds,
+            path="/",
+            secure=service.settings.cookie_secure,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
+    @app.get("/auth/callback")
+    async def callback(request: Request, code: str, state: str) -> RedirectResponse:
+        service = _auth(app)
+        if service.settings.mode != "oidc":
+            raise HTTPException(status_code=404, detail="OIDC is not enabled")
+        browser_state = request.cookies.get(f"{service.settings.cookie_name}_oidc_state")
+        if not browser_state or not secrets.compare_digest(browser_state, state):
+            raise HTTPException(status_code=400, detail="OIDC browser state is invalid")
+        try:
+            _, tokens = await service.acomplete_oidc_callback(state=state, code=code)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        response = RedirectResponse(_web_app_url(service), status_code=302)
+        response.delete_cookie(f"{service.settings.cookie_name}_oidc_state", path="/")
+        response.set_cookie(value=tokens.session_token, **service.cookie_options(tokens.expires_at))
+        response.set_cookie(
+            key=_csrf_cookie_name(service),
+            value=tokens.csrf_token,
+            max_age=service.settings.session_ttl_seconds,
+            expires=tokens.expires_at,
+            path="/",
+            secure=service.settings.cookie_secure,
+            httponly=False,
+            samesite="lax",
+        )
+        return response
+
+    @app.get("/auth/me")
+    def me(current: Principal = Depends(principal)) -> dict[str, Any]:
+        return {
+            "email": current.email,
+            "display_name": current.display_name,
+            "role": current.role,
+            "accounts": list(current.accounts),
+            "auth_method": current.auth_method,
+        }
+
+    @app.post("/auth/logout")
+    def logout(
+        request: Request,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> JSONResponse:
+        del current
+        service = _auth(app)
+        service.revoke_session(request.cookies.get(service.settings.cookie_name))
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(service.settings.cookie_name, path="/")
+        response.delete_cookie(_csrf_cookie_name(service), path="/")
+        return response
+
     @app.get("/api/v1/meta")
-    def meta() -> dict[str, Any]:
-        return {"accounts": DEFAULT_ACCOUNTS, "statuses": STATUSES, "max_upload_mb": MAX_UPLOAD_MB}
+    def meta(current: Principal = Depends(principal)) -> dict[str, Any]:
+        return {
+            "accounts": permitted_accounts(current, None),
+            "statuses": STATUSES,
+            "max_upload_mb": MAX_UPLOAD_MB,
+        }
 
     @app.get("/api/v1/overview")
     def overview_endpoint(
@@ -98,8 +250,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         status: list[str] | None = Query(None),
         start: date | None = None,
         end: date | None = None,
+        current: Principal = Depends(principal),
     ) -> dict[str, Any]:
-        items = _items(overview(_engine(app), _list(account), start, end, _list(status)))
+        accounts = permitted_accounts(current, _list(account))
+        items = _items(overview(_engine(app), accounts, start, end, _list(status)))
         return {"items": items, "count": len(items)}
 
     @app.get("/api/v1/daily")
@@ -108,8 +262,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         status: list[str] | None = Query(None),
         start: date | None = None,
         end: date | None = None,
+        current: Principal = Depends(principal),
     ) -> dict[str, Any]:
-        items = _items(daily_report(_engine(app), _list(account), start, end, _list(status)))
+        accounts = permitted_accounts(current, _list(account))
+        items = _items(daily_report(_engine(app), accounts, start, end, _list(status)))
         return {"items": items, "count": len(items)}
 
     @app.get("/api/v1/monthly-kpi")
@@ -119,8 +275,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         status: list[str] | None = Query(None),
         start: date | None = None,
         end: date | None = None,
+        current: Principal = Depends(principal),
     ) -> dict[str, Any]:
-        df = monthly_kpi(_engine(app), _list(account), start, end, _list(status))
+        accounts = permitted_accounts(current, _list(account))
+        df = monthly_kpi(_engine(app), accounts, start, end, _list(status))
         if month:
             df = df[pd.to_datetime(df["month"]).dt.strftime("%Y-%m") == month]
         items = _items(df)
@@ -135,20 +293,30 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         search: str | None = None,
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
+        current: Principal = Depends(principal),
     ) -> dict[str, Any]:
-        df = orders(_engine(app), _list(account), start, end, _list(status), search)
+        accounts = permitted_accounts(current, _list(account))
+        df = orders(_engine(app), accounts, start, end, _list(status), search)
         total = len(df)
         page = df.iloc[offset : offset + limit]
         items = _items(page)
         return {"items": items, "count": len(items), "total": total, "limit": limit, "offset": offset}
 
     @app.post("/api/v1/imports")
-    async def imports_endpoint(account: str = Form(...), file: UploadFile = File(...)) -> dict[str, Any]:
+    async def imports_endpoint(
+        account: str = Form(...),
+        file: UploadFile = File(...),
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        if current.role not in {"owner", "operator"}:
+            raise HTTPException(status_code=403, detail="Import requires operator or owner role")
         account = account.strip()
         if not account:
             raise HTTPException(status_code=422, detail="account is required")
         if account not in DEFAULT_ACCOUNTS:
             raise HTTPException(status_code=422, detail="account is not allowed")
+        permitted_accounts(current, [account])
         if not (file.filename or "").lower().endswith(".xlsx"):
             raise HTTPException(status_code=415, detail="only .xlsx files are supported")
         data = await _read_upload(file)
@@ -160,8 +328,9 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 file_bytes=data,
                 account=account,
                 rows=rows,
-                uploaded_by_label="API local",
-                auth_method="local-api",
+                uploaded_by_label=current.display_name or current.email,
+                auth_method=current.auth_method,
+                auth_subject=current.auth_subject,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -173,6 +342,40 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             "unchanged": int(result.get("unchanged", 0)),
             "rejected": int(result.get("rejected", 0)),
             "rejected_rows": result.get("rejected_rows", []),
+        }
+
+    @app.get("/api/v1/admin/users")
+    def users(_: Principal = Depends(owner)) -> dict[str, Any]:
+        items = _auth(app).list_users()
+        return {"items": items, "count": len(items)}
+
+    @app.patch("/api/v1/admin/users/{user_id}")
+    def update_user_endpoint(
+        user_id: int,
+        changes: UserUpdate,
+        _: None = Depends(csrf),
+        current: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        if current.user_id == user_id and (changes.active is False or changes.role in {"operator", "viewer"}):
+            raise HTTPException(status_code=409, detail="Owner cannot remove their own active owner access")
+        accounts = None if changes.accounts is None else list(dict.fromkeys(changes.accounts))
+        try:
+            updated = _auth(app).update_user(
+                user_id,
+                role=changes.role,
+                accounts=accounts,
+                active=changes.active,
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "id": updated.user_id,
+            "email": updated.email,
+            "display_name": updated.display_name,
+            "role": updated.role,
+            "accounts": list(updated.accounts),
         }
 
     return app

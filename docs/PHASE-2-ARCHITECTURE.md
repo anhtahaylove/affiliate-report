@@ -50,7 +50,7 @@ API phải gọi `parser.py`, `db.py`, `reports.py`; không được viết lạ
 
 Sở hữu render, filter, upload UI, navigation, responsive behavior và app-shell cache. PWA không đọc database trực tiếp và không tự tính lại KPI.
 
-## 3. Foundation đã dựng
+## 3. Trạng thái triển khai
 
 Python:
 
@@ -66,7 +66,7 @@ Web:
 - `web/src/lib/api.ts`
 - `web/public/sw.js`
 
-API local chạy tại `127.0.0.1:8000`; Next.js chạy tại `127.0.0.1:3000`. Foundation này chưa phải public security boundary.
+Gate B đã bổ sung OIDC Authorization Code + PKCE, signed ID-token validation, opaque server-side session, CSRF, roles/account allowlist, PostgreSQL và CI Postgres 16. `AUTH_MODE=local` vẫn tương thích desktop nhưng chỉ được bind loopback; host public/LAN bắt buộc `AUTH_MODE=oidc`.
 
 ## 4. API contract hiện tại
 
@@ -81,6 +81,9 @@ Base path: `/api/v1`. Date dùng `YYYY-MM-DD`; tiền là integer VND; null đư
 | GET | `/api/v1/monthly-kpi` | KPI tháng |
 | GET | `/api/v1/orders` | Order explorer có limit/offset |
 | POST | `/api/v1/imports` | Multipart `.xlsx` + account bắt buộc |
+| GET | `/auth/login`, `/auth/callback`, `/auth/me` | OIDC/session lifecycle |
+| POST | `/auth/logout` | Revoke session; yêu cầu CSRF trong OIDC mode |
+| GET/PATCH | `/api/v1/admin/users` | Owner quản lý role/account access |
 
 Report response:
 
@@ -100,7 +103,7 @@ Orders response thêm `total`, `limit`, `offset`. Import response giữ `batch_i
 - Rate limit upload, giới hạn 20 MB/50.000 dòng và audit subject/file hash.
 - Không log token, cookie hoặc nội dung Excel nhạy cảm.
 
-OIDC chưa được bật trong foundation vì provider/issuer/client ID chưa được chốt. Không expose `run_api.py` trực tiếp ra Internet.
+OIDC là provider-neutral và cấu hình bằng issuer/metadata, client credentials, redirect URI và email allowlist. Deployment thật vẫn cần TLS/reverse proxy, OIDC client hợp lệ, secret injection ngoài Git, PostgreSQL backup và restore drill.
 
 ## 6. Data strategy
 
@@ -119,9 +122,8 @@ OIDC chưa được bật trong foundation vì provider/issuer/client ID chưa �
 
 ### Gate B — OIDC + Postgres
 
-- Chốt provider và claims.
-- Thêm user/role/account access mapping.
-- Chạy cùng contract tests trên SQLite và Postgres.
+- **Đã triển khai trong code:** provider discovery, ID-token/issuer/nonce validation, session/CSRF, user/role/account mapping, PostgreSQL data layer và migration CI.
+- **Deployment input còn thiếu:** issuer/client credentials thật, DNS/TLS và database PostgreSQL đích.
 
 ### Gate C — Next.js feature parity
 
@@ -155,7 +157,7 @@ Chỉ deprecate khi PWA đạt parity, migration/rollback được thử và ng�
 | Risk | Gate |
 | --- | --- |
 | Logic Python/TypeScript lệch nhau | Cấm công thức KPI trong frontend; parity tests |
-| Public API chưa có auth | Chỉ bind localhost trước Gate B |
+| Public API chạy nhầm local auth | `run_api.py` từ chối non-loopback nếu không phải OIDC |
 | SQLite concurrency | Chuyển Postgres trước shared multi-user |
 | Wrapper sprawl | Wrapper chỉ packaging/native bridge |
 | Offline scope quá lớn | Chỉ cache app shell trước; data sync khi có yêu cầu thật |

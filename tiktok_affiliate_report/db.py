@@ -7,8 +7,26 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
-    JSON, BigInteger, Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index,
-    Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine, func, select, update
+    JSON,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    create_engine,
+    func,
+    select,
+    text,
+    update,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
@@ -83,12 +101,14 @@ Index(
     order_line_versions.c.business_key,
     unique=True,
     sqlite_where=order_line_versions.c.is_current.is_(True),
+    postgresql_where=order_line_versions.c.is_current.is_(True),
 )
 Index(
     "ix_order_line_versions_account_order_date",
     order_line_versions.c.account,
     order_line_versions.c.order_date,
     sqlite_where=order_line_versions.c.is_current.is_(True),
+    postgresql_where=order_line_versions.c.is_current.is_(True),
 )
 Index("ix_order_line_versions_order_id", order_line_versions.c.order_id)
 Index("ix_order_line_versions_sku_id", order_line_versions.c.sku_id)
@@ -102,13 +122,65 @@ monthly_targets = Table(
     UniqueConstraint("account", "month", name="uq_target_account_month"),
 )
 
+app_users = Table(
+    "app_users", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("issuer", String(512), nullable=False),
+    Column("subject", String(255), nullable=False),
+    Column("email", String(320), nullable=False),
+    Column("display_name", String(255)),
+    Column("role", String(16), nullable=False),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("last_login_at", DateTime(timezone=True)),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("role IN ('owner', 'operator', 'viewer')", name="ck_app_user_role"),
+    UniqueConstraint("issuer", "subject", name="uq_app_user_issuer_subject"),
+)
+Index("ix_app_users_email", app_users.c.email)
+
+user_account_access = Table(
+    "user_account_access", metadata,
+    Column("user_id", Integer, ForeignKey("app_users.id", ondelete="CASCADE"), primary_key=True),
+    Column("account", String(64), primary_key=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("ix_user_account_access_account", user_account_access.c.account)
+
+auth_sessions = Table(
+    "auth_sessions", metadata,
+    Column("token_hash", String(64), primary_key=True),
+    Column("user_id", Integer, ForeignKey("app_users.id", ondelete="CASCADE"), nullable=False),
+    Column("csrf_hash", String(64), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("ix_auth_sessions_user_id", auth_sessions.c.user_id)
+Index("ix_auth_sessions_expires_at", auth_sessions.c.expires_at)
+
+oidc_login_states = Table(
+    "oidc_login_states", metadata,
+    Column("state_hash", String(64), primary_key=True),
+    Column("code_verifier", String(255), nullable=False),
+    Column("nonce", String(255), nullable=False),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("ix_oidc_login_states_expires_at", oidc_login_states.c.expires_at)
+
 
 def get_engine(database_url: str | None = None) -> Engine:
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
-    if not url.startswith("sqlite:///"):
-        raise ValueError("Bản local chỉ hỗ trợ SQLite (sqlite:///...).")
-    Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(url, future=True)
+    if url.startswith("sqlite:///"):
+        Path(url.removeprefix("sqlite:///").split("?", 1)[0]).parent.mkdir(parents=True, exist_ok=True)
+        return create_engine(url, future=True)
+    if url.startswith("postgres://"):
+        url = "postgresql+psycopg://" + url.removeprefix("postgres://")
+    elif url.startswith("postgresql://"):
+        url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    if url.startswith("postgresql+psycopg://"):
+        return create_engine(url, future=True, pool_pre_ping=True)
+    raise ValueError("DATABASE_URL phải dùng sqlite:/// hoặc postgresql+psycopg://.")
 
 
 def init_db(engine: Engine) -> None:
@@ -129,9 +201,14 @@ def seed_targets(engine: Engine) -> None:
     }
     with engine.begin() as conn:
         for month, amount in targets.items():
-            exists = conn.execute(select(monthly_targets.c.id).where(monthly_targets.c.account == "ALL", monthly_targets.c.month == month)).first()
-            if not exists:
-                conn.execute(monthly_targets.insert().values(account="ALL", month=month, target_commission=amount))
+            values = {"account": "ALL", "month": month, "target_commission": amount}
+            if engine.dialect.name == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert
+                stmt = insert(monthly_targets).values(**values).on_conflict_do_nothing(index_elements=["account", "month"])
+            else:
+                from sqlalchemy.dialects.sqlite import insert
+                stmt = insert(monthly_targets).values(**values).on_conflict_do_nothing(index_elements=["account", "month"])
+            conn.execute(stmt)
 
 
 def import_rows(
@@ -155,6 +232,11 @@ def import_rows(
 
     sha = file_sha256(file_bytes)
     with engine.begin() as conn:
+        if engine.dialect.name == "postgresql":
+            conn.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+                {"lock_key": f"tiktok-affiliate-import:{account}"},
+            )
         old_batch = conn.execute(
             select(import_batches).where(
                 import_batches.c.account == account,

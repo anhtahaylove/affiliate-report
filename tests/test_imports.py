@@ -47,8 +47,8 @@ def engine():
     return e
 
 
-def test_local_database_rejects_non_sqlite_url():
-    with pytest.raises(ValueError, match="chỉ hỗ trợ SQLite"):
+def test_database_rejects_unknown_url_scheme():
+    with pytest.raises(ValueError, match="sqlite:/// hoặc postgresql"):
         get_engine("not-a-sqlite-url")
 
 
@@ -249,3 +249,13 @@ def test_overview_all_and_google_sheets_output_keep_accounts_separate():
     assert output.iloc[0]["Tổng HH thực tế"] == 20000
     assert output.iloc[0]["% đạt KPI"] == pytest.approx(20000 / 350000)
     assert daily_report(e).query("account == 'ALL'").iloc[0]["orders"] == 2
+
+
+def test_empty_account_allowlist_never_falls_back_to_all_accounts():
+    e = engine()
+    import_rows(e, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[raw_row()])
+
+    assert overview(e, accounts=[]).empty
+    assert daily_report(e, accounts=[]).empty
+    assert orders(e, accounts=[]).empty
+    assert sheets_output(e, accounts=[]).empty

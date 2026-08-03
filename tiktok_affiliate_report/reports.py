@@ -21,7 +21,7 @@ def _apply_filters(df: pd.DataFrame, accounts=None, start=None, end=None, status
         return df
     df = df.copy()
     df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
-    if accounts:
+    if accounts is not None:
         df = df[df["account"].isin(accounts)]
     if statuses:
         df = df[df["status"].isin(statuses)]
@@ -103,7 +103,8 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
     }
     result["daily_target"] = result["day"].str[:7].map(target_map)
     result.loc[result["account"] != "ALL", "daily_target"] = pd.NA
-    if set(accounts or DEFAULT_ACCOUNTS) != set(DEFAULT_ACCOUNTS) or statuses:
+    selected_accounts = DEFAULT_ACCOUNTS if accounts is None else accounts
+    if set(selected_accounts) != set(DEFAULT_ACCOUNTS) or statuses:
         result["daily_target"] = pd.NA
     denominator = pd.to_numeric(result["daily_target"], errors="coerce").where(lambda values: values > 0)
     result["target_achievement"] = result["actual_commission"].div(denominator)
@@ -167,7 +168,8 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
     out["actual_commission"] = pd.to_numeric(out["actual_commission"], errors="coerce").astype("Int64")
     out["order_lines"] = out["order_lines"].fillna(0).astype(int)
     out["days_in_scope"] = out["month"].map(days_in_scope)
-    if set(accounts or DEFAULT_ACCOUNTS) != set(DEFAULT_ACCOUNTS) or statuses:
+    selected_accounts = DEFAULT_ACCOUNTS if accounts is None else accounts
+    if set(selected_accounts) != set(DEFAULT_ACCOUNTS) or statuses:
         out["daily_target"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
     out["monthly_target"] = out["daily_target"] * out["days_in_scope"]
     out["gap"] = out["actual_commission"] - out["monthly_target"]
@@ -177,7 +179,7 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
 
 
 def sheets_output(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
-    account_order = list(accounts or DEFAULT_ACCOUNTS)
+    account_order = list(DEFAULT_ACCOUNTS if accounts is None else accounts)
     columns = ["Ngày"]
     account_metrics = [
         ("units_sold", "Số lượng bán"),

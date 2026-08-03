@@ -89,6 +89,52 @@ CREATE TABLE IF NOT EXISTS monthly_targets (
     UNIQUE (account, month)
 );
 
+CREATE TABLE IF NOT EXISTS app_users (
+    id INTEGER PRIMARY KEY,
+    issuer TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
+    role TEXT NOT NULL CHECK (role IN ('owner', 'operator', 'viewer')),
+    active BOOLEAN NOT NULL DEFAULT 1,
+    last_login_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (issuer, subject)
+);
+
+CREATE INDEX IF NOT EXISTS ix_app_users_email ON app_users (email);
+
+CREATE TABLE IF NOT EXISTS user_account_access (
+    user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    account TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, account)
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_account_access_account ON user_account_access (account);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    csrf_hash TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_auth_sessions_user_id ON auth_sessions (user_id);
+CREATE INDEX IF NOT EXISTS ix_auth_sessions_expires_at ON auth_sessions (expires_at);
+
+CREATE TABLE IF NOT EXISTS oidc_login_states (
+    state_hash TEXT PRIMARY KEY,
+    code_verifier TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_oidc_login_states_expires_at ON oidc_login_states (expires_at);
+
 CREATE VIEW IF NOT EXISTS v_order_line_current AS
 SELECT
     id,

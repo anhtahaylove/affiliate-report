@@ -23,8 +23,9 @@ def test_init_db_runs_versioned_migrations_and_seeds_targets():
     assert {i["name"] for i in inspector.get_indexes("raw_import_rows")} >= {"ix_raw_import_rows_batch_id"}
     assert {i["name"] for i in inspector.get_indexes("import_batches")} >= {"ix_import_batches_account_created_at"}
     with e.connect() as conn:
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4]
         assert conn.execute(select(monthly_targets.c.id)).first() is not None
+    assert {"app_users", "user_account_access", "auth_sessions", "oidc_login_states"} <= set(inspector.get_table_names())
 
 
 def test_migrations_adopt_existing_sqlite_and_preserve_data():
@@ -66,7 +67,7 @@ def test_migrations_adopt_existing_sqlite_and_preserve_data():
     with e.connect() as conn:
         old = conn.execute(text("select file_sha, filename, account, inserted from import_batches where id = 1")).mappings().one()
         assert dict(old) == {"file_sha": "abc", "filename": "old.xlsx", "account": "CHIISTORE", "inserted": 3}
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4]
 
 
 def test_import_rows_stores_optional_identity_audit():

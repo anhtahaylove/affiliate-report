@@ -70,7 +70,8 @@ button.primary {
   color: #ffffff;
 }
 
-button.primary:hover {
+button.primary:hover,
+.button-link:hover {
   background: var(--primary-dark);
 }
 
@@ -139,6 +140,41 @@ button:disabled {
 
 .api-state.offline::before {
   background: var(--danger);
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.user-menu strong {
+  color: var(--foreground);
+}
+
+.auth-card {
+  max-width: 440px;
+  margin: 12vh auto;
+  padding: 24px;
+}
+
+.auth-card h1 {
+  margin: 0 0 8px;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  margin: 12px 0;
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 650;
+  text-decoration: none;
 }
 
 .panel {

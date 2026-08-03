@@ -4,9 +4,13 @@ import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   API_URL,
+  ApiError,
+  CurrentUser,
   DailyRow,
   loadDashboard,
+  loadCurrentUser,
   loadMeta,
+  logout,
   OverviewRow,
   uploadExport,
 } from "@/lib/api";
@@ -23,7 +27,13 @@ function formatMoney(value: number | null | undefined) {
   return money.format(Number(value ?? 0));
 }
 
+function errorMessage(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback;
+}
+
 export function Dashboard() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [authError, setAuthError] = useState("");
   const [availableAccounts, setAvailableAccounts] = useState<string[]>([]);
   const [accounts, setAccounts] = useState<string[]>([]);
   const [start, setStart] = useState("");
@@ -35,6 +45,7 @@ export function Dashboard() {
   const [metaError, setMetaError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
+  const canUpload = user?.role === "operator" || user?.role === "owner";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -44,39 +55,45 @@ export function Dashboard() {
       setOverview(data.overview);
       setDaily(data.daily);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu API.");
+      if (reason instanceof ApiError && reason.status === 401) {
+        setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
+      } else {
+        setError(errorMessage(reason, "Không thể tải dữ liệu API."));
+      }
     } finally {
       setLoading(false);
     }
   }, [accounts, end, start]);
 
   useEffect(() => {
-    loadMeta()
-      .then((meta) => {
+    let active = true;
+    async function loadInitial() {
+      setLoading(true);
+      try {
+        const currentUser = await loadCurrentUser();
+        if (!active) return;
+        setUser(currentUser);
+        setAuthError("");
+
+        const [meta, data] = await Promise.all([loadMeta(), loadDashboard({})]);
+        if (!active) return;
         setAvailableAccounts(meta.accounts);
         setMetaError("");
-      })
-      .catch((reason) => {
-        setAvailableAccounts([]);
-        setMetaError(reason instanceof Error ? reason.message : "Không thể tải danh sách account.");
-      });
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    loadDashboard({})
-      .then((data) => {
-        if (!active) return;
         setOverview(data.overview);
         setDaily(data.daily);
-      })
-      .catch((reason) => {
+      } catch (reason) {
         if (!active) return;
-        setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu API.");
-      })
-      .finally(() => {
+        if (reason instanceof ApiError && reason.status === 401) {
+          setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
+        } else {
+          setError(errorMessage(reason, "Không thể tải dữ liệu API."));
+          setMetaError(errorMessage(reason, "Không thể tải danh sách account."));
+        }
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    }
+    void loadInitial();
     return () => {
       active = false;
     };
@@ -99,6 +116,10 @@ export function Dashboard() {
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canUpload) {
+      setUploadMessage("Tài khoản viewer không có quyền import dữ liệu.");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const account = String(form.get("account") ?? "");
     const file = form.get("file");
@@ -124,10 +145,37 @@ export function Dashboard() {
       await refresh();
       event.currentTarget.reset();
     } catch (reason) {
-      setUploadMessage(reason instanceof Error ? reason.message : "Import thất bại.");
+      if (reason instanceof ApiError && reason.status === 401) {
+        setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
+      } else {
+        setUploadMessage(errorMessage(reason, "Import thất bại."));
+      }
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } finally {
+      window.location.href = `${API_URL}/auth/login`;
+    }
+  }
+
+  if (authError) {
+    return (
+      <main className="app-shell">
+        <section className="auth-card panel">
+          <h1>TikTok Affiliate Report</h1>
+          <p>Vui lòng đăng nhập để xem dashboard.</p>
+          <a className="button-link" href={`${API_URL}/auth/login`}>
+            Đăng nhập
+          </a>
+          <p className="hint">{authError}</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -143,6 +191,13 @@ export function Dashboard() {
         <span className={`api-state${error || metaError ? " offline" : ""}`}>
           {error || metaError ? "API chưa sẵn sàng" : "API sẵn sàng"}: {API_URL}
         </span>
+        {user ? (
+          <div className="user-menu" aria-label="Tài khoản hiện tại">
+            <span>{user.email}</span>
+            <strong>{user.role}</strong>
+            <button type="button" onClick={handleLogout}>Đăng xuất</button>
+          </div>
+        ) : null}
       </header>
 
       <form
@@ -226,31 +281,33 @@ export function Dashboard() {
           </div>
         </section>
 
-        <section className="section panel">
-          <div className="section-heading">
-            <div>
-              <h2>Import file TikTok</h2>
-              <p>Account là bắt buộc; hệ thống giữ cơ chế chống trùng hiện tại.</p>
+        {canUpload ? (
+          <section className="section panel">
+            <div className="section-heading">
+              <div>
+                <h2>Import file TikTok</h2>
+                <p>Account là bắt buộc; hệ thống giữ cơ chế chống trùng hiện tại.</p>
+              </div>
             </div>
-          </div>
-          <form className="upload-form" onSubmit={handleUpload}>
-            <div className="field">
-              <label htmlFor="upload-account">Affiliate account</label>
-              <select id="upload-account" name="account" required defaultValue="" disabled={!availableAccounts.length}>
-                <option value="" disabled>Chọn account</option>
-                {availableAccounts.map((account) => <option key={account}>{account}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="upload-file">File export .xlsx</label>
-              <input id="upload-file" name="file" type="file" accept=".xlsx" required />
-            </div>
-            <button className="primary" type="submit" disabled={uploading || !availableAccounts.length}>
-              {uploading ? "Đang import…" : "Import dữ liệu"}
-            </button>
-            {uploadMessage ? <p className="upload-result" aria-live="polite">{uploadMessage}</p> : null}
-          </form>
-        </section>
+            <form className="upload-form" onSubmit={handleUpload}>
+              <div className="field">
+                <label htmlFor="upload-account">Affiliate account</label>
+                <select id="upload-account" name="account" required defaultValue="" disabled={!availableAccounts.length}>
+                  <option value="" disabled>Chọn account</option>
+                  {availableAccounts.map((account) => <option key={account}>{account}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="upload-file">File export .xlsx</label>
+                <input id="upload-file" name="file" type="file" accept=".xlsx" required />
+              </div>
+              <button className="primary" type="submit" disabled={uploading || !availableAccounts.length}>
+                {uploading ? "Đang import…" : "Import dữ liệu"}
+              </button>
+              {uploadMessage ? <p className="upload-result" aria-live="polite">{uploadMessage}</p> : null}
+            </form>
+          </section>
+        ) : null}
 
         <section className="section panel">
           <div className="section-heading">
