@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import sys
 import threading
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 import tiktok_affiliate_report.updater as updater
+from scripts import sign_update_feed
 
 TEST_KEY_ID = "test-key"
 TEST_PRIVATE = Ed25519PrivateKey.from_private_bytes(bytes(range(1, 33)))
@@ -87,6 +89,42 @@ def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: byte
     monkeypatch.setattr(updater, "urlopen", fake_urlopen)
     monkeypatch.delenv("TIKTOK_REPORT_UPDATE_FEED_URL", raising=False)
     return seen_headers
+
+
+def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.0.exe"
+    installer.write_bytes(b"installer")
+    output_dir = tmp_path / "feed"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "sign_update_feed.py",
+            "--version",
+            "1.2.0",
+            "--installer",
+            str(installer),
+            "--asset-url",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.0/TikTokAffiliateReportSetup-v1.2.0.exe",
+            "--release-url",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/tag/v1.2.0",
+            "--key-id",
+            TEST_KEY_ID,
+            "--output-dir",
+            str(output_dir),
+            "--published-at",
+            "2026-08-04T00:00:00Z",
+            "--private-key-b64",
+            base64.b64encode(bytes(range(1, 33))).decode("ascii"),
+        ],
+    )
+
+    assert sign_update_feed.main() == 0
+    manifest = (output_dir / "stable.json").read_bytes()
+    signature = (output_dir / "stable.json.sig").read_bytes()
+    assert b"\r" not in manifest + signature
+    monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", {TEST_KEY_ID: TEST_PUBLIC_B64})
+    assert updater.verify_update_manifest_bytes(manifest, signature)["version"] == "1.2.0"
 
 
 def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, monkeypatch):

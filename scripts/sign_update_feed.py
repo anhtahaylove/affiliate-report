@@ -64,7 +64,8 @@ def main() -> int:
     }
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "stable.json").write_bytes(payload)
-    (args.output_dir / "stable.json.sig").write_text(json.dumps(signature, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    signature_payload = (json.dumps(signature, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    (args.output_dir / "stable.json.sig").write_bytes(signature_payload)
     print(f"Wrote {args.output_dir / 'stable.json'} and stable.json.sig")
     return 0
 
