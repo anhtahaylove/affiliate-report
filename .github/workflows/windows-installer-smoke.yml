@@ -13,6 +13,7 @@ permissions:
 jobs:
   fresh-install-v120:
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Download public v1.2.0 installer
@@ -27,6 +28,7 @@ jobs:
 
   upgrade-v111-to-v120:
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Download v1.1.1 and public v1.2.0 installers

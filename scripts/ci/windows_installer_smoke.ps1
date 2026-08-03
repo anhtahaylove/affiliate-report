@@ -34,7 +34,12 @@ function Assert-Installer([string]$Path, [string]$Version) {
 }
 
 function Install-App([string]$Path) {
-    $process = Start-Process -FilePath $Path -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+    Write-Host "Installing $(Split-Path -Leaf $Path)..."
+    $process = Start-Process -FilePath $Path -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -PassThru
+    if (!$process.WaitForExit(120000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "Installer timed out after 120 seconds: $Path"
+    }
     if ($process.ExitCode -ne 0) {
         throw "Installer exited with code $($process.ExitCode): $Path"
     }
@@ -51,6 +56,7 @@ function Assert-InstalledVersion([string]$Version) {
 }
 
 function Start-App([int]$Port) {
+    Write-Host "Starting installed app on port $Port..."
     $env:API_PORT = "$Port"
     try {
         Start-Process -FilePath $appExe -WorkingDirectory $installDir | Out-Null
@@ -73,10 +79,14 @@ function Start-App([int]$Port) {
 }
 
 function Stop-App {
-    Get-CimInstance Win32_Process -Filter "Name = 'TikTokAffiliateReport.exe'" |
-        Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($appExe) } |
-        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    Start-Sleep -Seconds 1
+    for ($attempt = 1; $attempt -le 20; $attempt++) {
+        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'TikTokAffiliateReport.exe'" |
+            Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($appExe) })
+        if ($processes.Count -eq 0) { return }
+        $processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Milliseconds 500
+    }
+    throw 'Installed app processes did not stop within 10 seconds.'
 }
 
 function Assert-Routes([string]$BaseUrl) {
