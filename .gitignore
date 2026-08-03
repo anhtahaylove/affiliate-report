@@ -21,7 +21,6 @@ dist/
 .omx/
 .playwright-mcp/
 .impeccable/
-.streamlit/secrets.toml
 node_modules/
 .next/
 coverage/

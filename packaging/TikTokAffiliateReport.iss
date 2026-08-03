@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.1.0"
 #endif
 
 [Setup]
@@ -14,7 +14,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\artifacts\installer
-OutputBaseFilename=TikTokAffiliateReportSetup
+OutputBaseFilename=TikTokAffiliateReportSetup-v{#MyAppVersion}
 SetupIconFile=app.ico
 UninstallDisplayIcon={app}\TikTokAffiliateReport.exe
 Compression=lzma2/max

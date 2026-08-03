@@ -2,10 +2,10 @@
 
 ## 1. Quyết định
 
-Phase 2 không viết lại business logic. Hệ thống giữ một Python core, thêm một HTTP API versioned và dùng Next.js PWA làm UI chung:
+Phase 2 không viết lại business logic. Hệ thống giữ một Python core, dùng HTTP API versioned và Next.js PWA làm UI chung:
 
 ```text
-Browser / Tauri / Capacitor
+Browser / Windows EXE / Capacitor
             |
        Next.js PWA
             |
@@ -16,8 +16,8 @@ Browser / Tauri / Capacitor
  SQLite local / Postgres shared
 ```
 
-- Streamlit tiếp tục là bản desktop local ổn định trong thời gian chuyển đổi.
-- Tauri và Capacitor chỉ là wrapper, không chứa công thức KPI hoặc logic dedupe.
+- Streamlit đã được loại khỏi runtime; Windows EXE chạy FastAPI và phục vụ static Next.js trên loopback.
+- Wrapper tương lai như Tauri/Capacitor chỉ đóng gói UI/native bridge, không chứa công thức KPI hoặc logic dedupe.
 - Expo/React Native chỉ được chọn nếu mobile-first, offline, push notification hoặc native UX trở thành yêu cầu chính.
 
 ## 2. Boundary bắt buộc
@@ -66,7 +66,7 @@ Web:
 - `web/src/lib/api.ts`
 - `web/public/sw.js`
 
-Gate B đã bổ sung OIDC Authorization Code + PKCE, signed ID-token validation, opaque server-side session, CSRF, roles/account allowlist, PostgreSQL và CI Postgres 16. `AUTH_MODE=local` vẫn tương thích desktop nhưng chỉ được bind loopback; host public/LAN bắt buộc `AUTH_MODE=oidc`.
+Gate B đã bổ sung OIDC Authorization Code + PKCE, signed ID-token validation, opaque server-side session, CSRF, roles/account allowlist, PostgreSQL và CI Postgres 16. Operations Cockpit đã thay Streamlit cho local desktop; `AUTH_MODE=local` chỉ được bind loopback, còn host public/LAN bắt buộc `AUTH_MODE=oidc`.
 
 ## 4. API contract hiện tại
 
@@ -79,7 +79,10 @@ Base path: `/api/v1`. Date dùng `YYYY-MM-DD`; tiền là integer VND; null đư
 | GET | `/api/v1/overview` | Summary theo account và `ALL` |
 | GET | `/api/v1/daily` | Báo cáo ngày |
 | GET | `/api/v1/monthly-kpi` | KPI tháng |
+| GET | `/api/v1/targets` | Target KPI/ngày theo account/tháng |
+| PUT | `/api/v1/targets/{account}/{month}` | Sửa target; operator theo account, `ALL` chỉ owner |
 | GET | `/api/v1/orders` | Order explorer có limit/offset |
+| GET | `/api/v1/imports` | Lịch sử import mới nhất theo account scope |
 | POST | `/api/v1/imports` | Multipart `.xlsx` + account bắt buộc |
 | GET | `/auth/login`, `/auth/callback`, `/auth/me` | OIDC/session lifecycle |
 | POST | `/auth/logout` | Revoke session; yêu cầu CSRF trong OIDC mode |
@@ -125,21 +128,22 @@ OIDC là provider-neutral và cấu hình bằng issuer/metadata, client credent
 - **Đã triển khai trong code:** provider discovery, ID-token/issuer/nonce validation, session/CSRF, user/role/account mapping, PostgreSQL data layer và migration CI.
 - **Deployment input còn thiếu:** issuer/client credentials thật, DNS/TLS và database PostgreSQL đích.
 
-### Gate C — Next.js feature parity
+### Gate C — Next.js Operations Cockpit
 
-- Upload, filters, KPI, daily, orders, import history và exports có đủ trên PWA.
+- **Đã triển khai:** dashboard/filter, KPI tháng, target chỉnh sửa theo account + `ALL`, upload, daily/account performance và import history.
+- **Còn lại:** order explorer, CSV export và owner user-management UI.
 - Không có business math trong TypeScript.
-- PWA installable; app shell hoạt động offline, report data yêu cầu API.
+- PWA installable; service worker chỉ cache app shell/static assets, không cache `/api`, `/auth` hoặc dữ liệu report.
 
-### Gate D — Wrappers
+### Gate D — Wrappers/mobile
 
-- Tauri đóng gói cùng web build cho desktop.
+- Desktop hiện dùng PyInstaller one-file để chạy FastAPI + static Next.js; Tauri chỉ cân nhắc khi cần native shell/tray/updater.
 - Capacitor đóng gói cùng web build cho Android/iOS.
 - Native plugins chỉ cho file picker/share/deep link/notification; không duplicate domain logic.
 
-### Gate E — Streamlit deprecation
+### Gate E — Streamlit removal
 
-Chỉ deprecate khi PWA đạt parity, migration/rollback được thử và người dùng hiện tại chuyển đổi thành công.
+Đã hoàn tất trong runtime và packaging. Release v1.0.0 cũ vẫn là artifact lịch sử; v1.1.0 trở đi dùng Operations Cockpit.
 
 ## 8. Acceptance criteria
 
@@ -147,6 +151,7 @@ Chỉ deprecate khi PWA đạt parity, migration/rollback được thử và ng�
 - Overlap chỉ tạo version mới khi normalized content thay đổi.
 - Upload luôn yêu cầu account rõ ràng.
 - Report/KPI API khớp Python core.
+- Target là KPI hoa hồng mỗi ngày; target tháng do Python core tính theo số ngày trong scope.
 - Missing import không bị đổi thành số 0.
 - Mọi endpoint ngoài health được auth trước khi public.
 - Web, desktop và mobile dùng cùng API contract và cùng PWA surface.
@@ -165,13 +170,14 @@ Chỉ deprecate khi PWA đạt parity, migration/rollback được thử và ng�
 ## 10. Lệnh local
 
 ```powershell
-python -m pip install -r requirements-api.txt
-python run_api.py
+corepack enable
+.\START_REPORT.bat
 ```
 
+Hoặc chạy dev tách API/UI:
+
 ```powershell
-Set-Location web
-Copy-Item .env.example .env.local
-pnpm install
-pnpm dev
+.\.venv\Scripts\python.exe run_api.py
+Copy-Item web\.env.example web\.env.local
+pnpm --dir web dev
 ```

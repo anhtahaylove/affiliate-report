@@ -20,12 +20,13 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
-from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from .auth import AuthService, AuthSettings, Principal, is_loopback_host
-from .db import get_engine, import_rows, init_db
+from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
 from .parser import DEFAULT_ACCOUNTS, read_xlsx
 from .reports import daily_report, monthly_kpi, orders, overview
 
@@ -39,8 +40,12 @@ class UserUpdate(BaseModel):
     active: bool | None = None
 
 
+class TargetUpdate(BaseModel):
+    target_commission: int = Field(ge=0, le=1_000_000_000_000)
+
+
 def _cors_origins() -> list[str]:
-    raw = os.getenv("API_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8501,http://127.0.0.1:8501")
+    raw = os.getenv("API_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
@@ -69,6 +74,14 @@ def _list(values: list[str] | None) -> list[str] | None:
         return None
     out = [part.strip() for value in values for part in value.split(",") if part.strip()]
     return out or None
+
+
+def _month_start(value: str) -> date:
+    try:
+        parsed = datetime.strptime(value, "%Y-%m")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="month must use YYYY-MM") from exc
+    return date(parsed.year, parsed.month, 1)
 
 
 def _engine(app: FastAPI) -> Engine:
@@ -113,7 +126,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
         allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
     )
 
@@ -143,6 +156,16 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     def permitted_accounts(current: Principal, requested: list[str] | None) -> list[str]:
         allowed = list(DEFAULT_ACCOUNTS) if current.role == "owner" else [
+            account for account in DEFAULT_ACCOUNTS if account in current.accounts
+        ]
+        if requested is None:
+            return allowed
+        if any(account not in allowed for account in requested):
+            raise HTTPException(status_code=403, detail="Account access denied")
+        return list(dict.fromkeys(requested))
+
+    def permitted_target_accounts(current: Principal, requested: list[str] | None) -> list[str]:
+        allowed = ["ALL", *DEFAULT_ACCOUNTS] if current.role == "owner" else [
             account for account in DEFAULT_ACCOUNTS if account in current.accounts
         ]
         if requested is None:
@@ -284,6 +307,60 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         items = _items(df)
         return {"items": items, "count": len(items)}
 
+    @app.get("/api/v1/targets")
+    def targets_endpoint(
+        month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
+        account: list[str] | None = Query(None),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        accounts = permitted_target_accounts(current, _list(account))
+        stmt = select(monthly_targets).where(monthly_targets.c.account.in_(accounts))
+        if month:
+            stmt = stmt.where(monthly_targets.c.month == _month_start(month))
+        stmt = stmt.order_by(monthly_targets.c.month, monthly_targets.c.account)
+        with _engine(app).connect() as conn:
+            rows = conn.execute(stmt).mappings().all()
+        items = [
+            {
+                "account": row["account"],
+                "month": row["month"].strftime("%Y-%m"),
+                "target_commission": int(row["target_commission"]),
+            }
+            for row in rows
+        ]
+        return {"items": items, "count": len(items)}
+
+    @app.put("/api/v1/targets/{account}/{month}")
+    def update_target_endpoint(
+        account: str,
+        month: str,
+        changes: TargetUpdate,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        if current.role not in {"owner", "operator"}:
+            raise HTTPException(status_code=403, detail="Target update requires operator or owner role")
+        account = account.strip()
+        if account not in permitted_target_accounts(current, [account]):
+            raise HTTPException(status_code=403, detail="Account access denied")
+        month_date = _month_start(month)
+        values = {
+            "account": account,
+            "month": month_date,
+            "target_commission": changes.target_commission,
+        }
+        with _engine(app).begin() as conn:
+            if conn.dialect.name == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert
+            else:
+                from sqlalchemy.dialects.sqlite import insert
+            stmt = insert(monthly_targets).values(**values).on_conflict_do_update(
+                index_elements=["account", "month"],
+                set_={"target_commission": changes.target_commission},
+            )
+            conn.execute(stmt)
+        return {"account": account, "month": month, "target_commission": changes.target_commission}
+
     @app.get("/api/v1/orders")
     def orders_endpoint(
         account: list[str] | None = Query(None),
@@ -344,6 +421,34 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "rejected_rows": result.get("rejected_rows", []),
         }
 
+    @app.get("/api/v1/imports")
+    def imports_history_endpoint(
+        account: list[str] | None = Query(None),
+        limit: int = Query(10, ge=1, le=100),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        accounts = permitted_accounts(current, _list(account))
+        stmt = (
+            select(
+                import_batches.c.id,
+                import_batches.c.filename,
+                import_batches.c.account,
+                import_batches.c.uploaded_by_label,
+                import_batches.c.inserted,
+                import_batches.c.updated,
+                import_batches.c.unchanged,
+                import_batches.c.rejected,
+                import_batches.c.created_at,
+            )
+            .where(import_batches.c.account.in_(accounts))
+            .order_by(import_batches.c.created_at.desc(), import_batches.c.id.desc())
+            .limit(limit)
+        )
+        with _engine(app).connect() as conn:
+            rows = conn.execute(stmt).mappings().all()
+        items = [{key: _clean(value) for key, value in row.items()} for row in rows]
+        return {"items": items, "count": len(items), "limit": limit}
+
     @app.get("/api/v1/admin/users")
     def users(_: Principal = Depends(owner)) -> dict[str, Any]:
         items = _auth(app).list_users()
@@ -377,6 +482,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "role": updated.role,
             "accounts": list(updated.accounts),
         }
+
+    static_dir = os.getenv("WEB_STATIC_DIR")
+    if static_dir and os.path.isdir(static_dir):
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="web")
 
     return app
 

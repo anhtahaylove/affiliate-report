@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS monthly_targets (
     id INTEGER PRIMARY KEY,
     account TEXT NOT NULL,
     month DATE NOT NULL,
+    -- KPI hoa hồng mỗi ngày; monthly target = value * days_in_scope.
     target_commission INTEGER NOT NULL,
     UNIQUE (account, month)
 );

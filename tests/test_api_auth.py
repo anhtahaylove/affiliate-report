@@ -6,7 +6,7 @@ from sqlalchemy import select
 from tests.test_api import normalized, raw_export_row, xlsx_bytes
 from tiktok_affiliate_report.api import create_app
 from tiktok_affiliate_report.auth import AuthService, AuthSettings
-from tiktok_affiliate_report.db import get_engine, import_batches, import_rows
+from tiktok_affiliate_report.db import get_engine, import_batches, import_rows, monthly_targets
 
 
 def oidc_api(tmp_path):
@@ -79,6 +79,24 @@ def test_viewer_only_sees_assigned_accounts_and_cannot_import(tmp_path):
     assert denied.status_code == 403
 
 
+def test_import_history_is_account_scoped_and_secret_safe(tmp_path):
+    client, engine, auth = oidc_api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    import_rows(engine, filename="b.xlsx", file_bytes=b"b", account="EMLINHNOIY", rows=[normalized("EMLINHNOIY")])
+    viewer, _ = login(client, auth, "viewer@example.test", "viewer")
+    auth.update_user(viewer.user_id or 0, accounts=["CHIISTORE"])
+
+    visible = client.get("/api/v1/imports").json()
+    denied = client.get("/api/v1/imports", params={"account": "EMLINHNOIY"})
+    item = visible["items"][0]
+
+    assert visible["count"] == 1
+    assert item["filename"] == "a.xlsx"
+    assert item["account"] == "CHIISTORE"
+    assert {"file_sha", "auth_subject"} & set(item) == set()
+    assert denied.status_code == 403
+
+
 def test_operator_requires_csrf_and_cannot_upload_another_account(tmp_path):
     client, engine, auth = oidc_api(tmp_path)
     operator, tokens = login(client, auth, "viewer@example.test", "operator")
@@ -108,6 +126,64 @@ def test_operator_requires_csrf_and_cannot_upload_another_account(tmp_path):
     assert audit["auth_method"] == "oidc"
     assert audit["auth_subject"] == "https://idp.example.test:operator"
     assert audit["uploaded_by_label"] == "viewer@example.test"
+
+
+def test_targets_are_editable_by_role_and_account_scope(tmp_path):
+    client, engine, auth = oidc_api(tmp_path)
+    operator, tokens = login(client, auth, "viewer@example.test", "operator")
+    auth.update_user(operator.user_id or 0, role="operator", accounts=["CHIISTORE"])
+
+    missing_csrf = client.put("/api/v1/targets/CHIISTORE/2026-03", json={"target_commission": 111})
+    updated = client.put(
+        "/api/v1/targets/CHIISTORE/2026-03",
+        json={"target_commission": 111},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    )
+    denied_account = client.put(
+        "/api/v1/targets/THAOBRA/2026-03",
+        json={"target_commission": 222},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    )
+    denied_all = client.put(
+        "/api/v1/targets/ALL/2026-03",
+        json={"target_commission": 333},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    )
+
+    assert missing_csrf.status_code == 403
+    assert updated.status_code == 200
+    assert updated.json() == {"account": "CHIISTORE", "month": "2026-03", "target_commission": 111}
+    assert denied_account.status_code == 403
+    assert denied_all.status_code == 403
+    visible = client.get("/api/v1/targets", params={"month": "2026-03"}).json()["items"]
+    assert visible == [{"account": "CHIISTORE", "month": "2026-03", "target_commission": 111}]
+
+    with engine.connect() as conn:
+        target = conn.execute(
+            select(monthly_targets.c.target_commission).where(monthly_targets.c.account == "CHIISTORE")
+        ).scalar_one()
+    assert target == 111
+
+
+def test_owner_can_edit_all_target_and_validation_rejects_bad_values(tmp_path):
+    client, _, auth = oidc_api(tmp_path)
+    _, tokens = login(client, auth, "owner@example.test", "owner")
+    headers = {"X-CSRF-Token": tokens.csrf_token}
+
+    assert client.put("/api/v1/targets/ALL/not-a-month", json={"target_commission": 1}, headers=headers).status_code == 422
+    assert client.put("/api/v1/targets/ALL/2026-03", json={"target_commission": -1}, headers=headers).status_code == 422
+    assert client.put(
+        "/api/v1/targets/ALL/2026-03",
+        json={"target_commission": 1_000_000_000_001},
+        headers=headers,
+    ).status_code == 422
+    updated = client.put("/api/v1/targets/ALL/2026-03", json={"target_commission": 999}, headers=headers)
+    replaced = client.put("/api/v1/targets/ALL/2026-03", json={"target_commission": 1000}, headers=headers)
+
+    assert updated.status_code == 200
+    assert replaced.status_code == 200
+    targets = client.get("/api/v1/targets", params={"account": "ALL", "month": "2026-03"}).json()["items"]
+    assert targets == [{"account": "ALL", "month": "2026-03", "target_commission": 1000}]
 
 
 def test_owner_can_manage_users_but_cannot_remove_own_owner_access(tmp_path):

@@ -155,9 +155,10 @@ def test_monthly_kpi_expands_daily_target_to_calendar_month():
     kpi = monthly_kpi(e)
     march = kpi[kpi["month"] == date(2026, 3, 1)]
 
-    assert len(march) == 1
-    assert march.iloc[0]["daily_target"] == 350000
-    assert march.iloc[0]["monthly_target"] == 350000 * 31
+    assert set(march["account"]) == {"ALL", "CHIISTORE"}
+    total = march[march["account"] == "ALL"].iloc[0]
+    assert total["daily_target"] == 350000
+    assert total["monthly_target"] == 350000 * 31
 
 
 def test_monthly_kpi_uses_selected_date_days_and_hides_combined_target_for_one_account():
@@ -165,12 +166,13 @@ def test_monthly_kpi_uses_selected_date_days_and_hides_combined_target_for_one_a
     import_rows(e, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[raw_row()])
 
     partial = monthly_kpi(e, start=date(2026, 3, 1), end=date(2026, 3, 3))
-    assert partial.iloc[0]["days_in_scope"] == 3
-    assert partial.iloc[0]["monthly_target"] == 350000 * 3
+    total = partial[partial["account"] == "ALL"].iloc[0]
+    assert total["days_in_scope"] == 3
+    assert total["monthly_target"] == 350000 * 3
 
     one_account = monthly_kpi(e, accounts=["CHIISTORE"])
-    assert pd.isna(one_account.iloc[0]["daily_target"])
-    assert pd.isna(one_account.iloc[0]["monthly_target"])
+    assert one_account["daily_target"].isna().all()
+    assert one_account["monthly_target"].isna().all()
 
 
 def test_monthly_kpi_does_not_report_missing_imports_as_zero_actual():

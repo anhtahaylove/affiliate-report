@@ -1,5 +1,11 @@
-const CACHE = "tiktok-affiliate-report-shell-v1";
-const APP_SHELL = ["/", "/icon-192.png", "/icon-512.png"];
+const CACHE = "tiktok-affiliate-report-shell-v3";
+const APP_SHELL = ["/", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
+const BYPASS_PREFIXES = ["/api/", "/auth/", "/health"];
+
+function shouldBypass(request) {
+  const url = new URL(request.url);
+  return url.origin !== self.location.origin || BYPASS_PREFIXES.some((prefix) => url.pathname.startsWith(prefix));
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
@@ -16,14 +22,21 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
+  if (event.request.method !== "GET" || shouldBypass(event.request)) return;
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("/"))),
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === "navigate") return (await caches.match("/")) || Response.error();
+        return Response.error();
+      }),
   );
 });

@@ -9,20 +9,39 @@ if not exist "%PYTHON%" (
   exit /b 1
 )
 
-echo [1/2] Cai PyInstaller 6.21.0...
-"%PYTHON%" -m pip install --disable-pip-version-check "pyinstaller==6.21.0"
+where pnpm >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] Khong tim thay pnpm de build giao dien web.
+  pause
+  exit /b 1
+)
+
+echo [1/4] Cai dependencies production va PyInstaller...
+"%PYTHON%" -m pip install --disable-pip-version-check -r requirements-api.txt "pyinstaller==6.21.0"
 if errorlevel 1 goto :error
 
-echo [2/2] Dong goi TikTokAffiliateReport.exe...
-"%PYTHON%" -m PyInstaller --noconfirm --clean --onefile --windowed --name TikTokAffiliateReport --icon "packaging\app.ico" --add-data "streamlit_app.py;." --add-data ".streamlit;.streamlit" --add-data "tiktok_affiliate_report\migrations.py;tiktok_affiliate_report" --collect-all streamlit --collect-all altair --collect-all openpyxl --copy-metadata streamlit --hidden-import sqlalchemy.dialects.sqlite --hidden-import tiktok_affiliate_report.db --hidden-import tiktok_affiliate_report.migrations --hidden-import tiktok_affiliate_report.parser --hidden-import tiktok_affiliate_report.reports desktop_launcher.py
+echo [2/4] Build Next.js static web app...
+call pnpm --dir web install --frozen-lockfile
+if errorlevel 1 goto :error
+call pnpm --dir web build
+if errorlevel 1 goto :error
+if not exist "web\out\index.html" goto :missing_web
+
+echo [3/4] Dong goi TikTokAffiliateReport.exe...
+"%PYTHON%" -m PyInstaller --noconfirm --clean --onefile --windowed --name TikTokAffiliateReport --specpath build --icon "%CD%\packaging\app.ico" --add-data "%CD%\web\out;web" --add-data "%CD%\tiktok_affiliate_report\migrations.py;tiktok_affiliate_report" --collect-all openpyxl --collect-submodules uvicorn --copy-metadata uvicorn --hidden-import h11 --hidden-import python_multipart --hidden-import sqlalchemy.dialects.sqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg --hidden-import tiktok_affiliate_report.auth --hidden-import tiktok_affiliate_report.api --hidden-import tiktok_affiliate_report.db --hidden-import tiktok_affiliate_report.migrations --hidden-import tiktok_affiliate_report.parser --hidden-import tiktok_affiliate_report.reports desktop_launcher.py
 if errorlevel 1 goto :error
 
+echo [4/4] Kiem tra khong nhung database nguoi dung...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "packaging\assert_no_embedded_database.ps1" -Path "dist\TikTokAffiliateReport.exe"
 if errorlevel 1 goto :error
 
 echo.
 echo DONE: %CD%\dist\TikTokAffiliateReport.exe
 exit /b 0
+
+:missing_web
+echo [ERROR] Next.js build khong tao web\out\index.html. Kiem tra next.config.ts output export.
+goto :error
 
 :error
 echo.

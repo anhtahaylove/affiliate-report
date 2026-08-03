@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+export const dynamic = "force-static";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "TikTok Affiliate Report",
@@ -7,8 +9,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Dashboard báo cáo TikTok Affiliate từ dữ liệu export",
     start_url: "/",
     display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#ee1d52",
+    background_color: "#f6f8fa",
+    theme_color: "#0f766e",
     lang: "vi",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },

@@ -19,6 +19,38 @@ export type DailyRow = {
   target_achievement: number | null;
 };
 
+export type TargetRow = {
+  account: string;
+  month: string;
+  target_commission: number;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+
+export type MonthlyKpiRow = {
+  month: string;
+  account: string;
+  daily_target: number | null;
+  days_in_scope: number;
+  monthly_target: number | null;
+  actual_commission: number;
+  gap: number | null;
+  target_achievement: number | null;
+  order_lines: number;
+};
+
+export type ImportHistoryRow = {
+  id: number;
+  filename: string;
+  account: string;
+  uploaded_by_label: string | null;
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  rejected: number;
+  created_at: string;
+};
+
 export type MetaResponse = {
   accounts: string[];
   statuses: string[];
@@ -47,11 +79,16 @@ type ListResponse<T> = {
   count: number;
 };
 
-export const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+function browserOrigin() {
+  return typeof window === "undefined" ? "" : window.location.origin;
+}
+
+export function apiUrl() {
+  return (process.env.NEXT_PUBLIC_API_URL || browserOrigin()).replace(/\/$/, "");
+}
 
 function csrfToken() {
+  if (typeof document === "undefined") return undefined;
   const names = new Set(["csrf_token", "csrftoken", "XSRF-TOKEN"]);
   for (const part of document.cookie.split(";")) {
     const [name, value] = part.trim().split("=", 2);
@@ -63,20 +100,29 @@ function csrfToken() {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
+  if (init?.body && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
   if (!["GET", "HEAD", "OPTIONS"].includes(init?.method?.toUpperCase() ?? "GET")) {
     const token = csrfToken();
     if (token) headers.set("X-CSRF-Token", decodeURIComponent(token));
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(`${apiUrl()}${path}`, {
     ...init,
     credentials: "include",
     headers,
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new ApiError(detail || `API trả về HTTP ${response.status}`, response.status);
+    let message = `API trả về HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string" && payload.detail) message = payload.detail;
+    } catch {
+      // Keep the HTTP fallback when the server did not return JSON.
+    }
+    throw new ApiError(message, response.status);
   }
 
   return response.json() as Promise<T>;
@@ -122,6 +168,38 @@ export async function loadDashboard(filters: {
     request<ListResponse<DailyRow>>(`/api/v1/daily${query}`),
   ]);
   return { overview: overview.items, daily: daily.items };
+}
+
+export async function loadMonthlyKpi(filters: {
+  month?: string;
+  accounts?: string[];
+  start?: string;
+  end?: string;
+}) {
+  const query = queryString({
+    month: filters.month,
+    account: filters.accounts,
+    start: filters.start,
+    end: filters.end,
+  });
+  return request<ListResponse<MonthlyKpiRow>>(`/api/v1/monthly-kpi${query}`);
+}
+
+export async function loadTargets(month: string) {
+  const query = queryString({ month });
+  return request<ListResponse<TargetRow>>(`/api/v1/targets${query}`);
+}
+
+export async function saveTarget(account: string, month: string, targetCommission: number) {
+  return request<TargetRow>(`/api/v1/targets/${encodeURIComponent(account)}/${month}`, {
+    method: "PUT",
+    body: JSON.stringify({ target_commission: targetCommission }),
+  });
+}
+
+export async function loadImportHistory(limit = 5) {
+  const query = queryString({ limit: String(limit) });
+  return request<ListResponse<ImportHistoryRow>>(`/api/v1/imports${query}`);
 }
 
 export async function uploadExport(account: string, file: File) {
