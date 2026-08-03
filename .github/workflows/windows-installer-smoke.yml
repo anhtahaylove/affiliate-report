@@ -1,0 +1,48 @@
+name: Windows installer smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-installer-smoke.yml"
+      - "scripts/ci/windows_installer_smoke.ps1"
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-install-v120:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download public v1.2.0 installer
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe"
+          Invoke-WebRequest -UseBasicParsing "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.0/TikTokAffiliateReportSetup-v1.2.0.exe" -OutFile $installer
+      - name: Smoke fresh install
+        shell: pwsh
+        run: |
+          .\scripts\ci\windows_installer_smoke.ps1 -Mode Fresh -V120Installer (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe")
+
+  upgrade-v111-to-v120:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download v1.1.1 and public v1.2.0 installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.1.1 --repo anhtahaylove/tiktok-affiliate-report --pattern "TikTokAffiliateReportSetup-v1.1.1.exe" --dir $env:RUNNER_TEMP
+          if ($LASTEXITCODE -ne 0) { throw "Could not download private v1.1.1 installer" }
+          $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe"
+          Invoke-WebRequest -UseBasicParsing "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.0/TikTokAffiliateReportSetup-v1.2.0.exe" -OutFile $installer
+      - name: Smoke upgrade and data preservation
+        shell: pwsh
+        run: |
+          .\scripts\ci\windows_installer_smoke.ps1 -Mode Upgrade `
+            -V111Installer (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.1.1.exe") `
+            -V120Installer (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe")

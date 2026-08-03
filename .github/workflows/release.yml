@@ -28,14 +28,14 @@ jobs:
     env:
       POSTGRES_TEST_URL: postgresql+psycopg://postgres:postgres@localhost:5432/tiktok_affiliate_report_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.18.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -57,14 +57,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.18.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -177,7 +177,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Public draft manifest verification failed" }
           $draft = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: anhtahaylove/tiktok-affiliate-report-updates
           token: ${{ secrets.UPDATE_FEED_TOKEN }}

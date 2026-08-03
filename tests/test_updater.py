@@ -42,7 +42,7 @@ class Response(io.BytesIO):
 
 def stable_feed(
     installer: bytes = b"installer",
-    version: str = "1.2.0",
+    version: str = "1.2.1",
     *,
     signing_key: Ed25519PrivateKey = TEST_PRIVATE,
     key_id: str = TEST_KEY_ID,
@@ -92,7 +92,7 @@ def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: byte
 
 
 def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.0.exe"
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     output_dir = tmp_path / "feed"
     monkeypatch.setattr(
@@ -101,13 +101,13 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
         [
             "sign_update_feed.py",
             "--version",
-            "1.2.0",
+            "1.2.1",
             "--installer",
             str(installer),
             "--asset-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.0/TikTokAffiliateReportSetup-v1.2.0.exe",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateReportSetup-v1.2.1.exe",
             "--release-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/tag/v1.2.0",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/tag/v1.2.1",
             "--key-id",
             TEST_KEY_ID,
             "--output-dir",
@@ -124,7 +124,7 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
     signature = (output_dir / "stable.json.sig").read_bytes()
     assert b"\r" not in manifest + signature
     monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", {TEST_KEY_ID: TEST_PUBLIC_B64})
-    assert updater.verify_update_manifest_bytes(manifest, signature)["version"] == "1.2.0"
+    assert updater.verify_update_manifest_bytes(manifest, signature)["version"] == "1.2.1"
 
 
 def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, monkeypatch):
@@ -205,8 +205,8 @@ def test_manifest_rejects_non_https_bad_filename_size_and_tag(monkeypatch):
 
     manifest, signature, installer = stable_feed(
         installer_info={
-            "name": "TikTokAffiliateReportSetup-v1.2.0.exe",
-            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.0.exe",
+            "name": "TikTokAffiliateReportSetup-v1.2.1.exe",
+            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.1.exe",
             "size": 0,
             "sha256": "0" * 64,
         }
@@ -217,8 +217,8 @@ def test_manifest_rejects_non_https_bad_filename_size_and_tag(monkeypatch):
 
     manifest, signature, installer = stable_feed(
         installer_info={
-            "name": "TikTokAffiliateReportSetup-v1.2.0.exe",
-            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.0.exe",
+            "name": "TikTokAffiliateReportSetup-v1.2.1.exe",
+            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.1.exe",
             "size": updater.MAX_INSTALLER_BYTES + 1,
             "sha256": "0" * 64,
         }
@@ -263,7 +263,7 @@ def test_public_update_path_does_not_use_github_token_or_gh_cli(monkeypatch):
 
 
 def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.0.exe"
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     app = tmp_path / "TikTokAffiliateReport.exe"
@@ -303,7 +303,7 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
 
 
 def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.0.exe"
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"tampered")
     log_path = tmp_path / "updater.log"
     shutdown = threading.Event()

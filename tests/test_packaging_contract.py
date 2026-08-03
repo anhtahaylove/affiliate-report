@@ -19,15 +19,19 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert "Get-FileHash -Algorithm SHA256 $appExe, $setupExe" not in build
 
 
-def test_v120_installer_and_release_workflow_support_verified_auto_update():
+def test_v121_installer_and_release_workflow_support_verified_auto_update():
     batch = Path("BUILD_EXE.bat").read_text(encoding="utf-8")
     installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")
     build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    assert APP_VERSION == "1.2.0"
-    assert "[string]$AppVersion = '1.2.0'" in build
-    assert '#define MyAppVersion "1.2.0"' in installer
+    assert APP_VERSION == "1.2.1"
+    assert "[string]$AppVersion = '1.2.1'" in build
+    assert '#define MyAppVersion "1.2.1"' in installer
+    assert "actions/checkout@v7" in workflow
+    assert "actions/setup-python@v7" in workflow
+    assert "pnpm/action-setup@v6" in workflow
+    assert "actions/setup-node@v7" in workflow
     assert "--hidden-import tiktok_affiliate_report.updater" in batch
     assert "--hidden-import tiktok_affiliate_report.version" in batch
     assert "Flags: nowait postinstall skipifsilent" in installer
@@ -68,3 +72,23 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     private_publish = workflow.index("gh release edit $tag --draft=false", promote)
     latest = workflow.index("gh release edit $tag --repo $repo --prerelease=false --latest", promote)
     assert anonymous_publish < anonymous_download < feed_push < raw_download < private_publish < latest
+
+
+def test_all_workflows_have_no_node20_action_versions():
+    workflows = "\n".join(path.read_text(encoding="utf-8") for path in Path(".github/workflows").glob("*.yml"))
+    for old_action in (
+        "actions/checkout@v4",
+        "actions/setup-node@v4",
+        "actions/setup-python@v5",
+        "pnpm/action-setup@v4",
+    ):
+        assert old_action not in workflows
+    assert "fresh-install-v120" in workflows
+    assert "upgrade-v111-to-v120" in workflows
+
+
+def test_settings_data_page_is_not_ignored():
+    ignored = Path(".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "/data/" in ignored
+    assert "data/" not in ignored
+    assert Path("web/src/app/settings/data/page.tsx").is_file()
