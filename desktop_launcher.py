@@ -53,14 +53,16 @@ def main() -> None:
 
     from tiktok_affiliate_report.api import app
 
-    uvicorn.run(
+    server = uvicorn.Server(uvicorn.Config(
         app,
         host=HOST,
         port=port,
         loop="asyncio",
         http="h11",
         log_level="info",
-    )
+    ))
+    app.state.update_shutdown = lambda: setattr(server, "should_exit", True)
+    server.run()
 
 
 if __name__ == "__main__":

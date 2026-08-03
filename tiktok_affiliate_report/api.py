@@ -3,8 +3,11 @@ from __future__ import annotations
 import math
 import os
 import secrets
+import sys
+import threading
 from datetime import date, datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -29,6 +32,23 @@ from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
 from .parser import DEFAULT_ACCOUNTS, read_xlsx
 from .reports import daily_report, monthly_kpi, orders, overview
+from .reset_data import (
+    RESET_CONFIRMATION_PHRASE,
+    RESTORE_CONFIRMATION_PHRASE,
+    list_sqlite_backups,
+    preview_sqlite_backup,
+    reset_sqlite_business_data,
+    restore_sqlite_business_backup,
+    sqlite_file_path,
+)
+from .updater import (
+    INSTALL_CONFIRMATION_PHRASE,
+    UpdateError,
+    check_for_update,
+    download_latest_update,
+    schedule_installer,
+)
+from .version import APP_VERSION
 
 MAX_UPLOAD_MB = 20
 STATUSES = ["settled", "ineligible", "pending", "unknown"]
@@ -42,6 +62,19 @@ class UserUpdate(BaseModel):
 
 class TargetUpdate(BaseModel):
     target_commission: int = Field(ge=0, le=1_000_000_000_000)
+
+
+class ResetDataRequest(BaseModel):
+    confirmation: str
+
+
+class RestoreBackupRequest(BaseModel):
+    backup_id: str
+    confirmation: str
+
+
+class InstallUpdateRequest(BaseModel):
+    confirmation: str
 
 
 def _cors_origins() -> list[str]:
@@ -100,6 +133,14 @@ def _csrf_cookie_name(auth: AuthService) -> str:
     return getattr(auth.settings, "csrf_cookie_name", "csrf_token")
 
 
+def _automatic_update_supported(app: FastAPI) -> bool:
+    return (
+        os.name == "nt"
+        and bool(getattr(sys, "frozen", False))
+        and callable(getattr(app.state, "update_shutdown", None))
+    )
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     limit = MAX_UPLOAD_MB * 1024 * 1024
     data = bytearray()
@@ -114,11 +155,13 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     app = FastAPI(
         title="TikTok Affiliate Report API",
         description="Phase-2 API with local-safe mode, OIDC sessions and account-scoped RBAC.",
-        version="0.3.0",
+        version=APP_VERSION,
     )
     app.state.engine = engine or get_engine()
     init_db(app.state.engine)
     app.state.auth = auth or AuthService(app.state.engine, AuthSettings.from_env())
+    app.state.update_lock = threading.Lock()
+    app.state.update_scheduled = False
     origins = _cors_origins()
     if "*" in origins:
         raise ValueError("API_CORS_ORIGINS không được dùng * khi cookie credentials được bật.")
@@ -448,6 +491,101 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             rows = conn.execute(stmt).mappings().all()
         items = [{key: _clean(value) for key, value in row.items()} for row in rows]
         return {"items": items, "count": len(items), "limit": limit}
+
+    @app.post("/api/v1/admin/reset-data")
+    def reset_data_endpoint(
+        request: ResetDataRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        if request.confirmation != RESET_CONFIRMATION_PHRASE:
+            raise HTTPException(status_code=422, detail=f"confirmation must be {RESET_CONFIRMATION_PHRASE!r}")
+        try:
+            return reset_sqlite_business_data(_engine(app))
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/backups")
+    def list_backups_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
+        try:
+            items = list_sqlite_backups(_engine(app))
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"items": items, "count": len(items)}
+
+    @app.get("/api/v1/admin/backups/{backup_id:path}/preview")
+    def preview_backup_endpoint(backup_id: str, _: Principal = Depends(owner)) -> dict[str, Any]:
+        try:
+            return preview_sqlite_backup(_engine(app), backup_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/api/v1/admin/backups/restore")
+    def restore_backup_endpoint(
+        request: RestoreBackupRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        if request.confirmation != RESTORE_CONFIRMATION_PHRASE:
+            raise HTTPException(status_code=422, detail=f"confirmation must be {RESTORE_CONFIRMATION_PHRASE!r}")
+        try:
+            return restore_sqlite_business_backup(_engine(app), request.backup_id, request.confirmation)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/update")
+    def check_update_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
+        if _auth(app).settings.mode != "local":
+            raise HTTPException(status_code=409, detail="Automatic updates are only available in local mode.")
+        try:
+            result = check_for_update()
+        except UpdateError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        result["automatic_install_supported"] = _automatic_update_supported(app)
+        return result
+
+    @app.post("/api/v1/admin/update/install")
+    def install_update_endpoint(
+        request: InstallUpdateRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        if request.confirmation != INSTALL_CONFIRMATION_PHRASE:
+            raise HTTPException(status_code=422, detail=f"confirmation must be {INSTALL_CONFIRMATION_PHRASE!r}")
+        if _auth(app).settings.mode != "local":
+            raise HTTPException(status_code=409, detail="Automatic updates are only available in local mode.")
+        shutdown = getattr(app.state, "update_shutdown", None)
+        if not _automatic_update_supported(app):
+            raise HTTPException(status_code=409, detail="Automatic installation requires the installed Windows app.")
+        with app.state.update_lock:
+            if app.state.update_scheduled:
+                raise HTTPException(status_code=409, detail="An update is already scheduled.")
+            try:
+                data_dir = sqlite_file_path(_engine(app)).parent
+                downloaded = download_latest_update(data_dir)
+                schedule_installer(
+                    Path(downloaded["installer_path"]),
+                    downloaded["sha256"],
+                    data_dir / "updater.log",
+                    shutdown,
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except UpdateError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            app.state.update_scheduled = True
+        return {
+            "status": "scheduled",
+            "version": downloaded["version"],
+            "sha256": downloaded["sha256"],
+            "release_url": downloaded["release_url"],
+        }
 
     @app.get("/api/v1/admin/users")
     def users(_: Principal = Depends(owner)) -> dict[str, Any]:

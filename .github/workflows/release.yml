@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: tiktok_affiliate_report_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tiktok_affiliate_report_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_TEST_URL: postgresql+psycopg://postgres:postgres@localhost:5432/tiktok_affiliate_report_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Verify API, migration and web
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements-api.txt
+          python -m pytest -q
+          python -m compileall -q tiktok_affiliate_report scripts tests desktop_launcher.py
+          pnpm --dir web install --frozen-lockfile
+          pnpm --dir web lint
+          pnpm --dir web exec tsc --noEmit --pretty false
+          pnpm --dir web build
+          pnpm --dir web audit --prod
+
+  windows-installer:
+    needs: verify
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --disable-pip-version-check -r requirements-api.txt "pyinstaller==6.21.0"
+          choco install innosetup --no-progress -y
+      - name: Verify version and tests
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $appVersion = & .\.venv\Scripts\python.exe -c "from tiktok_affiliate_report.version import APP_VERSION; print(APP_VERSION)"
+          if ($appVersion -ne $version) { throw "Tag $version does not match APP_VERSION $appVersion" }
+          .\.venv\Scripts\python.exe -m pytest -q
+          .\.venv\Scripts\python.exe -m compileall -q tiktok_affiliate_report scripts tests desktop_launcher.py
+          pnpm --dir web install --frozen-lockfile
+          pnpm --dir web lint
+          pnpm --dir web exec tsc --noEmit --pretty false
+          pnpm --dir web audit --prod
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          .\packaging\build_installer.ps1 -AppVersion $version
+      - name: Create verified release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe"
+          gh release create $tag $installer "artifacts\installer\SHA256SUMS.txt" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag
+          $verify = Join-Path $env:RUNNER_TEMP "release-verify"
+          New-Item -ItemType Directory -Path $verify -Force | Out-Null
+          gh release download $tag --dir $verify
+          $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe") | Sort-Object
+          if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer and SHA256SUMS.txt" }
+          $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+          if ($actual -ne $expected) { throw "Downloaded release checksum mismatch" }
+          gh release edit $tag --draft=false --latest
+          $published = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+          if ($published.isDraft -or $published.isPrerelease -or $published.tagName -ne $tag) { throw "Release publish verification failed" }
