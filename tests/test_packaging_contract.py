@@ -39,7 +39,7 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     assert '"artifacts\\installer\\SHA256SUMS.txt"' in workflow
     assert "UPDATE_SIGNING_KEY_B64" in workflow
     assert "UPDATE_FEED_TOKEN" in workflow
-    assert r"scripts\sign_update_feed.py" in workflow or r"scripts\\sign_update_feed.py" in workflow
+    assert "-m scripts.sign_update_feed" in workflow
     assert "anhtahaylove/tiktok-affiliate-report-updates" in workflow
     assert "stable.json.sig" in workflow
     assert "Downloaded release checksum mismatch" in workflow
