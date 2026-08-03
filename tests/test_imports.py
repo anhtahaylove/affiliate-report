@@ -6,9 +6,10 @@ import pytest
 import pandas as pd
 from sqlalchemy import select
 
-from tiktok_affiliate_report.db import get_engine, import_rows, init_db, order_line_versions
+from tiktok_affiliate_report.accounts import create_account
+from tiktok_affiliate_report.db import get_engine, import_rows, init_db, monthly_targets, order_line_versions
 from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
-from tiktok_affiliate_report.reports import daily_report, monthly_kpi, orders, overview, sheets_output
+from tiktok_affiliate_report.reports import analytics, daily_report, monthly_kpi, orders, overview, sheets_output
 
 
 def raw_row(
@@ -19,17 +20,30 @@ def raw_row(
     commission="10.000",
     account="CHIISTORE",
     order_date="01/03/2026 08:00:00",
+    settlement_date="03/03/2026 08:00:00",
+    product="Sản phẩm",
+    product_id="P1",
+    shop="Shop A",
+    shop_id="SHOP1",
+    content_type="Video",
+    content_id="C1",
+    currency="VND",
 ):
     row = {h: "/" for h in EXPECTED_HEADERS}
     row.update({
         "ID đơn hàng": order,
         "ID SKU": sku,
-        "Tên sản phẩm": "Sản phẩm",
+        "Tên sản phẩm": product,
+        "ID sản phẩm": product_id,
         "Trạng thái quyết toán đơn hàng": status,
         "GMV": gmv,
         "Số món bán ra": "2",
         "Số món đã hoàn tiền": "1",
-        "Tên cửa hàng": "Shop A",
+        "Tên cửa hàng": shop,
+        "Mã cửa hàng": shop_id,
+        "Loại nội dung": content_type,
+        "Id nội dung": content_id,
+        "Đơn vị tiền tệ": currency,
         "Tổng số tiền nhận được cuối cùng": "7.000",
         "Hoa hồng tiêu chuẩn ước tính": commission,
         "Hoa hồng Quảng cáo cửa hàng ước tính": "1.000",
@@ -37,6 +51,7 @@ def raw_row(
         "Thưởng ước tính của đối tác liên kết": "3.000",
         "Ước tính phần chia doanh thu": "4.000",
         "Ngày đặt hàng": order_date,
+        "Ngày quyết toán hoa hồng": settlement_date,
     })
     return normalize_row(row, account)
 
@@ -145,7 +160,7 @@ def test_daily_aggregation_uses_current_rows_and_ineligible_cancellations():
 
     total = report[report["account"] == "ALL"].iloc[0].to_dict()
     assert total["actual_commission"] == 22000
-    assert total["daily_target"] == 350000
+    assert pd.isna(total["daily_target"])
 
 
 def test_monthly_kpi_expands_daily_target_to_calendar_month():
@@ -157,8 +172,8 @@ def test_monthly_kpi_expands_daily_target_to_calendar_month():
 
     assert set(march["account"]) == {"ALL", "CHIISTORE"}
     total = march[march["account"] == "ALL"].iloc[0]
-    assert total["daily_target"] == 350000
-    assert total["monthly_target"] == 350000 * 31
+    assert pd.isna(total["daily_target"])
+    assert pd.isna(total["monthly_target"])
 
 
 def test_monthly_kpi_uses_selected_date_days_and_hides_combined_target_for_one_account():
@@ -168,7 +183,7 @@ def test_monthly_kpi_uses_selected_date_days_and_hides_combined_target_for_one_a
     partial = monthly_kpi(e, start=date(2026, 3, 1), end=date(2026, 3, 3))
     total = partial[partial["account"] == "ALL"].iloc[0]
     assert total["days_in_scope"] == 3
-    assert total["monthly_target"] == 350000 * 3
+    assert pd.isna(total["monthly_target"])
 
     one_account = monthly_kpi(e, accounts=["CHIISTORE"])
     assert one_account["daily_target"].isna().all()
@@ -179,12 +194,7 @@ def test_monthly_kpi_does_not_report_missing_imports_as_zero_actual():
     e = engine()
 
     kpi = monthly_kpi(e)
-    march = kpi[kpi["month"] == date(2026, 3, 1)].iloc[0]
-
-    assert march["order_lines"] == 0
-    assert pd.isna(march["actual_commission"])
-    assert pd.isna(march["gap"])
-    assert pd.isna(march["target_achievement"])
+    assert kpi.empty
 
 
 def test_google_sheets_output_fills_calendar_gaps_and_missing_kpi_is_blank():
@@ -204,8 +214,8 @@ def test_google_sheets_output_fills_calendar_gaps_and_missing_kpi_is_blank():
     assert output["Ngày"].tolist() == ["2026-03-01", "2026-03-02", "2026-03-03"]
     middle = output.iloc[1]
     assert middle["Tổng DT thực tế"] == 0
-    assert middle["KPI/ngày"] == 350000
-    assert middle["% đạt KPI"] == 0
+    assert pd.isna(middle["KPI/ngày"])
+    assert pd.isna(middle["% đạt KPI"])
 
     import_rows(
         e,
@@ -247,9 +257,9 @@ def test_overview_all_and_google_sheets_output_keep_accounts_separate():
     assert list(output.columns[:3]) == ["Ngày", "CHIISTORE - Số lượng bán", "CHIISTORE - Tổng DT"]
     assert output.iloc[0]["CHIISTORE - HH thực tế"] == 20000
     assert output.iloc[0]["EMLINHNOIY - DT huỷ"] == 50000
-    assert output.iloc[0]["THAOBRA - Tổng DT"] == 0
+    assert "THAOBRA - Tổng DT" not in output.columns
     assert output.iloc[0]["Tổng HH thực tế"] == 20000
-    assert output.iloc[0]["% đạt KPI"] == pytest.approx(20000 / 350000)
+    assert pd.isna(output.iloc[0]["% đạt KPI"])
     assert daily_report(e).query("account == 'ALL'").iloc[0]["orders"] == 2
 
 
@@ -261,3 +271,74 @@ def test_empty_account_allowlist_never_falls_back_to_all_accounts():
     assert daily_report(e, accounts=[]).empty
     assert orders(e, accounts=[]).empty
     assert sheets_output(e, accounts=[]).empty
+
+
+def test_analytics_returns_finance_dimensions_settlement_quality_and_forecast():
+    e = engine()
+    create_account(e, "CHIISTORE", display_name="Chii Store")
+    create_account(e, "EMLINHNOIY", display_name="Em Linh")
+    with e.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=1000))
+    import_rows(
+        e,
+        filename="march.xlsx",
+        file_bytes=b"march",
+        account="CHIISTORE",
+        rows=[
+            raw_row(order="O1", product="Áo A", product_id="P1"),
+            raw_row(
+                order="O2",
+                sku="S2",
+                gmv="50.000",
+                commission="5.000",
+                status="Đang chờ",
+                order_date="05/03/2026 08:00:00",
+                settlement_date="/",
+                product="Áo A",
+                product_id="P1",
+            ),
+            raw_row(
+                order="O3",
+                sku="S3",
+                gmv="25.000",
+                commission="2.000",
+                status="Không đủ điều kiện",
+                order_date="06/03/2026 08:00:00",
+                settlement_date="/",
+                product="Quần B",
+                product_id="P2",
+            ),
+        ],
+    )
+    import_rows(
+        e,
+        filename="february.xlsx",
+        file_bytes=b"february",
+        account="CHIISTORE",
+        rows=[raw_row(order="O0", sku="S0", order_date="01/02/2026 08:00:00")],
+    )
+
+    result = analytics(
+        e,
+        accounts=["CHIISTORE"],
+        start=date(2026, 3, 1),
+        end=date(2026, 3, 31),
+        today=date(2026, 3, 10),
+    )
+
+    assert result["summary"]["orders"] == 3
+    assert result["summary"]["gross_gmv"] == 175000
+    assert result["summary"]["actual_gmv"] == 150000
+    assert result["summary"]["actual_commission"] == 35000
+    assert result["previous_period"]["summary"]["orders"] == 1
+    assert {row["status"] for row in result["status_breakdown"]} == {"settled", "pending", "ineligible"}
+    assert result["account_breakdown"][0]["commission_share"] == 1
+    assert result["products"][0]["id"] == "P1"
+    assert next(row for row in result["products"] if row["id"] == "P2")["cancellation_rate"] == 1
+    assert result["content"][0]["id"] == "C1"
+    assert result["settlement"]["median_lag_days"] == 2
+    assert result["settlement"]["pending_aging"][0] == {"bucket": "0-7", "count": 1}
+    assert result["data_quality"]["import_batches"] == 2
+    assert result["data_quality"]["missing_settlement_date_rows"] == 2
+    assert result["target"]["monthly_target"] == 31000
+    assert result["target"]["projected_month_end"] == 108500

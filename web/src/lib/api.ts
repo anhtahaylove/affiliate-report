@@ -7,6 +7,7 @@ export type OverviewRow = {
   cancelled_gmv: number;
   actual_gmv: number;
   actual_commission: number;
+  final_received?: number;
 };
 
 export type DailyRow = {
@@ -39,6 +40,33 @@ export type MonthlyKpiRow = {
   order_lines: number;
 };
 
+export type OrderRow = {
+  account: string;
+  order_id: string | null;
+  sku_id: string | null;
+  product_id: string | null;
+  product_name: string | null;
+  shop_id: string | null;
+  shop_name: string | null;
+  content_type: string | null;
+  content_id: string | null;
+  order_type: string | null;
+  commission_type: string | null;
+  currency: string | null;
+  status: string | null;
+  order_date: string | null;
+  settlement_date: string | null;
+  gmv: number | null;
+  actual_gmv: number | null;
+  units_sold: number | null;
+  units_refunded: number | null;
+  estimated_commission: number | null;
+  actual_commission: number | null;
+  final_received: number | null;
+  version: number | null;
+  created_at: string | null;
+};
+
 export type ImportHistoryRow = {
   id: number;
   filename: string;
@@ -51,10 +79,20 @@ export type ImportHistoryRow = {
   created_at: string;
 };
 
+export type UploadResponse = {
+  batch_id?: number | string | null;
+  duplicate: boolean;
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  rejected: number;
+  rejected_rows?: unknown[];
+};
+
 export type ResetDataResponse = {
   backup_path: string;
   deleted_counts: Record<string, number>;
-  default_targets_restored: number;
+  targets_preserved: boolean;
 };
 
 export type BackupItem = {
@@ -97,6 +135,7 @@ export type InstallUpdateResponse = {
 
 export type MetaResponse = {
   accounts: string[];
+  account_items?: AccountItem[];
   statuses: string[];
   max_upload_mb: number;
 };
@@ -109,6 +148,155 @@ export type CurrentUser = {
   accounts?: string[];
 };
 
+export type AdminUser = {
+  id: number;
+  email: string;
+  display_name?: string | null;
+  role: UserRole;
+  active: boolean;
+  accounts: string[];
+};
+
+export type UserPatch = Partial<Pick<AdminUser, "role" | "active" | "accounts">>;
+
+export type AccountItem = {
+  code: string;
+  display_name: string;
+  active: boolean;
+  display_order: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AccountsResponse = ListResponse<AccountItem> & {
+  hard_delete_supported: boolean;
+};
+
+export type AccountDeletePreview = {
+  code: string;
+  exists: boolean;
+  dependency_counts: Record<string, number>;
+  can_hard_delete: boolean;
+  postgres_action: string;
+  action: "hard_delete" | "archive";
+};
+
+export type AccountDeleteResponse = {
+  code: string;
+  archived: boolean;
+  hard_deleted: boolean;
+  backup_path?: string;
+  account?: AccountItem;
+  dependency_counts: Record<string, number>;
+};
+
+export type AnalyticsSummary = {
+  orders: number;
+  order_lines: number;
+  gross_gmv: number;
+  actual_gmv: number;
+  initial_commission: number;
+  actual_commission: number;
+  final_received: number;
+  units_sold: number;
+  units_refunded: number;
+  effective_commission_rate: number | null;
+  refund_rate: number | null;
+  ineligible_rate: number | null;
+  final_received_variance: number;
+  latest_order_date: string | null;
+};
+
+export type AnalyticsTrendRow = {
+  period: string;
+  orders: number;
+  order_lines: number;
+  gross_gmv: number;
+  actual_gmv: number;
+  actual_commission: number;
+  final_received: number;
+};
+
+export type AnalyticsBreakdownRow = {
+  orders: number;
+  order_lines: number;
+  gross_gmv: number;
+  actual_gmv: number;
+  actual_commission: number;
+  order_share: number;
+  gmv_share: number | null;
+  commission_share: number | null;
+  share: number | null;
+  status?: string;
+  account?: string;
+};
+
+export type AnalyticsDimensionRow = {
+  id: string;
+  label: string;
+  orders: number;
+  order_lines: number;
+  units_sold: number;
+  units_refunded: number;
+  gross_gmv: number;
+  actual_gmv: number;
+  actual_commission: number;
+  ineligible_rate: number | null;
+  cancelled_orders: number;
+  cancellation_rate: number | null;
+};
+
+export type AnalyticsResponse = {
+  filters: {
+    accounts: string[];
+    start: string | null;
+    end: string | null;
+    statuses: string[];
+    group_by: "day" | "week" | "month";
+    top: number;
+  };
+  summary: AnalyticsSummary;
+  previous_period: { range: { start: string; end: string }; summary: AnalyticsSummary } | null;
+  target: {
+    monthly_target: number | null;
+    actual_commission: number;
+    remaining: number | null;
+    achievement: number | null;
+    elapsed_days: number;
+    scope_days: number;
+    remaining_days: number;
+    required_per_remaining_day: number | null;
+    projected_month_end: number | null;
+    projected_achievement: number | null;
+  } | null;
+  trend: AnalyticsTrendRow[];
+  status_breakdown: AnalyticsBreakdownRow[];
+  account_breakdown: AnalyticsBreakdownRow[];
+  products: AnalyticsDimensionRow[];
+  shops: AnalyticsDimensionRow[];
+  content: AnalyticsDimensionRow[];
+  settlement: {
+    median_lag_days: number | null;
+    settled_lines: number;
+    pending_lines: number;
+    pending_aging: Array<{ bucket: string; count: number }>;
+  };
+  data_quality: {
+    unknown_status_rows: number;
+    non_vnd_rows: number;
+    missing_order_date_rows: number;
+    missing_settlement_date_rows: number;
+    settled_missing_settlement_rows: number;
+    negative_settlement_lag_rows: number;
+    import_batches: number;
+    import_inserted: number;
+    import_updated: number;
+    import_unchanged: number;
+    import_rejected: number;
+    latest_import_at: string | null;
+  };
+};
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -118,9 +306,15 @@ export class ApiError extends Error {
   }
 }
 
-type ListResponse<T> = {
+export type ListResponse<T> = {
   items: T[];
   count: number;
+};
+
+export type PageResponse<T> = ListResponse<T> & {
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 function browserOrigin() {
@@ -144,45 +338,55 @@ function csrfToken() {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
-  if (init?.body && !(init.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
+  if (init?.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   if (!["GET", "HEAD", "OPTIONS"].includes(init?.method?.toUpperCase() ?? "GET")) {
     const token = csrfToken();
     if (token) headers.set("X-CSRF-Token", decodeURIComponent(token));
   }
 
-  const response = await fetch(`${apiUrl()}${path}`, {
-    ...init,
-    credentials: "include",
-    headers,
-  });
-
+  const response = await fetch(`${apiUrl()}${path}`, { ...init, credentials: "include", headers });
   if (!response.ok) {
     let message = `API trả về HTTP ${response.status}`;
     try {
       const payload = (await response.json()) as { detail?: unknown };
       if (typeof payload.detail === "string" && payload.detail) message = payload.detail;
     } catch {
-      // Keep the HTTP fallback when the server did not return JSON.
+      // Keep HTTP fallback.
     }
     throw new ApiError(message, response.status);
   }
-
   return response.json() as Promise<T>;
 }
 
-function queryString(params: Record<string, string | string[] | undefined>) {
+export function queryString(params: Record<string, string | string[] | number | undefined | null>) {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
-    if (Array.isArray(value)) {
-      value.forEach((item) => query.append(key, item));
-    } else if (value) {
-      query.set(key, value);
-    }
+    if (Array.isArray(value)) value.filter(Boolean).forEach((item) => query.append(key, item));
+    else if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
   });
   const text = query.toString();
   return text ? `?${text}` : "";
+}
+
+export type ReportFilters = {
+  accounts?: string[];
+  statuses?: string[];
+  start?: string;
+  end?: string;
+  month?: string;
+};
+
+function reportQuery(filters: ReportFilters & { search?: string; limit?: number; offset?: number } = {}) {
+  return queryString({
+    account: filters.accounts,
+    status: filters.statuses,
+    start: filters.start,
+    end: filters.end,
+    month: filters.month,
+    search: filters.search,
+    limit: filters.limit,
+    offset: filters.offset,
+  });
 }
 
 export async function loadCurrentUser() {
@@ -197,16 +401,37 @@ export async function loadMeta() {
   return request<MetaResponse>("/api/v1/meta");
 }
 
-export async function loadDashboard(filters: {
-  accounts?: string[];
-  start?: string;
-  end?: string;
-}) {
-  const query = queryString({
-    account: filters.accounts,
-    start: filters.start,
-    end: filters.end,
+export async function loadAccounts() {
+  return request<AccountsResponse>("/api/v1/accounts");
+}
+
+export async function createAccount(changes: { code: string; display_name: string; display_order?: number | null }) {
+  return request<AccountItem>("/api/v1/accounts", {
+    method: "POST",
+    body: JSON.stringify(changes),
   });
+}
+
+export async function updateAccount(code: string, changes: { display_name?: string; display_order?: number | null; active?: boolean }) {
+  return request<AccountItem>(`/api/v1/accounts/${encodeURIComponent(code)}`, {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  });
+}
+
+export async function previewDeleteAccount(code: string) {
+  return request<AccountDeletePreview>(`/api/v1/accounts/${encodeURIComponent(code)}/delete-preview`);
+}
+
+export async function deleteAccount(code: string, confirmation: string) {
+  return request<AccountDeleteResponse>(`/api/v1/accounts/${encodeURIComponent(code)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirmation }),
+  });
+}
+
+export async function loadDashboard(filters: ReportFilters) {
+  const query = reportQuery(filters);
   const [overview, daily] = await Promise.all([
     request<ListResponse<OverviewRow>>(`/api/v1/overview${query}`),
     request<ListResponse<DailyRow>>(`/api/v1/daily${query}`),
@@ -214,24 +439,24 @@ export async function loadDashboard(filters: {
   return { overview: overview.items, daily: daily.items };
 }
 
-export async function loadMonthlyKpi(filters: {
-  month?: string;
-  accounts?: string[];
-  start?: string;
-  end?: string;
-}) {
-  const query = queryString({
-    month: filters.month,
-    account: filters.accounts,
-    start: filters.start,
-    end: filters.end,
-  });
-  return request<ListResponse<MonthlyKpiRow>>(`/api/v1/monthly-kpi${query}`);
+export async function loadAnalytics(filters: ReportFilters) {
+  return request<AnalyticsResponse>(`/api/v1/analytics${reportQuery(filters)}`);
 }
 
-export async function loadTargets(month: string) {
-  const query = queryString({ month });
-  return request<ListResponse<TargetRow>>(`/api/v1/targets${query}`);
+export async function loadOrders(filters: ReportFilters & { search?: string; limit?: number; offset?: number }) {
+  return request<PageResponse<OrderRow>>(`/api/v1/orders${reportQuery(filters)}`);
+}
+
+export function ordersExportUrl(filters: ReportFilters & { search?: string }) {
+  return `${apiUrl()}/api/v1/orders/export.xlsx${reportQuery(filters)}`;
+}
+
+export async function loadMonthlyKpi(filters: ReportFilters) {
+  return request<ListResponse<MonthlyKpiRow>>(`/api/v1/monthly-kpi${reportQuery(filters)}`);
+}
+
+export async function loadTargets(month: string, accounts?: string[]) {
+  return request<ListResponse<TargetRow>>(`/api/v1/targets${queryString({ month, account: accounts })}`);
 }
 
 export async function saveTarget(account: string, month: string, targetCommission: number) {
@@ -241,9 +466,8 @@ export async function saveTarget(account: string, month: string, targetCommissio
   });
 }
 
-export async function loadImportHistory(limit = 5) {
-  const query = queryString({ limit: String(limit) });
-  return request<ListResponse<ImportHistoryRow>>(`/api/v1/imports${query}`);
+export async function loadImportHistory(limit = 10, accounts?: string[]) {
+  return request<ListResponse<ImportHistoryRow> & { limit: number }>(`/api/v1/imports${queryString({ limit, account: accounts })}`);
 }
 
 export async function resetData(confirmation: string) {
@@ -255,6 +479,10 @@ export async function resetData(confirmation: string) {
 
 export async function loadBackups() {
   return request<ListResponse<BackupItem>>("/api/v1/admin/backups");
+}
+
+export async function previewBackup(backupId: string) {
+  return request<BackupItem>(`/api/v1/admin/backups/${encodeURIComponent(backupId)}/preview`);
 }
 
 export async function restoreBackup(backupId: string, confirmation: string) {
@@ -275,12 +503,20 @@ export async function installUpdate(confirmation: string) {
   });
 }
 
+export async function loadUsers() {
+  return request<ListResponse<AdminUser>>("/api/v1/admin/users");
+}
+
+export async function updateUser(userId: number, changes: UserPatch) {
+  return request<AdminUser>(`/api/v1/admin/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  });
+}
+
 export async function uploadExport(account: string, file: File) {
   const body = new FormData();
   body.set("account", account);
   body.set("file", file);
-  return request<Record<string, unknown>>("/api/v1/imports", {
-    method: "POST",
-    body,
-  });
+  return request<UploadResponse>("/api/v1/imports", { method: "POST", body });
 }

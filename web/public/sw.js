@@ -1,5 +1,18 @@
-const CACHE = "tiktok-affiliate-report-shell-v3";
-const APP_SHELL = ["/", "/icon-192.png", "/icon-512.png", "/manifest.webmanifest"];
+const CACHE = "tiktok-affiliate-report-shell-v4";
+const APP_SHELL = [
+  "/",
+  "/analytics",
+  "/orders",
+  "/imports",
+  "/targets",
+  "/accounts",
+  "/settings/data",
+  "/settings/update",
+  "/settings/users",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/manifest.webmanifest",
+];
 const BYPASS_PREFIXES = ["/api/", "/auth/", "/health"];
 
 function shouldBypass(request) {

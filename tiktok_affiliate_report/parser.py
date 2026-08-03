@@ -22,7 +22,6 @@ EXPECTED_HEADERS = [
     "Tổng số tiền nhận được cuối cùng", "Ngày đặt hàng", "Ngày quyết toán hoa hồng",
 ]
 
-DEFAULT_ACCOUNTS = ["CHIISTORE", "EMLINHNOIY", "THAOBRA"]
 MAX_IMPORT_ROWS = 50_000
 ID_FIELDS = {"ID đơn hàng", "ID SKU", "ID sản phẩm", "Mã cửa hàng", "Id nội dung"}
 INT_FIELDS = {
@@ -102,7 +101,7 @@ def normalize_status(value: Any) -> str:
 
 
 def normalize_row(row: dict[str, Any], account: str) -> dict[str, Any]:
-    account = account.strip()
+    account = account.strip().upper()
     if not account:
         raise ValueError("Affiliate account không được để trống")
     out: dict[str, Any] = {"account": account}
@@ -124,7 +123,14 @@ def normalize_row(row: dict[str, Any], account: str) -> dict[str, Any]:
     out["units_sold"] = out.get("Số món bán ra") or 0
     out["units_refunded"] = out.get("Số món đã hoàn tiền") or 0
     out["final_received"] = out.get("Tổng số tiền nhận được cuối cùng")
+    out["product_id"] = out.get("ID sản phẩm")
+    out["shop_id"] = out.get("Mã cửa hàng")
     out["shop_name"] = out.get("Tên cửa hàng")
+    out["content_type"] = out.get("Loại nội dung")
+    out["content_id"] = out.get("Id nội dung")
+    out["order_type"] = out.get("Loại đơn hàng")
+    out["commission_type"] = out.get("Loại hoa hồng")
+    out["currency"] = out.get("Đơn vị tiền tệ")
     out["business_key"] = f"{account}|{out.get('ID đơn hàng') or ''}|{out.get('ID SKU') or ''}"
     out["normalized_hash"] = hashlib.sha256(
         json.dumps(out, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")

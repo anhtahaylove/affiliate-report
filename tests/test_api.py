@@ -12,8 +12,10 @@ from sqlalchemy import select
 
 import tiktok_affiliate_report.api as api_module
 import tiktok_affiliate_report.reset_data as reset_data_module
+from tiktok_affiliate_report.accounts import create_account
 from tiktok_affiliate_report.api import create_app
 from tiktok_affiliate_report.db import (
+    accounts,
     get_engine,
     import_batches,
     import_rows,
@@ -26,8 +28,11 @@ from tiktok_affiliate_report.version import APP_VERSION
 
 def api(tmp_path):
     engine = get_engine(f"sqlite:///{(tmp_path / 'api.db').as_posix()}")
+    app = create_app(engine)
+    for code in ("CHIISTORE", "EMLINHNOIY", "THAOBRA"):
+        create_account(engine, code, display_name=code)
     return TestClient(
-        create_app(engine),
+        app,
         base_url="http://127.0.0.1",
         client=("127.0.0.1", 50000),
     ), engine
@@ -74,8 +79,17 @@ def test_health_and_meta(tmp_path):
     meta = client.get("/api/v1/meta").json()
 
     assert meta["accounts"] == ["CHIISTORE", "EMLINHNOIY", "THAOBRA"]
+    assert [item["code"] for item in meta["account_items"]] == meta["accounts"]
     assert meta["statuses"] == ["settled", "ineligible", "pending", "unknown"]
     assert meta["max_upload_mb"] == 20
+
+
+def test_fresh_database_has_no_user_specific_accounts_or_targets(tmp_path):
+    engine = get_engine(f"sqlite:///{(tmp_path / 'fresh.db').as_posix()}")
+    client = TestClient(create_app(engine), base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+
+    assert client.get("/api/v1/meta").json()["accounts"] == []
+    assert client.get("/api/v1/targets").json()["items"] == []
 
 
 def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatch):
@@ -151,8 +165,7 @@ def test_report_endpoints_return_items_count_and_safe_nulls(tmp_path):
     assert {item["account"] for item in overview["items"]} == {"CHIISTORE", "ALL"}
     assert daily["count"] == len(daily["items"])
     assert daily["items"][0]["day"] == "2026-03-01"
-    assert monthly["count"] == 1
-    assert monthly["items"][0]["actual_commission"] is None
+    assert monthly["count"] == 0
 
 
 def test_monthly_kpi_uses_account_targets_and_clear_subset_total(tmp_path):
@@ -198,6 +211,11 @@ def test_import_requires_account_and_imports_xlsx(tmp_path):
     data = xlsx_bytes([raw_export_row()])
 
     missing = client.post("/api/v1/imports", files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    virtual = client.post(
+        "/api/v1/imports",
+        data={"account": "ALL"},
+        files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
     unknown = client.post(
         "/api/v1/imports",
         data={"account": "NOT_ALLOWED"},
@@ -220,7 +238,8 @@ def test_import_requires_account_and_imports_xlsx(tmp_path):
     )
 
     assert missing.status_code == 422
-    assert unknown.status_code == 422
+    assert virtual.status_code == 422
+    assert unknown.status_code == 403
     assert wrong_type.status_code == 415
     assert created.status_code == 200
     assert created.json() | {"batch_id": created.json()["batch_id"]} == {
@@ -250,9 +269,11 @@ def test_import_rejects_file_when_stream_crosses_size_limit(tmp_path, monkeypatc
     assert response.json() == {"detail": "File exceeds 0 MB"}
 
 
-def test_owner_reset_data_creates_backup_deletes_imports_and_restores_default_targets(tmp_path):
+def test_owner_reset_data_creates_backup_deletes_imports_and_preserves_targets(tmp_path):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    with engine.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=100))
 
     wrong = client.post("/api/v1/admin/reset-data", json={"confirmation": "RESET DATA"})
     response = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"})
@@ -266,7 +287,8 @@ def test_owner_reset_data_creates_backup_deletes_imports_and_restores_default_ta
     with engine.connect() as conn:
         assert conn.execute(select(import_batches)).all() == []
         assert conn.execute(select(order_line_versions)).all() == []
-        assert conn.execute(select(monthly_targets)).all()
+        assert conn.execute(select(monthly_targets.c.account, monthly_targets.c.target_commission)).all() == [("CHIISTORE", 100)]
+        assert conn.execute(select(accounts.c.code).where(accounts.c.code == "CHIISTORE")).scalar_one() == "CHIISTORE"
 
 
 def test_reset_data_aborts_before_delete_when_backup_check_fails(tmp_path, monkeypatch):
@@ -356,3 +378,75 @@ def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
 
     assert client.get("/health").json() == {"status": "ok"}
     assert "Ops Cockpit" in client.get("/").text
+
+
+def test_owner_account_crud_hard_delete_with_backup_and_restore(tmp_path):
+    client, engine = api(tmp_path)
+    created = client.post(
+        "/api/v1/accounts",
+        json={"code": "new_acc", "display_name": "New Account"},
+    )
+    assert created.status_code == 201
+    assert created.json()["code"] == "NEW_ACC"
+
+    updated = client.patch(
+        "/api/v1/accounts/NEW_ACC",
+        json={"display_name": "New Account 2", "display_order": 5},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["display_name"] == "New Account 2"
+
+    import_rows(engine, filename="new.xlsx", file_bytes=b"new", account="NEW_ACC", rows=[normalized(account="NEW_ACC")])
+    preview = client.get("/api/v1/accounts/NEW_ACC/delete-preview")
+    assert preview.status_code == 200
+    assert preview.json()["dependency_counts"]["order_line_versions"] == 1
+    assert preview.json()["action"] == "hard_delete"
+
+    wrong = client.request("DELETE", "/api/v1/accounts/NEW_ACC", json={"confirmation": "XOA"})
+    deleted = client.request("DELETE", "/api/v1/accounts/NEW_ACC", json={"confirmation": "XOA NEW_ACC"})
+    assert wrong.status_code == 422
+    assert deleted.status_code == 200
+    assert deleted.json()["hard_deleted"] is True
+    assert deleted.json()["backup_path"].endswith(".db")
+    assert all(item["code"] != "NEW_ACC" for item in client.get("/api/v1/accounts").json()["items"])
+    assert client.get("/api/v1/overview", params={"account": "NEW_ACC"}).status_code == 403
+
+    backup_name = deleted.json()["backup_path"].replace("\\", "/").split("/")[-1]
+    restored = client.post(
+        "/api/v1/admin/backups/restore",
+        json={"backup_id": backup_name, "confirmation": "KHOI PHUC DU LIEU"},
+    )
+    assert restored.status_code == 200
+    assert any(item["code"] == "NEW_ACC" for item in client.get("/api/v1/accounts").json()["items"])
+
+
+def test_analytics_and_excel_exports_follow_account_scope(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+
+    payload = client.get(
+        "/api/v1/analytics",
+        params={"account": "CHIISTORE", "start": "2026-03-01", "end": "2026-03-31"},
+    )
+    all_scope = client.get(
+        "/api/v1/analytics",
+        params={"account": "ALL", "start": "2026-03-01", "end": "2026-03-31"},
+    )
+    mixed_all_scope = client.get(
+        "/api/v1/analytics",
+        params=[("account", "ALL"), ("account", "NOT_ALLOWED")],
+    )
+    orders_export = client.get("/api/v1/orders/export.xlsx", params={"account": "CHIISTORE"})
+    daily_export = client.get(
+        "/api/v1/reports/daily.xlsx",
+        params={"account": "CHIISTORE", "start": "2026-03-01", "end": "2026-03-31"},
+    )
+
+    assert payload.status_code == 200
+    assert all_scope.status_code == 200
+    assert mixed_all_scope.status_code == 422
+    assert all_scope.json()["summary"] == payload.json()["summary"]
+    assert payload.json()["summary"]["orders"] == 1
+    assert payload.json()["products"][0]["label"] == "Sản phẩm"
+    assert orders_export.status_code == 200 and orders_export.content.startswith(b"PK")
+    assert daily_export.status_code == 200 and daily_export.content.startswith(b"PK")

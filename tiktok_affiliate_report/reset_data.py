@@ -9,10 +9,12 @@ from sqlalchemy import delete
 from sqlalchemy.engine import Engine
 
 from .db import (
-    DEFAULT_MONTHLY_TARGETS,
+    accounts,
     app_users,
+    get_engine,
     auth_sessions,
     import_batches,
+    init_db,
     monthly_targets,
     oidc_login_states,
     order_line_versions,
@@ -22,8 +24,9 @@ from .db import (
 
 RESET_CONFIRMATION_PHRASE = "XOA DU LIEU"
 RESTORE_CONFIRMATION_PHRASE = "KHOI PHUC DU LIEU"
-RESET_TABLES = (raw_import_rows, order_line_versions, import_batches, monthly_targets)
-BUSINESS_TABLES = (import_batches, raw_import_rows, order_line_versions, monthly_targets)
+RESET_TABLES = (raw_import_rows, order_line_versions, import_batches)
+RESTORE_DELETE_TABLES = (raw_import_rows, order_line_versions, import_batches, monthly_targets, accounts)
+BUSINESS_TABLES = (accounts, monthly_targets, import_batches, raw_import_rows, order_line_versions)
 AUTH_TABLES = (app_users, user_account_access, auth_sessions, oidc_login_states)
 REQUIRED_TABLES = (*BUSINESS_TABLES, *AUTH_TABLES)
 
@@ -41,8 +44,6 @@ def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
 
             for table in RESET_TABLES:
                 counts[table.name] = conn.execute(delete(table)).rowcount or 0
-            for month, amount in DEFAULT_MONTHLY_TARGETS.items():
-                conn.execute(monthly_targets.insert().values(account="ALL", month=month, target_commission=amount))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -50,7 +51,7 @@ def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
     return {
         "backup_path": str(backup_path),
         "deleted_counts": counts,
-        "default_targets_restored": len(DEFAULT_MONTHLY_TARGETS),
+        "targets_preserved": True,
     }
 
 
@@ -67,8 +68,12 @@ def preview_sqlite_backup(engine: Engine, backup_id: str) -> dict[str, object]:
     db_path = sqlite_file_path(engine)
     backup_path = _resolve_backup_id(db_path, backup_id)
     _check_backup(backup_path)
-    _check_required_schema(backup_path)
-    return _backup_meta(backup_path) | {"valid": True, "counts": _counts(backup_path)}
+    usable_path = _usable_backup_path(backup_path)
+    try:
+        _check_required_schema(usable_path)
+        return _backup_meta(backup_path) | {"valid": True, "counts": _counts(usable_path)}
+    finally:
+        _unlink_temp_backup(usable_path, backup_path)
 
 
 def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation: str) -> dict[str, object]:
@@ -77,7 +82,8 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
     db_path = sqlite_file_path(engine)
     backup_path = _resolve_backup_id(db_path, backup_id)
     _check_backup(backup_path)
-    _check_required_schema(backup_path)
+    usable_path = _usable_backup_path(backup_path)
+    _check_required_schema(usable_path)
     safety_backup_path = _backup_path(db_path, "restore-safety")
 
     with engine.connect() as conn:
@@ -86,7 +92,7 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
             _backup_sqlite(db_path, safety_backup_path)
             _check_backup(safety_backup_path)
             _check_required_schema(safety_backup_path)
-            _replace_business_tables(conn, backup_path)
+            _replace_business_tables(conn, usable_path)
             restored_counts = _table_counts(conn, BUSINESS_TABLES)
             conn.commit()
             _detach_restore_backup(conn)
@@ -94,6 +100,8 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
             conn.rollback()
             _detach_restore_backup(conn)
             raise
+        finally:
+            _unlink_temp_backup(usable_path, backup_path)
     return {
         "restored_counts": restored_counts,
         "safety_backup_path": str(safety_backup_path),
@@ -181,8 +189,12 @@ def _is_candidate_backup(db_path: Path, path: Path) -> bool:
 def _backup_item(path: Path) -> dict[str, object]:
     try:
         _check_backup(path)
-        _check_required_schema(path)
-        return _backup_meta(path) | {"valid": True, "counts": _counts(path)}
+        usable_path = _usable_backup_path(path)
+        try:
+            _check_required_schema(usable_path)
+            return _backup_meta(path) | {"valid": True, "counts": _counts(usable_path)}
+        finally:
+            _unlink_temp_backup(usable_path, path)
     except (RuntimeError, ValueError) as exc:
         return _backup_meta(path) | {
             "valid": False,
@@ -231,15 +243,16 @@ def _check_required_schema(path: Path) -> None:
                 raise ValueError(f"Backup schema is missing table {table.name}.")
             actual = [col[1] for col in conn.execute(f'PRAGMA table_info("{table.name}")')]
             expected = [column.name for column in table.columns]
-            if actual != expected:
-                raise ValueError(f"Backup schema for {table.name} does not match the app schema.")
+            missing = [column for column in expected if column not in actual]
+            if missing:
+                raise ValueError(f"Backup schema for {table.name} is missing columns: {', '.join(missing)}.")
     finally:
         conn.close()
 
 
 def _replace_business_tables(conn, backup_path: Path) -> None:
     conn.exec_driver_sql("ATTACH DATABASE ? AS restore_backup", (str(backup_path),)).close()
-    for table in RESET_TABLES:
+    for table in RESTORE_DELETE_TABLES:
         conn.exec_driver_sql(f'DELETE FROM "{table.name}"').close()
     for table in BUSINESS_TABLES:
         columns = [column.name for column in table.columns]
@@ -248,6 +261,37 @@ def _replace_business_tables(conn, backup_path: Path) -> None:
             f'INSERT INTO "{table.name}" ({quoted}) '
             f'SELECT {quoted} FROM restore_backup."{table.name}"'
         ).close()
+
+
+def _usable_backup_path(backup_path: Path) -> Path:
+    try:
+        _check_required_schema(backup_path)
+        return backup_path
+    except ValueError:
+        migrated = backup_path.with_name(backup_path.name + ".migrated.tmp")
+        migrated.unlink(missing_ok=True)
+        engine = None
+        try:
+            _backup_sqlite(backup_path, migrated)
+            engine = get_engine(f"sqlite:///{migrated.as_posix()}")
+            init_db(engine)
+            _check_backup(migrated)
+            _check_required_schema(migrated)
+        except Exception as exc:
+            if engine is not None:
+                engine.dispose()
+                engine = None
+            migrated.unlink(missing_ok=True)
+            raise ValueError(f"Backup schema is not restorable: {exc}") from exc
+        finally:
+            if engine is not None:
+                engine.dispose()
+        return migrated
+
+
+def _unlink_temp_backup(path: Path, original: Path) -> None:
+    if path != original:
+        path.unlink(missing_ok=True)
 
 
 def _detach_restore_backup(conn) -> None:

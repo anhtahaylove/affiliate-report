@@ -22,16 +22,26 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 
+from .accounts import (
+    can_hard_delete_accounts,
+    create_account,
+    delete_account,
+    delete_account_preview,
+    list_accounts,
+    update_account,
+)
 from .auth import AuthService, AuthSettings, Principal, is_loopback_host
+from .db import accounts as account_registry
 from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
-from .parser import DEFAULT_ACCOUNTS, read_xlsx
-from .reports import daily_report, monthly_kpi, orders, overview
+from .parser import read_xlsx
+from .reports import analytics, daily_report, monthly_kpi, orders, overview, sheets_output
 from .reset_data import (
     RESET_CONFIRMATION_PHRASE,
     RESTORE_CONFIRMATION_PHRASE,
@@ -77,6 +87,22 @@ class InstallUpdateRequest(BaseModel):
     confirmation: str
 
 
+class AccountCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    display_name: str = Field(min_length=1, max_length=128)
+    display_order: int | None = Field(default=None, ge=0, le=1_000_000)
+
+
+class AccountUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    display_order: int | None = Field(default=None, ge=0, le=1_000_000)
+    active: bool | None = None
+
+
+class AccountDeleteRequest(BaseModel):
+    confirmation: str
+
+
 def _cors_origins() -> list[str]:
     raw = os.getenv("API_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
@@ -102,6 +128,14 @@ def _items(df: pd.DataFrame) -> list[dict[str, Any]]:
     return [{key: _clean(value) for key, value in row.items()} for row in df.to_dict(orient="records")]
 
 
+def _clean_nested(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _clean_nested(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clean_nested(item) for item in value]
+    return _clean(value)
+
+
 def _list(values: list[str] | None) -> list[str] | None:
     if not values:
         return None
@@ -119,6 +153,16 @@ def _month_start(value: str) -> date:
 
 def _engine(app: FastAPI) -> Engine:
     return app.state.engine
+
+
+def _account_items(engine: Engine, *, include_inactive: bool = False) -> list[dict[str, Any]]:
+    stmt = select(account_registry)
+    if not include_inactive:
+        stmt = stmt.where(account_registry.c.active.is_(True))
+    stmt = stmt.order_by(account_registry.c.display_order, account_registry.c.code)
+    with engine.connect() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [{key: _clean(value) for key, value in row.items()} for row in rows]
 
 
 def _auth(app: FastAPI) -> AuthService:
@@ -151,6 +195,21 @@ async def _read_upload(file: UploadFile) -> bytes:
     return bytes(data)
 
 
+def _xlsx_response(df: pd.DataFrame, filename: str, sheet_name: str) -> StreamingResponse:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        worksheet = writer.book[sheet_name]
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 def create_app(engine: Engine | None = None, auth: AuthService | None = None) -> FastAPI:
     app = FastAPI(
         title="TikTok Affiliate Report API",
@@ -169,7 +228,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         CORSMiddleware,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
     )
 
@@ -198,21 +257,25 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             raise HTTPException(status_code=403, detail="CSRF token is invalid")
 
     def permitted_accounts(current: Principal, requested: list[str] | None) -> list[str]:
-        allowed = list(DEFAULT_ACCOUNTS) if current.role == "owner" else [
-            account for account in DEFAULT_ACCOUNTS if account in current.accounts
-        ]
+        active = [item["code"] for item in _account_items(_engine(app))]
+        allowed = active if current.role == "owner" else [account for account in active if account in current.accounts]
         if requested is None:
+            return allowed
+        requested = list(dict.fromkeys(account.strip().upper() for account in requested))
+        if "ALL" in requested:
+            if requested != ["ALL"]:
+                raise HTTPException(status_code=422, detail="ALL must be the only account filter")
             return allowed
         if any(account not in allowed for account in requested):
             raise HTTPException(status_code=403, detail="Account access denied")
-        return list(dict.fromkeys(requested))
+        return requested
 
     def permitted_target_accounts(current: Principal, requested: list[str] | None) -> list[str]:
-        allowed = ["ALL", *DEFAULT_ACCOUNTS] if current.role == "owner" else [
-            account for account in DEFAULT_ACCOUNTS if account in current.accounts
-        ]
+        active = [item["code"] for item in _account_items(_engine(app))]
+        allowed = ["ALL", *active] if current.role == "owner" else [account for account in active if account in current.accounts]
         if requested is None:
             return allowed
+        requested = [account.strip().upper() for account in requested]
         if any(account not in allowed for account in requested):
             raise HTTPException(status_code=403, detail="Account access denied")
         return list(dict.fromkeys(requested))
@@ -304,11 +367,87 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     @app.get("/api/v1/meta")
     def meta(current: Principal = Depends(principal)) -> dict[str, Any]:
+        accounts = permitted_accounts(current, None)
+        allowed = set(accounts)
         return {
-            "accounts": permitted_accounts(current, None),
+            "accounts": accounts,
+            "account_items": [item for item in _account_items(_engine(app)) if item["code"] in allowed],
             "statuses": STATUSES,
             "max_upload_mb": MAX_UPLOAD_MB,
         }
+
+    @app.get("/api/v1/accounts")
+    def accounts_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
+        items = [_clean_nested(item) for item in list_accounts(_engine(app), include_inactive=True)]
+        return {"items": items, "count": len(items), "hard_delete_supported": can_hard_delete_accounts(_engine(app))}
+
+    @app.post("/api/v1/accounts", status_code=201)
+    def create_account_endpoint(
+        changes: AccountCreate,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        try:
+            return _clean_nested(create_account(
+                _engine(app),
+                changes.code,
+                display_name=changes.display_name,
+                display_order=changes.display_order,
+            ))
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Account code đã tồn tại.") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.patch("/api/v1/accounts/{code}")
+    def update_account_endpoint(
+        code: str,
+        changes: AccountUpdate,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        try:
+            return _clean_nested(update_account(
+                _engine(app),
+                code,
+                display_name=changes.display_name,
+                display_order=changes.display_order,
+                active=changes.active,
+            ))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/v1/accounts/{code}/delete-preview")
+    def delete_account_preview_endpoint(code: str, _: Principal = Depends(owner)) -> dict[str, Any]:
+        try:
+            result = delete_account_preview(_engine(app), code)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if not result["exists"]:
+            raise HTTPException(status_code=404, detail="Không tìm thấy account.")
+        result["action"] = "hard_delete" if result["can_hard_delete"] else "archive"
+        return result
+
+    @app.delete("/api/v1/accounts/{code}")
+    def delete_account_endpoint(
+        code: str,
+        request: AccountDeleteRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        normalized = code.strip().upper()
+        expected = f"XOA {normalized}"
+        if request.confirmation != expected:
+            raise HTTPException(status_code=422, detail=f"confirmation must be {expected!r}")
+        try:
+            engine = _engine(app)
+            return _clean_nested(delete_account(engine, normalized, hard=can_hard_delete_accounts(engine)))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/v1/overview")
     def overview_endpoint(
@@ -350,6 +489,30 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         items = _items(df)
         return {"items": items, "count": len(items)}
 
+    @app.get("/api/v1/analytics")
+    def analytics_endpoint(
+        account: list[str] | None = Query(None),
+        status: list[str] | None = Query(None),
+        start: date | None = None,
+        end: date | None = None,
+        group_by: Literal["day", "week", "month"] = "day",
+        top: int = Query(20, ge=1, le=100),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        if start and end and start > end:
+            raise HTTPException(status_code=422, detail="start must not be after end")
+        accounts = permitted_accounts(current, _list(account))
+        result = analytics(
+            _engine(app),
+            accounts=accounts,
+            start=start,
+            end=end,
+            statuses=_list(status),
+            group_by=group_by,
+            top=top,
+        )
+        return _clean_nested(result)
+
     @app.get("/api/v1/targets")
     def targets_endpoint(
         month: str | None = Query(None, pattern=r"^\d{4}-\d{2}$"),
@@ -383,7 +546,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> dict[str, Any]:
         if current.role not in {"owner", "operator"}:
             raise HTTPException(status_code=403, detail="Target update requires operator or owner role")
-        account = account.strip()
+        account = account.strip().upper()
         if account not in permitted_target_accounts(current, [account]):
             raise HTTPException(status_code=403, detail="Account access denied")
         month_date = _month_start(month)
@@ -422,6 +585,31 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         items = _items(page)
         return {"items": items, "count": len(items), "total": total, "limit": limit, "offset": offset}
 
+    @app.get("/api/v1/orders/export.xlsx")
+    def orders_export_endpoint(
+        account: list[str] | None = Query(None),
+        status: list[str] | None = Query(None),
+        start: date | None = None,
+        end: date | None = None,
+        search: str | None = None,
+        current: Principal = Depends(principal),
+    ) -> StreamingResponse:
+        accounts = permitted_accounts(current, _list(account))
+        df = orders(_engine(app), accounts, start, end, _list(status), search)
+        return _xlsx_response(df, "tiktok-affiliate-orders.xlsx", "Orders")
+
+    @app.get("/api/v1/reports/daily.xlsx")
+    def daily_export_endpoint(
+        account: list[str] | None = Query(None),
+        status: list[str] | None = Query(None),
+        start: date | None = None,
+        end: date | None = None,
+        current: Principal = Depends(principal),
+    ) -> StreamingResponse:
+        accounts = permitted_accounts(current, _list(account))
+        df = sheets_output(_engine(app), accounts, start, end, _list(status))
+        return _xlsx_response(df, "tiktok-affiliate-daily-report.xlsx", "Daily report")
+
     @app.post("/api/v1/imports")
     async def imports_endpoint(
         account: str = Form(...),
@@ -431,11 +619,11 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> dict[str, Any]:
         if current.role not in {"owner", "operator"}:
             raise HTTPException(status_code=403, detail="Import requires operator or owner role")
-        account = account.strip()
+        account = account.strip().upper()
         if not account:
             raise HTTPException(status_code=422, detail="account is required")
-        if account not in DEFAULT_ACCOUNTS:
-            raise HTTPException(status_code=422, detail="account is not allowed")
+        if account == "ALL":
+            raise HTTPException(status_code=422, detail="ALL is a virtual report scope and cannot receive imports")
         permitted_accounts(current, [account])
         if not (file.filename or "").lower().endswith(".xlsx"):
             raise HTTPException(status_code=415, detail="only .xlsx files are supported")
@@ -601,7 +789,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> dict[str, Any]:
         if current.user_id == user_id and (changes.active is False or changes.role in {"operator", "viewer"}):
             raise HTTPException(status_code=409, detail="Owner cannot remove their own active owner access")
-        accounts = None if changes.accounts is None else list(dict.fromkeys(changes.accounts))
+        accounts = None if changes.accounts is None else list(dict.fromkeys(account.strip().upper() for account in changes.accounts))
         try:
             updated = _auth(app).update_user(
                 user_id,
@@ -618,6 +806,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "email": updated.email,
             "display_name": updated.display_name,
             "role": updated.role,
+            "active": updated.active,
             "accounts": list(updated.accounts),
         }
 
