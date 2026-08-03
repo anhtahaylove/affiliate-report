@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.2 - 2026-08-04
+
+- Việt hoá trạng thái dashboard/analytics/order: Đã quyết toán, Không đủ điều kiện, Đang chờ quyết toán và Chưa xác định.
+- Mặc định bộ lọc Account/Trạng thái chọn tất cả; giữ URL gọn khi đang ở scope ALL.
+- Nút **Đặt lại bộ lọc** áp dụng canonical query ngay lập tức, không cần refresh.
+- Xác minh smoke test nâng cấp Windows giữ nguyên dữ liệu cũ và đủ 9 route desktop/mobile.
+
 ## v1.2.1 - 2026-08-04
 
 - Nâng GitHub Actions lên các major chạy Node.js 24 để loại cảnh báo Node.js 20 trong CI/release.

@@ -19,15 +19,15 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert "Get-FileHash -Algorithm SHA256 $appExe, $setupExe" not in build
 
 
-def test_v121_installer_and_release_workflow_support_verified_auto_update():
+def test_v122_installer_and_release_workflow_support_verified_auto_update():
     batch = Path("BUILD_EXE.bat").read_text(encoding="utf-8")
     installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")
     build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    assert APP_VERSION == "1.2.1"
-    assert "[string]$AppVersion = '1.2.1'" in build
-    assert '#define MyAppVersion "1.2.1"' in installer
+    assert APP_VERSION == "1.2.2"
+    assert "[string]$AppVersion = '1.2.2'" in build
+    assert '#define MyAppVersion "1.2.2"' in installer
     assert "actions/checkout@v7" in workflow
     assert "actions/setup-python@v7" in workflow
     assert "pnpm/action-setup@v6" in workflow
