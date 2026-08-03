@@ -55,7 +55,7 @@ def test_v120_installer_and_release_workflow_support_verified_auto_update():
     assert "gh release delete $tag --repo $repo --yes" in workflow
     assert "Anonymous public release assets did not become available or match the build" in workflow
     assert "Live raw feed does not match signed build artifacts" in workflow
-    assert 'gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest' in workflow
+    assert 'gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest,isPrerelease' in workflow
     assert '$env:GH_TOKEN = ""' in workflow
     assert "git revert --no-edit $stableCommit" in workflow
     assert "gh release edit $tag --repo $repo --draft=true" in workflow
