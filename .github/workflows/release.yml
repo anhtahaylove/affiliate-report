@@ -101,7 +101,7 @@ jobs:
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
           $keyId = "tiktok-report-updates-2026-08"
-          $publicKey = .\.venv\Scripts\python.exe .\scripts\sign_update_feed.py --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
+          $publicKey = .\.venv\Scripts\python.exe -m scripts.sign_update_feed --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
           $pinned = .\.venv\Scripts\python.exe -c "from tiktok_affiliate_report.updater import TRUSTED_UPDATE_KEYS; print(TRUSTED_UPDATE_KEYS['$keyId'])"
           if ($publicKey -ne $pinned) { throw "UPDATE_SIGNING_KEY_B64 does not match pinned updater public key" }
       - name: Create verified private release
