@@ -94,7 +94,7 @@ def test_fresh_database_has_no_user_specific_accounts_or_targets(tmp_path):
 
 def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatch):
     client, _ = api(tmp_path)
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.0.exe"
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"verified")
     scheduled = {}
 
@@ -103,7 +103,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
         "check_for_update",
         lambda: {
             "current_version": APP_VERSION,
-            "latest_version": "1.2.0",
+            "latest_version": "1.2.1",
             "available": True,
             "installable": True,
         },
@@ -113,7 +113,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
         api_module,
         "download_latest_update",
         lambda _data_dir: {
-            "version": "1.2.0",
+            "version": "1.2.1",
             "installer_path": str(installer),
             "sha256": "A" * 64,
             "release_url": "https://github.com/example/release",
@@ -143,7 +143,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     assert installed.status_code == 200
     assert installed.json() == {
         "status": "scheduled",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "sha256": "A" * 64,
         "release_url": "https://github.com/example/release",
     }

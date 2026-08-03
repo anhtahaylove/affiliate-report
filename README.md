@@ -16,13 +16,38 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.2.0.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.2.1.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
 1. khởi động FastAPI trên một cổng loopback còn trống;
 2. phục vụ Next.js đã bundle cùng EXE;
 3. tự mở `http://127.0.0.1:<port>` trong trình duyệt.
+
+### Cách cài và mở app
+
+1. Tải file setup mới nhất và `SHA256SUMS.txt` từ public Releases.
+2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
+
+   ```powershell
+   Get-FileHash .\TikTokAffiliateReportSetup-v1.2.1.exe -Algorithm SHA256
+   ```
+
+   Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
+3. Double-click setup. Vì app chưa có Authenticode, nếu SmartScreen hiện cảnh báo thì chọn **More info** → **Run anyway** sau khi đã kiểm tra hash.
+4. Giữ tuỳ chọn tạo shortcut Desktop, hoàn tất cài đặt rồi mở **TikTok Affiliate Report** từ Desktop hoặc Start Menu.
+5. Chờ vài giây; app tự mở trình duyệt tại một địa chỉ `http://127.0.0.1:<port>` chỉ truy cập được trên chính máy đó.
+
+Lần đầu sử dụng: vào **Accounts** tạo account, vào **Imports** chọn account và upload file TikTok `.xlsx`, sau đó xem **Dashboard**/**Analytics** và đặt KPI tại **Targets**. Scope **ALL** tự tổng hợp các account; không upload file vào **ALL**.
+
+### Mở lại, đóng app và xử lý lỗi
+
+- Mở lại: dùng shortcut Desktop hoặc Start Menu; không cần chạy command.
+- App không có cửa sổ desktop riêng; trình duyệt chính là giao diện. Đóng tab trình duyệt không dừng backend.
+- Muốn dừng hoàn toàn: mở Task Manager, chọn `TikTokAffiliateReport.exe` và **End task**. Sau đó có thể mở lại bằng shortcut.
+- Nếu trình duyệt không tự mở: dừng process như trên rồi mở lại shortcut. Log chẩn đoán nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\launcher.log`.
+- Nếu app bị chặn khi cài/chạy: kiểm tra SmartScreen/antivirus và xác minh SHA-256 trước khi cho phép.
+- Update hoặc cài lại giữ nguyên database. Muốn xoá lịch sử, dùng **Settings → Data → Reset Data** để app backup trước; không dùng reinstall để reset.
 
 Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\tiktok_affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
 
@@ -110,7 +135,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v1.2.0.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v1.2.1.exe`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
 - `artifacts\installer\stable.json.sig`
