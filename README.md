@@ -22,7 +22,10 @@ Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shor
 
 1. khởi động FastAPI trên một cổng loopback còn trống;
 2. phục vụ Next.js đã bundle cùng EXE;
-3. tự mở `http://127.0.0.1:<port>` trong trình duyệt.
+3. tạo biểu tượng ở Windows system tray;
+4. tự mở `http://127.0.0.1:<port>` trong trình duyệt.
+
+App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới sẽ mở lại dashboard hiện tại rồi tự thoát.
 
 ### Cách cài và mở app
 
@@ -44,8 +47,9 @@ Lần đầu sử dụng: vào **Accounts** tạo account, vào **Imports** ch�
 
 - Mở lại: dùng shortcut Desktop hoặc Start Menu; không cần chạy command.
 - App không có cửa sổ desktop riêng; trình duyệt chính là giao diện. Đóng tab trình duyệt không dừng backend.
-- Muốn dừng hoàn toàn: mở Task Manager, chọn `TikTokAffiliateReport.exe` và **End task**. Sau đó có thể mở lại bằng shortcut.
-- Nếu trình duyệt không tự mở: dừng process như trên rồi mở lại shortcut. Log chẩn đoán nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\launcher.log`.
+- Muốn dừng hoàn toàn: dùng nút **Thoát ứng dụng** trên web app, hoặc nhấp phải biểu tượng tray và chọn **Thoát ứng dụng**.
+- Muốn mở lại dashboard khi app đang chạy: double-click biểu tượng tray hoặc mở shortcut lần nữa.
+- Nếu trình duyệt không tự mở: mở shortcut lần nữa hoặc chọn **Mở TikTok Affiliate Report** trong tray. Log chẩn đoán nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\launcher.log`.
 - Nếu app bị chặn khi cài/chạy: kiểm tra SmartScreen/antivirus và xác minh SHA-256 trước khi cho phép.
 - Update hoặc cài lại giữ nguyên database. Muốn xoá lịch sử, dùng **Settings → Data → Reset Data** để app backup trước; không dùng reinstall để reset.
 

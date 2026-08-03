@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { apiUrl, CurrentUser, logout } from "@/lib/api";
+import { apiUrl, CurrentUser, exitApplication, logout } from "@/lib/api";
 
 type NavItem = { href: string; label: string; roles?: Array<CurrentUser["role"]> };
 
@@ -23,6 +23,8 @@ const navItems: NavItem[] = [
 export function AppShell({ user, apiError, children }: { user: CurrentUser; apiError?: string; children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [exiting, setExiting] = useState(false);
+  const [exitError, setExitError] = useState("");
   const apiBaseLabel = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "same-origin";
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
 
@@ -40,6 +42,19 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
       await logout();
     } finally {
       window.location.href = `${apiUrl()}/auth/login`;
+    }
+  }
+
+  async function handleExit() {
+    if (!user.desktop_control_token) return;
+    if (!window.confirm("Thoát hoàn toàn TikTok Affiliate Report? Bạn có thể mở lại từ Desktop hoặc Start Menu.")) return;
+    setExiting(true);
+    setExitError("");
+    try {
+      await exitApplication(user.desktop_control_token);
+    } catch (reason) {
+      setExiting(false);
+      setExitError(reason instanceof Error ? reason.message : "Không thể thoát ứng dụng.");
     }
   }
 
@@ -75,6 +90,8 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
             <span>{user.email}</span>
             <strong>{user.role}</strong>
             <button type="button" onClick={handleLogout}>Đăng xuất</button>
+            {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => void handleExit()} disabled={exiting}>{exiting ? "Đang thoát…" : "Thoát ứng dụng"}</button> : null}
+            {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
           </div>
         </header>
         {children}

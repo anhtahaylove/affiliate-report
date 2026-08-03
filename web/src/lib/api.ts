@@ -146,6 +146,9 @@ export type CurrentUser = {
   email: string;
   role: UserRole;
   accounts?: string[];
+  auth_method?: string;
+  desktop_app?: boolean;
+  desktop_control_token?: string | null;
 };
 
 export type AdminUser = {
@@ -395,6 +398,13 @@ export async function loadCurrentUser() {
 
 export async function logout() {
   return request<Record<string, unknown>>("/auth/logout", { method: "POST" });
+}
+
+export async function exitApplication(controlToken: string) {
+  return request<{ status: string }>("/api/v1/admin/shutdown", {
+    method: "POST",
+    headers: { "X-Desktop-Control-Token": controlToken },
+  });
 }
 
 export async function loadMeta() {

@@ -185,6 +185,14 @@ def _automatic_update_supported(app: FastAPI) -> bool:
     )
 
 
+def _desktop_shutdown_supported(app: FastAPI) -> bool:
+    return (
+        _auth(app).settings.mode == "local"
+        and _automatic_update_supported(app)
+        and bool(os.getenv("DESKTOP_CONTROL_TOKEN"))
+    )
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     limit = MAX_UPLOAD_MB * 1024 * 1024
     data = bytearray()
@@ -229,7 +237,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Accept", "Content-Type", "X-CSRF-Token"],
+        allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Desktop-Control-Token"],
     )
 
     def principal(request: Request) -> Principal:
@@ -343,12 +351,15 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     @app.get("/auth/me")
     def me(current: Principal = Depends(principal)) -> dict[str, Any]:
+        desktop_app = current.role == "owner" and _desktop_shutdown_supported(app)
         return {
             "email": current.email,
             "display_name": current.display_name,
             "role": current.role,
             "accounts": list(current.accounts),
             "auth_method": current.auth_method,
+            "desktop_app": desktop_app,
+            "desktop_control_token": os.getenv("DESKTOP_CONTROL_TOKEN") if desktop_app else None,
         }
 
     @app.post("/auth/logout")
@@ -774,6 +785,24 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "sha256": downloaded["sha256"],
             "release_url": downloaded["release_url"],
         }
+
+    @app.post("/api/v1/admin/shutdown")
+    def shutdown_endpoint(
+        request: Request,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, str]:
+        if not _desktop_shutdown_supported(app):
+            raise HTTPException(status_code=409, detail="Shutdown is only available in the installed local Windows app.")
+        expected = os.getenv("DESKTOP_CONTROL_TOKEN", "")
+        supplied = request.headers.get("X-Desktop-Control-Token", "")
+        if not supplied or not secrets.compare_digest(supplied, expected):
+            raise HTTPException(status_code=403, detail="Desktop control token is invalid.")
+        shutdown = getattr(app.state, "update_shutdown", None)
+        timer = threading.Timer(0.15, shutdown)
+        timer.daemon = True
+        timer.start()
+        return {"status": "shutting_down"}
 
     @app.get("/api/v1/admin/users")
     def users(_: Principal = Depends(owner)) -> dict[str, Any]:

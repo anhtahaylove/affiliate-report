@@ -34,6 +34,11 @@ def test_v121_installer_and_release_workflow_support_verified_auto_update():
     assert "actions/setup-node@v7" in workflow
     assert "--hidden-import tiktok_affiliate_report.updater" in batch
     assert "--hidden-import tiktok_affiliate_report.version" in batch
+    assert "--hidden-import pystray._win32" in batch
+    assert '--add-data "%CD%\\packaging\\app.ico;packaging"' in batch
+    assert 'pystray==0.19.5; sys_platform == "win32"' in Path("requirements-api.txt").read_text(encoding="utf-8")
+    assert "TikTokAffiliateReport.SingleInstance" in Path("desktop_launcher.py").read_text(encoding="utf-8")
+    assert 'pystray.MenuItem("Thoát ứng dụng"' in Path("desktop_launcher.py").read_text(encoding="utf-8")
     assert "Flags: nowait postinstall skipifsilent" in installer
     assert 'tags:\n      - "v*.*.*"' in workflow
     assert "permissions:\n  contents: read" in workflow
