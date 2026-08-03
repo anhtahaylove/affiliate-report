@@ -6,7 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-$distExe = Join-Path $root 'dist\TikTokAffiliateReport.exe'
+$appExe = Join-Path $root 'build\installer-app\TikTokAffiliateReport.exe'
+$outputDir = Join-Path $root 'artifacts\installer'
 $setupExe = Join-Path $root "artifacts\installer\TikTokAffiliateReportSetup-v$AppVersion.exe"
 $checksumFile = Join-Path $root 'artifacts\installer\SHA256SUMS.txt'
 $installerScript = Join-Path $PSScriptRoot 'TikTokAffiliateReport.iss'
@@ -22,18 +23,21 @@ if (!$SkipAppBuild) {
     if ($LASTEXITCODE) { throw "BUILD_EXE.bat failed with exit code $LASTEXITCODE" }
 }
 
-if (!(Test-Path -LiteralPath $distExe)) { throw "Missing app EXE: $distExe" }
-& $privacyGate -Path $distExe
+if (!(Test-Path -LiteralPath $appExe)) { throw "Missing staged app EXE: $appExe" }
+& $privacyGate -Path $appExe
 if (!(Test-Path -LiteralPath $installerScript)) { throw "Missing Inno Setup script: $installerScript" }
 if (!$iscc) { throw 'Inno Setup 6 is required. Install it with: winget install --id JRSoftware.InnoSetup --exact' }
+
+New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+Get-ChildItem -LiteralPath $outputDir -Filter 'TikTokAffiliateReportSetup*.exe' -File | Remove-Item -Force
+Remove-Item -LiteralPath $checksumFile -Force -ErrorAction SilentlyContinue
 
 & $iscc "/DMyAppVersion=$AppVersion" $installerScript
 if ($LASTEXITCODE) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 if (!(Test-Path -LiteralPath $setupExe)) { throw "Installer was not created: $setupExe" }
 
-$hashes = Get-FileHash -Algorithm SHA256 $distExe, $setupExe
-$lines = $hashes | ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path -Leaf $_.Path) }
-[IO.File]::WriteAllLines($checksumFile, $lines, [Text.UTF8Encoding]::new($false))
-$hashes | Format-Table Path, Hash -AutoSize
+$hash = Get-FileHash -Algorithm SHA256 $setupExe
+[IO.File]::WriteAllText($checksumFile, ("{0}  {1}`n" -f $hash.Hash, (Split-Path -Leaf $hash.Path)), [Text.UTF8Encoding]::new($false))
+$hash | Format-Table Path, Hash -AutoSize
 Write-Output "SHA256SUMS: $checksumFile"
-Write-Warning 'EXE và installer không được code-sign; Windows SmartScreen có thể cảnh báo.'
+Write-Warning 'Installer không được code-sign; Windows SmartScreen có thể cảnh báo.'

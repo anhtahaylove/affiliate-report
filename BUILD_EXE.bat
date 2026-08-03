@@ -3,6 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 set "PYTHON=.venv\Scripts\python.exe"
+set "APP_STAGE=build\installer-app"
 if not exist "%PYTHON%" (
   echo [ERROR] Chua co .venv. Hay chay START_REPORT.bat --check truoc.
   pause
@@ -28,15 +29,16 @@ if errorlevel 1 goto :error
 if not exist "web\out\index.html" goto :missing_web
 
 echo [3/4] Dong goi TikTokAffiliateReport.exe...
-"%PYTHON%" -m PyInstaller --noconfirm --clean --onefile --windowed --name TikTokAffiliateReport --specpath build --icon "%CD%\packaging\app.ico" --add-data "%CD%\web\out;web" --add-data "%CD%\tiktok_affiliate_report\migrations.py;tiktok_affiliate_report" --collect-all openpyxl --collect-submodules uvicorn --copy-metadata uvicorn --hidden-import h11 --hidden-import python_multipart --hidden-import sqlalchemy.dialects.sqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg --hidden-import tiktok_affiliate_report.auth --hidden-import tiktok_affiliate_report.api --hidden-import tiktok_affiliate_report.db --hidden-import tiktok_affiliate_report.migrations --hidden-import tiktok_affiliate_report.parser --hidden-import tiktok_affiliate_report.reports desktop_launcher.py
+if exist "dist\TikTokAffiliateReport.exe" del /q "dist\TikTokAffiliateReport.exe"
+"%PYTHON%" -m PyInstaller --noconfirm --clean --onefile --windowed --name TikTokAffiliateReport --specpath build --distpath "%APP_STAGE%" --workpath build\pyinstaller-work --icon "%CD%\packaging\app.ico" --add-data "%CD%\web\out;web" --add-data "%CD%\tiktok_affiliate_report\migrations.py;tiktok_affiliate_report" --collect-all openpyxl --collect-submodules uvicorn --copy-metadata uvicorn --hidden-import h11 --hidden-import python_multipart --hidden-import sqlalchemy.dialects.sqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg --hidden-import tiktok_affiliate_report.auth --hidden-import tiktok_affiliate_report.api --hidden-import tiktok_affiliate_report.db --hidden-import tiktok_affiliate_report.migrations --hidden-import tiktok_affiliate_report.parser --hidden-import tiktok_affiliate_report.reports desktop_launcher.py
 if errorlevel 1 goto :error
 
 echo [4/4] Kiem tra khong nhung database nguoi dung...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "packaging\assert_no_embedded_database.ps1" -Path "dist\TikTokAffiliateReport.exe"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "packaging\assert_no_embedded_database.ps1" -Path "%APP_STAGE%\TikTokAffiliateReport.exe"
 if errorlevel 1 goto :error
 
 echo.
-echo DONE: %CD%\dist\TikTokAffiliateReport.exe
+echo DONE: runtime staging da san sang cho installer.
 exit /b 0
 
 :missing_web

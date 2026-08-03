@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.0 - 2026-08-03
 
 - Operations Cockpit Next.js thay hoàn toàn Streamlit trong local runtime và Windows packaging.
 - Editable KPI/ngày theo từng account; owner có thêm target tổng `ALL`.
@@ -10,6 +10,8 @@
 - PostgreSQL shared database support, SQLite → PostgreSQL migration tool và Postgres 16 CI.
 - PWA login/logout flow; viewer read-only, operator bị giới hạn account, `ALL` chỉ owner chỉnh sửa.
 - Windows packaging mặc định unsigned; SHA-256 là integrity gate miễn phí.
+- Chỉ phát hành full installer; portable EXE không còn là release artifact.
+- Reinstall/upgrade giữ nguyên database và lịch sử người dùng theo installer contract.
 
 ## v1.0.0 - 2026-08-03
 

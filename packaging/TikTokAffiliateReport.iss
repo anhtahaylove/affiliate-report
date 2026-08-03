@@ -29,10 +29,10 @@ UsePreviousTasks=yes
 Name: "desktopicon"; Description: "Tạo biểu tượng ngoài Desktop"; GroupDescription: "Biểu tượng bổ sung:"; Flags: checkedonce
 
 [Files]
-Source: "..\dist\TikTokAffiliateReport.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\installer-app\TikTokAffiliateReport.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
-Name: "{app}\data"
+Name: "{app}\data"; Flags: uninsneveruninstall
 
 [Icons]
 Name: "{group}\TikTok Affiliate Report"; Filename: "{app}\TikTokAffiliateReport.exe"; WorkingDir: "{app}"; IconFilename: "{app}\TikTokAffiliateReport.exe"

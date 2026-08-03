@@ -24,7 +24,7 @@ Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shor
 2. phục vụ Next.js đã bundle cùng EXE;
 3. tự mở `http://127.0.0.1:<port>` trong trình duyệt.
 
-Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\tiktok_affiliate_report.db` và không được nhúng vào EXE hay ghi đè khi nâng cấp.
+Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\tiktok_affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
 
 Artifact hiện cố ý **không code-sign**; Windows SmartScreen có thể cảnh báo. SHA-256 xác minh integrity, không thay thế publisher trust.
 
@@ -91,20 +91,19 @@ Chuyển database SQLite local sang PostgreSQL rỗng:
 
 Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy session/OIDC state, rồi kiểm tra row counts và PostgreSQL sequences.
 
-## Build EXE và installer
+## Build full installer
 
 ```powershell
 .\BUILD_EXE.bat
 .\packaging\build_installer.ps1 -SkipAppBuild
 ```
 
-Output:
+Artifact phát hành:
 
-- `dist\TikTokAffiliateReport.exe`
 - `artifacts\installer\TikTokAffiliateReportSetup-v1.1.0.exe`
 - `artifacts\installer\SHA256SUMS.txt`
 
-`BUILD_EXE.bat` build static Next.js, bundle FastAPI + web assets, rồi chạy privacy gate để chặn database người dùng lọt vào artifact. Build installer cần Inno Setup 6 trên máy phát triển:
+Không phát hành portable EXE. `BUILD_EXE.bat` chỉ tạo runtime staging nội bộ để Inno Setup đóng gói, đồng thời chạy privacy gate để chặn database người dùng lọt vào installer. Build installer cần Inno Setup 6 trên máy phát triển:
 
 ```powershell
 winget install --id JRSoftware.InnoSetup --exact
