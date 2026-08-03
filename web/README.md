@@ -1,6 +1,6 @@
 # TikTok Affiliate Report PWA
 
-Next.js/PWA client cho API Phase 2. Đây là nền web dùng chung cho browser, Tauri desktop và Capacitor mobile; Streamlit vẫn là app desktop ổn định trong Phase 1.
+Next.js/PWA Operations Cockpit cho FastAPI. Đây là UI production dùng chung cho browser, bộ cài Windows hiện tại và các wrapper Tauri/Capacitor khi có nhu cầu native thật.
 
 ## Chạy local
 
@@ -26,4 +26,4 @@ Mở `http://127.0.0.1:3000`.
 - Manifest: `src/app/manifest.ts`
 - Service worker: `public/sw.js`
 - App shell có thể mở offline; dữ liệu báo cáo vẫn cần kết nối API.
-- Production phải đặt API sau HTTPS/OIDC; API local hiện không phải public security boundary.
+- Production đặt API sau HTTPS với `AUTH_MODE=oidc`; PWA dùng cookie session/CSRF, không lưu token trong `localStorage`.

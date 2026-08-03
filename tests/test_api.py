@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from io import BytesIO
 
 import pandas as pd
@@ -7,13 +8,17 @@ from fastapi.testclient import TestClient
 
 import tiktok_affiliate_report.api as api_module
 from tiktok_affiliate_report.api import create_app
-from tiktok_affiliate_report.db import get_engine, import_rows
+from tiktok_affiliate_report.db import get_engine, import_rows, monthly_targets
 from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
 
 
 def api(tmp_path):
     engine = get_engine(f"sqlite:///{(tmp_path / 'api.db').as_posix()}")
-    return TestClient(create_app(engine)), engine
+    return TestClient(
+        create_app(engine),
+        base_url="http://127.0.0.1",
+        client=("127.0.0.1", 50000),
+    ), engine
 
 
 def raw_export_row(**updates):
@@ -74,6 +79,25 @@ def test_report_endpoints_return_items_count_and_safe_nulls(tmp_path):
     assert daily["items"][0]["day"] == "2026-03-01"
     assert monthly["count"] == 1
     assert monthly["items"][0]["actual_commission"] is None
+
+
+def test_monthly_kpi_uses_account_targets_and_clear_subset_total(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    with engine.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=100))
+
+    monthly = client.get("/api/v1/monthly-kpi", params={"account": "CHIISTORE", "month": "2026-03"}).json()
+    by_account = {item["account"]: item for item in monthly["items"]}
+    filtered = client.get(
+        "/api/v1/monthly-kpi",
+        params={"account": "CHIISTORE", "month": "2026-03", "status": "settled"},
+    ).json()
+
+    assert by_account["CHIISTORE"]["daily_target"] == 100
+    assert by_account["ALL"]["daily_target"] == 100
+    assert by_account["ALL"]["monthly_target"] == 3100
+    assert all(item["daily_target"] is None for item in filtered["items"])
 
 
 def test_orders_paginates_with_total(tmp_path):
@@ -150,3 +174,14 @@ def test_import_rejects_file_when_stream_crosses_size_limit(tmp_path, monkeypatc
 
     assert response.status_code == 413
     assert response.json() == {"detail": "File exceeds 0 MB"}
+
+
+def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
+    static_dir = tmp_path / "web"
+    static_dir.mkdir()
+    (static_dir / "index.html").write_text("<h1>Ops Cockpit</h1>", encoding="utf-8")
+    monkeypatch.setenv("WEB_STATIC_DIR", str(static_dir))
+    client, _ = api(tmp_path)
+
+    assert client.get("/health").json() == {"status": "ok"}
+    assert "Ops Cockpit" in client.get("/").text

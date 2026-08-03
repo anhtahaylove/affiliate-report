@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.0.0"
+  #define MyAppVersion "1.1.0"
 #endif
 
 [Setup]
@@ -14,7 +14,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\artifacts\installer
-OutputBaseFilename=TikTokAffiliateReportSetup
+OutputBaseFilename=TikTokAffiliateReportSetup-v{#MyAppVersion}
 SetupIconFile=app.ico
 UninstallDisplayIcon={app}\TikTokAffiliateReport.exe
 Compression=lzma2/max
@@ -29,10 +29,10 @@ UsePreviousTasks=yes
 Name: "desktopicon"; Description: "Tạo biểu tượng ngoài Desktop"; GroupDescription: "Biểu tượng bổ sung:"; Flags: checkedonce
 
 [Files]
-Source: "..\dist\TikTokAffiliateReport.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\installer-app\TikTokAffiliateReport.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
-Name: "{app}\data"
+Name: "{app}\data"; Flags: uninsneveruninstall
 
 [Icons]
 Name: "{group}\TikTok Affiliate Report"; Filename: "{app}\TikTokAffiliateReport.exe"; WorkingDir: "{app}"; IconFilename: "{app}\TikTokAffiliateReport.exe"

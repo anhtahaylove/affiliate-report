@@ -106,10 +106,17 @@ def _migration_0003_ensure_baseline_tables(conn: Connection) -> None:
     metadata.create_all(conn)
 
 
+def _migration_0004_auth_rbac_tables(conn: Connection) -> None:
+    from .db import app_users, auth_sessions, metadata, oidc_login_states, user_account_access
+
+    metadata.create_all(conn, tables=[app_users, user_account_access, auth_sessions, oidc_login_states])
+
+
 MIGRATIONS = [
     Migration(1, "baseline_create_or_adopt", _migration_0001_baseline),
     Migration(2, "import_audit_columns_and_indexes", _migration_0002_import_audit_columns_and_indexes),
     Migration(3, "ensure_baseline_tables", _migration_0003_ensure_baseline_tables),
+    Migration(4, "auth_rbac_tables", _migration_0004_auth_rbac_tables),
 ]
 
 

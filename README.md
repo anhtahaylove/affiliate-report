@@ -1,106 +1,123 @@
 # TikTok Affiliate Report
 
-Ứng dụng Streamlit chạy local trên Windows để upload Excel export từ TikTok Affiliate, chống double-count khi các lần export bị overlap, giữ lịch sử version theo dòng `account + order_id + sku_id` và dựng dashboard theo logic `REPORT AFF.xlsx`.
+Web app local cho Windows để import Excel export từ TikTok Affiliate, chống double-count khi file bị overlap và theo dõi hiệu suất theo từng affiliate account. UI production là **Next.js Operations Cockpit**; Python/FastAPI giữ toàn bộ parser, dedupe, versioning và công thức báo cáo.
 
-## Chức năng hiện có
+## Chức năng
 
 - Parser đúng 47 cột TikTok; giữ ID dạng text và raw JSON để audit.
 - Giới hạn upload 20 MB và 50.000 dòng/file.
-- Dedupe file bằng SHA-256; versioning khi cùng order/SKU đổi dữ liệu.
-- Tổng quan theo account và hàng tổng `ALL`.
-- Báo cáo ngày/tháng, KPI, đơn hàng hiện hành và lịch sử import.
-- Output wide tải CSV để dán/import vào Google Sheets.
-- Migration có version; dữ liệu local lưu bằng SQLite tại `data/tiktok_affiliate_report.db`.
-- Chạy bằng launcher Windows `START_REPORT.bat`, Streamlit localhost `http://127.0.0.1:8501`.
+- Dedupe file bằng SHA-256; versioning theo `account + order_id + sku_id` khi dữ liệu thay đổi.
+- Dashboard `ALL` và từng account: đơn hàng, GMV, hoa hồng, huỷ, KPI ngày/tháng.
+- Sửa KPI/ngày theo từng account; owner sửa thêm target tổng `ALL`.
+- Upload `.xlsx`, phản hồi duplicate/inserted/updated/unchanged/rejected và lịch sử import gần nhất.
+- Roles `owner` / `operator` / `viewer`, account allowlist, OIDC session + CSRF cho shared web.
+- SQLite cho local single-user; PostgreSQL cho shared multi-user.
+- PWA responsive dùng chung cho web/desktop, sẵn boundary để bọc mobile sau này.
 
-## Chạy local trên Windows
+## Cài và chạy trên máy Windows không cần Python
 
-Yêu cầu Python 3.11+.
+Khi release `v1.1.0` được phát hành, tải installer từ [GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.1.0.exe`.
 
-1. Mở thư mục dự án trên Windows.
-2. Double-click `START_REPORT.bat`.
-3. Khi terminal báo app đã chạy, mở `http://127.0.0.1:8501` nếu trình duyệt chưa tự mở.
+Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
-Launcher tự tạo `.venv` nếu thiếu, cài `requirements.txt` nếu thiếu thư viện, rồi chạy Streamlit tại `127.0.0.1:8501`. Database SQLite nằm tại `data/tiktok_affiliate_report.db`.
+1. khởi động FastAPI trên một cổng loopback còn trống;
+2. phục vụ Next.js đã bundle cùng EXE;
+3. tự mở `http://127.0.0.1:<port>` trong trình duyệt.
 
-## Chạy bằng EXE (máy không cần Python)
+Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\tiktok_affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
 
-File đã đóng gói nằm tại `dist\TikTokAffiliateReport.exe`. Chỉ cần copy và double-click file này; app mở tại `http://127.0.0.1:8501` và tạo thư mục `data` cạnh EXE để lưu lâu dài.
+Artifact hiện cố ý **không code-sign**; Windows SmartScreen có thể cảnh báo. SHA-256 xác minh integrity, không thay thế publisher trust.
 
-EXE phát hành được build **không kèm database người dùng**. Máy mới khởi tạo database rỗng và chỉ tạo cấu hình KPI mặc định; dữ liệu phát sinh luôn nằm trong thư mục `data` cạnh EXE và không bị installer ghi đè. `BUILD_EXE.bat` tự chạy privacy gate và dừng nếu archive chứa file database.
+## Chạy source trên Windows
 
-Để build lại trên máy phát triển, double-click `BUILD_EXE.bat`. Không đặt EXE trong `Program Files`; dùng một thư mục người dùng có quyền ghi, ví dụ `Documents\TikTok Affiliate Report`.
-
-## Tải bản cài đặt
-
-GitHub Release private: https://github.com/anhtahaylove/tiktok-affiliate-report/releases/latest
-
-- Đăng nhập GitHub bằng account có quyền đọc private repository rồi tải `TikTokAffiliateReportSetup-v1.0.0.exe`.
-- `SHA256SUMS.txt` trong release dùng để kiểm tra file sau khi tải.
-- Bản `v1.0.0` hiện dùng chữ ký self-signed local nên Windows SmartScreen có thể cảnh báo. Chỉ coi là public-trusted sau khi pipeline build chạy với OV/EV hoặc Azure Artifact Signing và timestamp hợp lệ.
-
-## Build installer Windows
-
-Installer chuẩn Windows tạo bằng Inno Setup, cài app vào `%LOCALAPPDATA%\TikTokAffiliateReport`, thêm Start Menu, uninstaller và shortcut ngoài Desktop.
-
-Cài công cụ build một lần trên máy phát triển:
+Yêu cầu cho máy phát triển: Python 3.11+, Node.js 22 và pnpm.
 
 ```powershell
-winget install --id JRSoftware.InnoSetup --exact
+corepack enable
+.\START_REPORT.bat
 ```
+
+Launcher tự tạo `.venv`, cài `requirements-api.txt`, build `web/out` khi thiếu rồi mở app. Kiểm tra nhanh không chạy server:
 
 ```powershell
-.\packaging\build_installer.ps1
+.\START_REPORT.bat --check
 ```
 
-Output: `artifacts\installer\TikTokAffiliateReportSetup.exe`. Máy người dùng không cần cài Inno Setup hoặc Python.
-
-Script sẽ ký `dist\TikTokAffiliateReport.exe` và installer nếu trong `Cert:\CurrentUser\My` có code-signing certificate còn hạn kèm private key. Nếu máy chưa có certificate, dùng signing local/dev:
-
-```powershell
-.\packaging\build_installer.ps1 -CreateSelfSignedCert
-```
-
-Self-signed signature chỉ giúp kiểm tra integrity nội bộ; Windows/SmartScreen vẫn có thể cảnh báo vì không phải certificate public-trusted.
-
-Khi có certificate code-signing public-trusted, chọn đúng certificate và timestamp bản phát hành:
-
-```powershell
-.\packaging\build_installer.ps1 `
-  -CertificateThumbprint "<THUMBPRINT>" `
-  -TimestampServer "http://timestamp.digicert.com" `
-  -RequireTrustedCertificate
-```
-
-Public release gate yêu cầu exact thumbprint, certificate không self-signed, signature hợp lệ trên máy build và RFC 3161/SHA-256 timestamp. Script không tự dùng certificate của ứng dụng khác trên máy.
-
-## Phase 2 API + Next.js/PWA
-
-Streamlit/EXE vẫn là bản local ổn định. Foundation Phase 2 tái sử dụng cùng parser, dedupe và report core qua FastAPI:
+## Chạy API và Next.js riêng khi phát triển
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-api.txt
 .\.venv\Scripts\python.exe run_api.py
 ```
 
-Sau đó chạy PWA:
+Terminal khác:
 
 ```powershell
-Set-Location web
-Copy-Item .env.example .env.local
-pnpm install
-pnpm dev
+Copy-Item web\.env.example web\.env.local
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web dev
 ```
 
-Mở `http://127.0.0.1:3000`. API local tại `http://127.0.0.1:8000`; chưa được expose public trước khi có OIDC.
+Mở `http://127.0.0.1:3000`; API local ở `http://127.0.0.1:8000`. `AUTH_MODE=local` chỉ được bind loopback và dùng local owner.
+
+## Shared web với OIDC + PostgreSQL
+
+Shared multi-user cần PostgreSQL, OIDC provider thật, TLS/reverse proxy và secret injection ngoài Git:
+
+```powershell
+$env:DATABASE_URL = 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/tiktok_affiliate_report'
+$env:AUTH_MODE = 'oidc'
+$env:OIDC_ISSUER = 'https://id.example.com'
+$env:OIDC_CLIENT_ID = '<CLIENT_ID>'
+$env:OIDC_CLIENT_SECRET = '<CLIENT_SECRET>'
+$env:OIDC_REDIRECT_URI = 'https://report.example.com/auth/callback'
+$env:AUTH_BOOTSTRAP_OWNER_EMAIL = 'owner@example.com'
+$env:AUTH_ALLOWED_EMAILS = 'owner@example.com,user@example.com'
+$env:WEB_APP_URL = 'https://report.example.com'
+$env:API_CORS_ORIGINS = 'https://report.example.com'
+$env:API_HOST = '0.0.0.0'
+.\.venv\Scripts\python.exe run_api.py
+```
+
+`AUTH_DEFAULT_ACCOUNTS` mặc định rỗng. User mới chỉ thấy account sau khi owner cấp quyền qua API quản trị. Không commit client secret hoặc database password.
+
+Chuyển database SQLite local sang PostgreSQL rỗng:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\migrate_sqlite_to_postgres.py `
+  --source data\tiktok_affiliate_report.db `
+  --target 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/tiktok_affiliate_report'
+```
+
+Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy session/OIDC state, rồi kiểm tra row counts và PostgreSQL sequences.
+
+## Build full installer
+
+```powershell
+.\BUILD_EXE.bat
+.\packaging\build_installer.ps1 -SkipAppBuild
+```
+
+Artifact phát hành:
+
+- `artifacts\installer\TikTokAffiliateReportSetup-v1.1.0.exe`
+- `artifacts\installer\SHA256SUMS.txt`
+
+Không phát hành portable EXE. `BUILD_EXE.bat` chỉ tạo runtime staging nội bộ để Inno Setup đóng gói, đồng thời chạy privacy gate để chặn database người dùng lọt vào installer. Build installer cần Inno Setup 6 trên máy phát triển:
+
+```powershell
+winget install --id JRSoftware.InnoSetup --exact
+```
 
 ## Kiểm tra
 
 ```powershell
-.\START_REPORT.bat --check
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m compileall streamlit_app.py tiktok_affiliate_report
+.\.venv\Scripts\python.exe -m compileall -q tiktok_affiliate_report scripts tests desktop_launcher.py
 .\.venv\Scripts\python.exe -m pip check
+pnpm --dir web lint
+pnpm --dir web build
+git diff --check
 ```
 
 ## Tài liệu
@@ -112,8 +129,9 @@ Mở `http://127.0.0.1:3000`. API local tại `http://127.0.0.1:8000`; chưa đ�
 
 ## Quy tắc dữ liệu
 
-- File TikTok không chứa tên affiliate account sở hữu file; `Tên cửa hàng` là seller shop. Selector không có mặc định và người upload phải chọn đúng account; app không suy account từ filename.
+- File TikTok không chứa tên affiliate account sở hữu file; `Tên cửa hàng` là seller shop. Người upload phải chọn account, app không suy account từ filename.
 - Không dedupe chỉ bằng `ID đơn hàng`: một order có thể có nhiều SKU.
 - `Tổng số tiền nhận được cuối cùng` là KPI TikTok riêng, không phải `Hoa hồng thực tế` theo workbook.
 - Một dòng không xuất hiện trong file sau không bị xem là đã xoá.
-- `REPORT AFF.xlsx` là nguồn thiết kế output legacy đã chốt; app không cần link Google Sheets để chạy.
+- `target_commission` trong database/API là **KPI hoa hồng mỗi ngày**, không phải tổng target tháng.
+- `REPORT AFF.xlsx` là nguồn thiết kế output legacy; app không cần link Google Sheets để chạy.

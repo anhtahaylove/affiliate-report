@@ -4,7 +4,7 @@
 
 TikTok Affiliate Report là web app nội bộ chạy local trên Windows, giúp người vận hành upload các file Excel xuất từ TikTok, tự động loại trùng giữa các lần export bị chồng dữ liệu, và xem báo cáo ngày/tháng theo cùng logic đang dùng trong `REPORT AFF.xlsx`.
 
-MVP dùng một ứng dụng Streamlit chạy trên localhost và một cơ sở dữ liệu SQLite tại máy local. Không cần queue, microservice, data warehouse hay dịch vụ database riêng.
+MVP production dùng Next.js Operations Cockpit do FastAPI phục vụ trên loopback và một cơ sở dữ liệu SQLite tại máy local. Không cần queue, microservice, data warehouse, Docker hay dịch vụ database riêng.
 
 ## 2. Contacts
 
@@ -81,7 +81,7 @@ Ràng buộc:
 - Không làm mất lịch sử khi trạng thái đơn đổi.
 - Báo cáo có thể drill-down về dòng nguồn và batch upload.
 - Công thức KPI có tên rõ ràng, tránh nhầm “hoa hồng thực nhận của TikTok” với “hoa hồng thực tế theo logic workbook”.
-- Một codebase chạy local bằng Streamlit và SQLite.
+- Một codebase chạy local bằng FastAPI + static Next.js và SQLite; shared multi-user dùng cùng API với PostgreSQL/OIDC.
 
 ## 7. Giải pháp
 
@@ -173,9 +173,10 @@ actual_commission = initial_commission - cancelled_commission
 
 ```mermaid
 flowchart TB
-    U["Trình duyệt trên máy local"] --> S["Streamlit localhost"]
-    S --> P["Parser + validation"]
-    S --> R["Reporting queries"]
+    U["Trình duyệt trên máy local"] --> W["Next.js Operations Cockpit"]
+    W --> A["FastAPI loopback"]
+    A --> P["Parser + validation"]
+    A --> R["Reporting queries"]
     P --> DB[("SQLite local: data/tiktok_affiliate_report.db")]
     R --> DB
 ```
@@ -186,7 +187,7 @@ Lựa chọn này cố ý nhỏ:
 - Không object storage trong MVP; lưu raw row JSON đủ để audit/replay.
 - Không tách bảng product/shop/content trước khi có nhu cầu query thật.
 - Máy chạy app và file database SQLite là boundary vận hành của MVP local.
-- Launcher Windows `START_REPORT.bat` khởi động Streamlit tại `127.0.0.1:8501` và giữ database trong `data/`.
+- Launcher Windows `START_REPORT.bat` build web khi cần, khởi động FastAPI trên một cổng loopback còn trống, tự mở trình duyệt và giữ database trong `data/`.
 
 ### 7.6 Database
 
@@ -255,13 +256,13 @@ Migration chạy khi app khởi động. Bản đầu chỉ additive/adopt schem
 
 ## 9. Quyết định nền tảng dài hạn
 
-Streamlit tiếp tục là UI phù hợp cho MVP local và cockpit nội bộ vì luồng chính là upload, filter, bảng và biểu đồ. Không dùng Streamlit làm nền UI native cuối cùng cho Android/iOS.
+Operations Cockpit Next.js là UI production cho local web/desktop và là surface dùng chung cho PWA/mobile wrapper. Streamlit đã được loại khỏi runtime để tránh duy trì hai giao diện và mở rộng custom UI thuận tiện hơn.
 
 Lộ trình ít viết lại nhất:
 
-1. Giữ `parser`, dedupe, migration và reporting core độc lập với Streamlit.
-2. Khi cần nhiều người dùng/public, đặt core sau một API Python và xây web UI React/Next.js responsive/PWA.
-3. Đóng gói cùng web UI bằng Tauri cho desktop và Capacitor cho Android/iOS.
-4. Chỉ chọn Expo/React Native thay Capacitor khi mobile-first, offline, push notification hoặc native gesture trở thành yêu cầu chính.
+1. Giữ `parser`, dedupe, migration và reporting core trong Python, độc lập với giao diện.
+2. Dùng cùng FastAPI + Next.js/PWA cho local single-user và shared web; shared mode bật OIDC, account access và PostgreSQL.
+3. Khi cần phân phối desktop native ngoài bộ cài hiện tại, bọc web UI bằng Tauri; khi cần app store, bọc cùng PWA bằng Capacitor cho Android/iOS.
+4. Chỉ chọn Expo/React Native thay Capacitor khi offline/background, push notification hoặc native gesture trở thành yêu cầu chính.
 
-Ngưỡng chuyển khỏi Streamlit: cần app-store distribution, offline/background, push/deep link, UX mobile-first hoặc luồng tương tác phức tạp bị giới hạn bởi rerun model. Trước ngưỡng đó, tiếp tục cải thiện bằng theme, widget native, layout responsive và fragment/form thay vì viết lại UI.
+Ngưỡng thêm native wrapper: có yêu cầu app-store distribution, background task, push/deep link hoặc tích hợp thiết bị mà PWA không đáp ứng. Trước ngưỡng đó, một codebase responsive/PWA là phương án ít vận hành và ít viết lại nhất.

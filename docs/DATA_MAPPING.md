@@ -62,6 +62,8 @@ KPI legacy:
 | 2026-07 | 500.000 VND |
 | 2026-08 | 500.000 VND |
 
+Trong Operations Cockpit, các giá trị trên được giữ ở target `ALL`. User có thể đặt thêm KPI/ngày riêng cho từng account; target tháng và tỷ lệ đạt được Python core tính từ đúng target của account/phạm vi đang xem.
+
 ### Kết quả đối soát mapping
 
 | File suffix | Block legacy khớp mạnh nhất | Đối soát số lượng | MAE Tổng DT/ngày | MAE Tổng HH ban đầu/ngày | Độ tin cậy |
