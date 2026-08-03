@@ -2,8 +2,8 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
-  - postcss@8.5.18
+  - postcss@8.5.25
   - sharp@0.35.0
 overrides:
-  "next>postcss": 8.5.18
+  "next>postcss": 8.5.25
   "next>sharp": 0.35.0

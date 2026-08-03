@@ -153,6 +153,33 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     assert duplicate.status_code == 409
 
 
+def test_installed_local_owner_can_shutdown_app(tmp_path, monkeypatch):
+    client, _ = api(tmp_path)
+    stopped = threading.Event()
+    client.app.state.update_shutdown = stopped.set
+    monkeypatch.setattr(api_module, "_desktop_shutdown_supported", lambda _app: True)
+    monkeypatch.setenv("DESKTOP_CONTROL_TOKEN", "test-desktop-token")
+
+    current = client.get("/auth/me").json()
+    assert current["desktop_app"] is True
+    assert current["desktop_control_token"] == "test-desktop-token"
+    assert client.post("/api/v1/admin/shutdown").status_code == 403
+    response = client.post(
+        "/api/v1/admin/shutdown",
+        headers={"X-Desktop-Control-Token": "test-desktop-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "shutting_down"}
+    assert stopped.wait(1)
+
+    monkeypatch.setattr(api_module, "_desktop_shutdown_supported", lambda _app: False)
+    assert client.post(
+        "/api/v1/admin/shutdown",
+        headers={"X-Desktop-Control-Token": "test-desktop-token"},
+    ).status_code == 409
+
+
 def test_report_endpoints_return_items_count_and_safe_nulls(tmp_path):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])

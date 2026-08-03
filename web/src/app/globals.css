@@ -239,6 +239,18 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .user-menu strong { color: var(--ink); }
 
+.user-menu .exit-button {
+  border-color: #f0b2aa;
+  color: var(--danger);
+}
+
+.user-menu .exit-button:hover {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.exit-error { color: var(--danger); }
+
 .drawer-button {
   display: none;
 }
