@@ -1,17 +1,29 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date
+from datetime import date, datetime, timedelta
+from statistics import median
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from .db import monthly_targets, order_line_versions
-from .parser import DEFAULT_ACCOUNTS
+from .db import accounts as account_registry
+from .db import import_batches, monthly_targets, order_line_versions
 
 
 MONTHLY_KPI_COLUMNS = ["month", "account", "daily_target", "days_in_scope", "monthly_target", "actual_commission", "gap", "target_achievement", "order_lines"]
+
+
+def _active_account_codes(engine: Engine) -> list[str]:
+    stmt = (
+        select(account_registry.c.code)
+        .where(account_registry.c.active.is_(True))
+        .order_by(account_registry.c.display_order, account_registry.c.code)
+    )
+    with engine.connect() as conn:
+        return [str(code) for code in conn.execute(stmt).scalars()]
 
 
 def _current_rows(engine: Engine) -> pd.DataFrame:
@@ -102,7 +114,7 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
         (account, pd.Timestamp(month).strftime("%Y-%m")): int(target)
         for account, month, target in zip(targets["account"], targets["month"], targets["target_commission"])
     }
-    selected_accounts = DEFAULT_ACCOUNTS if accounts is None else accounts
+    selected_accounts = _active_account_codes(engine) if accounts is None else accounts
 
     def daily_target(row) -> int | pd.NA:
         if statuses:
@@ -110,7 +122,7 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
         month_key = row["day"][:7]
         if row["account"] != "ALL":
             return target_map.get((row["account"], month_key), pd.NA)
-        if set(selected_accounts) == set(DEFAULT_ACCOUNTS):
+        if set(selected_accounts) == set(_active_account_codes(engine)):
             return target_map.get(("ALL", month_key), pd.NA)
         account_targets = [target_map.get((account, month_key)) for account in selected_accounts]
         return sum(account_targets) if all(target is not None for target in account_targets) else pd.NA
@@ -123,7 +135,12 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
 
 def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None) -> pd.DataFrame:
     df = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
-    cols = ["account", "order_id", "sku_id", "product_name", "shop_name", "status", "order_date", "gmv", "units_sold", "units_refunded", "estimated_commission", "final_received", "version", "created_at"]
+    cols = [
+        "account", "order_id", "sku_id", "product_id", "product_name", "shop_id", "shop_name",
+        "content_type", "content_id", "order_type", "commission_type", "currency", "status",
+        "order_date", "settlement_date", "gmv", "actual_gmv", "units_sold", "units_refunded",
+        "estimated_commission", "actual_commission", "final_received", "version", "created_at",
+    ]
     if df.empty:
         return pd.DataFrame(columns=cols)
     if search:
@@ -132,6 +149,7 @@ def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, s
         for column in ("order_id", "sku_id", "product_name", "shop_name"):
             matches |= df[column].fillna("").astype(str).str.contains(needle, case=False, regex=False)
         df = df[matches]
+    df = _with_actuals(df)
     return df.sort_values(["order_date", "order_id", "sku_id"], ascending=[False, True, True])[cols]
 
 
@@ -141,8 +159,9 @@ def import_history(engine: Engine) -> pd.DataFrame:
 
 
 def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
-    selected_accounts = list(DEFAULT_ACCOUNTS if accounts is None else accounts)
-    full_scope = set(selected_accounts) == set(DEFAULT_ACCOUNTS)
+    active_accounts = _active_account_codes(engine)
+    selected_accounts = list(active_accounts if accounts is None else accounts)
+    full_scope = set(selected_accounts) == set(active_accounts)
     target_accounts = [] if statuses else [*selected_accounts, *(["ALL"] if full_scope else [])]
     targets = pd.read_sql(
         select(monthly_targets)
@@ -215,7 +234,8 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
 
 
 def sheets_output(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
-    account_order = list(DEFAULT_ACCOUNTS if accounts is None else accounts)
+    active_accounts = _active_account_codes(engine)
+    account_order = list(active_accounts if accounts is None else accounts)
     columns = ["Ngày"]
     account_metrics = [
         ("units_sold", "Số lượng bán"),
@@ -252,10 +272,330 @@ def sheets_output(engine: Engine, accounts=None, start=None, end=None, statuses=
         pd.Timestamp(month).strftime("%Y-%m"): int(target)
         for month, target in zip(targets["month"], targets["target_commission"])
     }
-    if set(account_order) == set(DEFAULT_ACCOUNTS) and not statuses:
+    if set(account_order) == set(active_accounts) and not statuses:
         output["KPI/ngày"] = output["Ngày"].str[:7].map(target_map).astype("Int64")
     else:
         output["KPI/ngày"] = pd.Series(pd.NA, index=output.index, dtype="Int64")
     denominator = pd.to_numeric(output["KPI/ngày"], errors="coerce").where(lambda values: values > 0)
     output["% đạt KPI"] = output["Tổng HH thực tế"].div(denominator)
     return output[columns]
+
+
+def _with_actuals(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+    out = df.copy()
+    out["initial_commission"] = pd.to_numeric(out["estimated_commission"], errors="coerce").fillna(0)
+    out["is_ineligible"] = out["status"] == "ineligible"
+    out["actual_gmv"] = pd.to_numeric(out["gmv"], errors="coerce").fillna(0).where(~out["is_ineligible"], 0)
+    out["actual_commission"] = out["initial_commission"].where(~out["is_ineligible"], 0)
+    out["final_received_value"] = pd.to_numeric(out["final_received"], errors="coerce").fillna(0)
+    out["order_key"] = out["account"].fillna("").astype(str) + "|" + out["order_id"].fillna("").astype(str)
+    return out
+
+
+def _safe_rate(numerator: float | int, denominator: float | int) -> float | None:
+    return float(numerator) / float(denominator) if denominator else None
+
+
+def _summary(df: pd.DataFrame) -> dict[str, object]:
+    if df.empty:
+        return {
+            "orders": 0,
+            "order_lines": 0,
+            "gross_gmv": 0,
+            "actual_gmv": 0,
+            "initial_commission": 0,
+            "actual_commission": 0,
+            "final_received": 0,
+            "units_sold": 0,
+            "units_refunded": 0,
+            "effective_commission_rate": None,
+            "refund_rate": None,
+            "ineligible_rate": None,
+            "final_received_variance": 0,
+            "latest_order_date": None,
+        }
+    work = _with_actuals(df)
+    gross_gmv = int(pd.to_numeric(work["gmv"], errors="coerce").fillna(0).sum())
+    actual_gmv = int(work["actual_gmv"].sum())
+    initial_commission = int(work["initial_commission"].sum())
+    actual_commission = int(work["actual_commission"].sum())
+    final_received = int(work["final_received_value"].sum())
+    units_sold = int(pd.to_numeric(work["units_sold"], errors="coerce").fillna(0).sum())
+    units_refunded = int(pd.to_numeric(work["units_refunded"], errors="coerce").fillna(0).sum())
+    latest_order = pd.to_datetime(work["order_date"], errors="coerce").max()
+    return {
+        "orders": int(work["order_key"].nunique()),
+        "order_lines": int(len(work)),
+        "gross_gmv": gross_gmv,
+        "actual_gmv": actual_gmv,
+        "initial_commission": initial_commission,
+        "actual_commission": actual_commission,
+        "final_received": final_received,
+        "units_sold": units_sold,
+        "units_refunded": units_refunded,
+        "effective_commission_rate": _safe_rate(actual_commission, actual_gmv),
+        "refund_rate": _safe_rate(units_refunded, units_sold),
+        "ineligible_rate": _safe_rate(int(work["is_ineligible"].sum()), len(work)),
+        "final_received_variance": final_received - actual_commission,
+        "latest_order_date": None if pd.isna(latest_order) else latest_order.isoformat(),
+    }
+
+
+def _trend(df: pd.DataFrame, group_by: str) -> list[dict[str, object]]:
+    if df.empty:
+        return []
+    work = _with_actuals(df)
+    dates = pd.to_datetime(work["order_date"], errors="coerce")
+    work = work[dates.notna()].copy()
+    dates = dates[dates.notna()]
+    if work.empty:
+        return []
+    if group_by == "week":
+        work["period"] = dates.dt.to_period("W-SUN").dt.start_time.dt.strftime("%Y-%m-%d")
+    elif group_by == "month":
+        work["period"] = dates.dt.strftime("%Y-%m")
+    else:
+        work["period"] = dates.dt.strftime("%Y-%m-%d")
+    grouped = work.groupby("period", as_index=False).agg(
+        orders=("order_key", "nunique"),
+        order_lines=("id", "count"),
+        gross_gmv=("gmv", "sum"),
+        actual_gmv=("actual_gmv", "sum"),
+        actual_commission=("actual_commission", "sum"),
+        final_received=("final_received_value", "sum"),
+    )
+    return [
+        {
+            "period": str(row.period),
+            "orders": int(row.orders),
+            "order_lines": int(row.order_lines),
+            "gross_gmv": int(row.gross_gmv),
+            "actual_gmv": int(row.actual_gmv),
+            "actual_commission": int(row.actual_commission),
+            "final_received": int(row.final_received),
+        }
+        for row in grouped.itertuples(index=False)
+    ]
+
+
+def _breakdown(df: pd.DataFrame, column: str, key: str) -> list[dict[str, object]]:
+    if df.empty:
+        return []
+    work = _with_actuals(df)
+    work[column] = work[column].fillna("unknown").astype(str).replace("", "unknown")
+    grouped = work.groupby(column, as_index=False).agg(
+        orders=("order_key", "nunique"),
+        order_lines=("id", "count"),
+        gross_gmv=("gmv", "sum"),
+        actual_gmv=("actual_gmv", "sum"),
+        actual_commission=("actual_commission", "sum"),
+    )
+    total_orders = max(int(work["order_key"].nunique()), 1)
+    total_gmv = int(grouped["actual_gmv"].sum())
+    total_commission = int(grouped["actual_commission"].sum())
+    return [
+        {
+            key: str(getattr(row, column)),
+            "orders": int(row.orders),
+            "order_lines": int(row.order_lines),
+            "gross_gmv": int(row.gross_gmv),
+            "actual_gmv": int(row.actual_gmv),
+            "actual_commission": int(row.actual_commission),
+            "order_share": int(row.orders) / total_orders,
+            "gmv_share": _safe_rate(int(row.actual_gmv), total_gmv),
+            "commission_share": _safe_rate(int(row.actual_commission), total_commission),
+            "share": _safe_rate(int(row.actual_commission), total_commission),
+        }
+        for row in grouped.sort_values("actual_commission", ascending=False).itertuples(index=False)
+    ]
+
+
+def _dimension(df: pd.DataFrame, dimension: str, top: int) -> list[dict[str, object]]:
+    if df.empty:
+        return []
+    work = _with_actuals(df)
+    if dimension == "product":
+        id_column, label_column = "product_id", "product_name"
+    elif dimension == "shop":
+        id_column, label_column = "shop_id", "shop_name"
+    else:
+        id_column, label_column = "content_id", "content_type"
+    for column in (id_column, label_column):
+        if column not in work:
+            work[column] = None
+        work[column] = work[column].fillna("unknown").astype(str).replace("", "unknown")
+    work["ineligible_order_key"] = work["order_key"].where(work["is_ineligible"])
+    grouped = work.groupby([id_column, label_column], as_index=False).agg(
+        orders=("order_key", "nunique"),
+        order_lines=("id", "count"),
+        units_sold=("units_sold", "sum"),
+        units_refunded=("units_refunded", "sum"),
+        gross_gmv=("gmv", "sum"),
+        actual_gmv=("actual_gmv", "sum"),
+        actual_commission=("actual_commission", "sum"),
+        ineligible_rows=("is_ineligible", "sum"),
+        cancelled_orders=("ineligible_order_key", "nunique"),
+    ).sort_values(["actual_commission", "actual_gmv"], ascending=False).head(top)
+    return [
+        {
+            "id": str(getattr(row, id_column)),
+            "label": str(getattr(row, label_column)),
+            "orders": int(row.orders),
+            "order_lines": int(row.order_lines),
+            "units_sold": int(row.units_sold),
+            "units_refunded": int(row.units_refunded),
+            "gross_gmv": int(row.gross_gmv),
+            "actual_gmv": int(row.actual_gmv),
+            "actual_commission": int(row.actual_commission),
+            "ineligible_rate": _safe_rate(int(row.ineligible_rows), int(row.order_lines)),
+            "cancelled_orders": int(row.cancelled_orders),
+            "cancellation_rate": _safe_rate(int(row.cancelled_orders), int(row.orders)),
+        }
+        for row in grouped.itertuples(index=False)
+    ]
+
+
+def _settlement(df: pd.DataFrame, today: date) -> dict[str, object]:
+    if df.empty:
+        return {"median_lag_days": None, "settled_lines": 0, "pending_lines": 0, "pending_aging": []}
+    work = df.copy()
+    order_dates = pd.to_datetime(work["order_date"], errors="coerce")
+    settlement_dates = pd.to_datetime(work["settlement_date"], errors="coerce")
+    settled = (work["status"] == "settled") & order_dates.notna() & settlement_dates.notna()
+    lags = (settlement_dates[settled] - order_dates[settled]).dt.days.tolist()
+    non_negative_lags = [int(value) for value in lags if value >= 0]
+    pending = work["status"] == "pending"
+    buckets = {"0-7": 0, "8-14": 0, "15-30": 0, "31+": 0, "unknown": 0}
+    for value in order_dates[pending]:
+        if pd.isna(value):
+            buckets["unknown"] += 1
+            continue
+        age = max((today - value.date()).days, 0)
+        bucket = "0-7" if age <= 7 else "8-14" if age <= 14 else "15-30" if age <= 30 else "31+"
+        buckets[bucket] += 1
+    return {
+        "median_lag_days": None if not non_negative_lags else float(median(non_negative_lags)),
+        "settled_lines": int((work["status"] == "settled").sum()),
+        "pending_lines": int(pending.sum()),
+        "pending_aging": [{"bucket": name, "count": count} for name, count in buckets.items()],
+    }
+
+
+def _data_quality(engine: Engine, df: pd.DataFrame, accounts: list[str] | None) -> dict[str, object]:
+    work = df.copy()
+    order_dates = pd.to_datetime(work.get("order_date"), errors="coerce") if not work.empty else pd.Series(dtype="datetime64[ns]")
+    settlement_dates = pd.to_datetime(work.get("settlement_date"), errors="coerce") if not work.empty else pd.Series(dtype="datetime64[ns]")
+    currencies = work.get("currency", pd.Series(index=work.index, dtype="object")).fillna("").astype(str).str.upper()
+    stmt = select(import_batches)
+    if accounts is not None:
+        stmt = stmt.where(import_batches.c.account.in_(accounts))
+    imports = pd.read_sql(stmt, engine)
+    latest_import = pd.to_datetime(imports["created_at"], errors="coerce").max() if not imports.empty else pd.NaT
+    return {
+        "unknown_status_rows": int((work.get("status", pd.Series(index=work.index, dtype="object")) == "unknown").sum()),
+        "non_vnd_rows": int(((currencies != "") & (currencies != "VND")).sum()),
+        "missing_order_date_rows": int(order_dates.isna().sum()),
+        "missing_settlement_date_rows": int(settlement_dates.isna().sum()),
+        "settled_missing_settlement_rows": int(((work.get("status") == "settled") & settlement_dates.isna()).sum()) if not work.empty else 0,
+        "negative_settlement_lag_rows": int(((settlement_dates - order_dates).dt.days < 0).sum()) if not work.empty else 0,
+        "import_batches": int(len(imports)),
+        "import_inserted": int(imports["inserted"].sum()) if not imports.empty else 0,
+        "import_updated": int(imports["updated"].sum()) if not imports.empty else 0,
+        "import_unchanged": int(imports["unchanged"].sum()) if not imports.empty else 0,
+        "import_rejected": int(imports["rejected"].sum()) if not imports.empty else 0,
+        "latest_import_at": None if pd.isna(latest_import) else latest_import.isoformat(),
+    }
+
+
+def _target_snapshot(
+    engine: Engine,
+    accounts: list[str] | None,
+    start: date | None,
+    end: date | None,
+    statuses: list[str] | None,
+    actual_commission: int,
+    today: date,
+) -> dict[str, object] | None:
+    if statuses or not start or not end or (start.year, start.month) != (end.year, end.month):
+        return None
+    rows = monthly_kpi(engine, accounts, start, end, statuses)
+    if rows.empty:
+        return None
+    total = rows[(rows["account"] == "ALL") & (rows["month"] == date(start.year, start.month, 1))]
+    if total.empty:
+        return None
+    row = total.iloc[0]
+    target = None if pd.isna(row["monthly_target"]) else int(row["monthly_target"])
+    achievement = None if pd.isna(row["target_achievement"]) else float(row["target_achievement"])
+    remaining = None if target is None else max(target - actual_commission, 0)
+    is_current_month = (today.year, today.month) == (start.year, start.month)
+    elapsed_end = min(today, end)
+    elapsed_days = max((elapsed_end - start).days + 1, 0) if elapsed_end >= start else 0
+    scope_days = (end - start).days + 1
+    projected = round(actual_commission / elapsed_days * scope_days) if is_current_month and elapsed_days else None
+    remaining_days = max((end - max(today, start)).days, 0) if is_current_month else 0
+    return {
+        "monthly_target": target,
+        "actual_commission": actual_commission,
+        "remaining": remaining,
+        "achievement": achievement,
+        "elapsed_days": elapsed_days,
+        "scope_days": scope_days,
+        "remaining_days": remaining_days,
+        "required_per_remaining_day": None if remaining is None or remaining_days == 0 else round(remaining / remaining_days),
+        "projected_month_end": projected,
+        "projected_achievement": None if projected is None or not target else projected / target,
+    }
+
+
+def analytics(
+    engine: Engine,
+    accounts: list[str] | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    statuses: list[str] | None = None,
+    group_by: str = "day",
+    top: int = 20,
+    today: date | None = None,
+) -> dict[str, object]:
+    if group_by not in {"day", "week", "month"}:
+        raise ValueError("group_by must be day, week or month")
+    if start and end and start > end:
+        raise ValueError("start must not be after end")
+    if not 1 <= top <= 100:
+        raise ValueError("top must be between 1 and 100")
+    today = today or datetime.now(ZoneInfo("Asia/Bangkok")).date()
+    current = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
+    summary = _summary(current)
+    previous_summary = None
+    previous_range = None
+    if start and end:
+        duration = (end - start).days + 1
+        previous_end = start - timedelta(days=1)
+        previous_start = previous_end - timedelta(days=duration - 1)
+        previous = _apply_filters(_current_rows(engine), accounts, previous_start, previous_end, statuses)
+        previous_summary = _summary(previous)
+        previous_range = {"start": previous_start.isoformat(), "end": previous_end.isoformat()}
+    return {
+        "filters": {
+            "accounts": list(accounts or []),
+            "start": start.isoformat() if start else None,
+            "end": end.isoformat() if end else None,
+            "statuses": list(statuses or []),
+            "group_by": group_by,
+            "top": top,
+        },
+        "summary": summary,
+        "previous_period": None if previous_summary is None else {"range": previous_range, "summary": previous_summary},
+        "target": _target_snapshot(engine, accounts, start, end, statuses, int(summary["actual_commission"]), today),
+        "trend": _trend(current, group_by),
+        "status_breakdown": _breakdown(current, "status", "status"),
+        "account_breakdown": _breakdown(current, "account", "account"),
+        "products": _dimension(current, "product", top),
+        "shops": _dimension(current, "shop", top),
+        "content": _dimension(current, "content", top),
+        "settlement": _settlement(current, today),
+        "data_quality": _data_quality(engine, current, accounts),
+    }

@@ -15,6 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tiktok_affiliate_report.db import (
+    accounts,
     app_users,
     get_engine,
     import_batches,
@@ -26,6 +27,7 @@ from tiktok_affiliate_report.db import (
 from tiktok_affiliate_report.migrations import apply_migrations
 
 COPY_TABLES = (
+    accounts,
     import_batches,
     raw_import_rows,
     order_line_versions,
@@ -132,6 +134,7 @@ def migrate(source_value: str, target_value: str) -> dict[str, int]:
     source = get_engine(sqlite_url(source_value))
     target = get_engine(target_value)
     assert_postgres(target)
+    apply_migrations(source)
     apply_migrations(target)
     require_empty_target(target)
     counts = copy_rows(source, target)

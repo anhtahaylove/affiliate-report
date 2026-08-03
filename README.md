@@ -16,7 +16,7 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.1.1.exe`.
+Tải installer từ [GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.2.0.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -32,11 +32,9 @@ Owner có thể dùng mục **Reset Data** trong dashboard. App bắt buộc nh�
 
 Mục **Khôi phục backup** liệt kê thời gian, dung lượng và row counts để xem trước. Restore chỉ thay các bảng dữ liệu báo cáo, giữ nguyên user/session đang dùng và luôn tạo thêm một safety backup của trạng thái hiện tại trước khi ghi đè.
 
-Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. Khi có bản mới, app tải đúng installer của latest stable GitHub Release, xác minh cả digest do GitHub cung cấp và `SHA256SUMS.txt`, sau đó đóng app, chạy Inno Setup silent và mở lại. Cài tự động chỉ bật trong bản Windows full installer ở local mode; source dev và shared server không tự thay binary.
+Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. App đọc public feed `stable.json` + `stable.json.sig` từ `anhtahaylove/tiktok-affiliate-report-updates`, xác minh chữ ký Ed25519 bằng public key ghim trong app, rồi mới tải installer HTTPS đúng tên/kích thước/SHA-256. Không cần GitHub token trên máy người dùng; biến `TIKTOK_REPORT_UPDATE_FEED_URL` chỉ dùng được khi chạy source/dev, không dùng trong bản cài frozen.
 
 Kết quả helper/installer được ghi tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\updater.log` và thư mục `data\updates\v<version>` để chẩn đoán nếu update bị Windows hoặc antivirus chặn.
-
-Repository phát hành hiện là private nên máy nhận update phải có quyền đọc repo và một trong các nguồn xác thực sau: biến môi trường user `TIKTOK_REPORT_GITHUB_TOKEN` (ưu tiên), `GH_TOKEN` hoặc `GITHUB_TOKEN`. GitHub CLI chỉ được dùng khi đã `gh auth login` và chủ động đặt `TIKTOK_REPORT_USE_GH_CLI=1`; bản cài không tự chạy executable tìm thấy trong `PATH`. Dùng fine-grained token chỉ cấp **Contents: Read-only**; app không nhúng token vào EXE hay release. Muốn update hoàn toàn zero-config cho người ngoài GitHub cần tách một public update feed/release repo riêng.
 
 Artifact hiện cố ý **không code-sign**; Windows SmartScreen có thể cảnh báo và làm gián đoạn bước cài tự động cho tới khi người dùng chấp thuận. SHA-256 xác minh integrity, không thay thế publisher trust.
 
@@ -112,8 +110,10 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v1.1.1.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v1.2.0.exe`
 - `artifacts\installer\SHA256SUMS.txt`
+- `artifacts\installer\stable.json`
+- `artifacts\installer\stable.json.sig`
 
 Không phát hành portable EXE. `BUILD_EXE.bat` chỉ tạo runtime staging nội bộ để Inno Setup đóng gói, đồng thời chạy privacy gate để chặn database người dùng lọt vào installer. Build installer cần Inno Setup 6 trên máy phát triển:
 

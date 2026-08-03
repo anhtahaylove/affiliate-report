@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from sqlalchemy import select
 
+from tiktok_affiliate_report.accounts import create_account
 from tiktok_affiliate_report.auth import AuthService, AuthSettings, _hash
 from tiktok_affiliate_report.db import auth_sessions, get_engine, init_db, oidc_login_states
 
@@ -13,6 +14,8 @@ from tiktok_affiliate_report.db import auth_sessions, get_engine, init_db, oidc_
 def service(tmp_path, **updates):
     engine = get_engine(f"sqlite:///{(tmp_path / 'auth.db').as_posix()}")
     init_db(engine)
+    for account in ("CHIISTORE", "EMLINHNOIY", "THAOBRA"):
+        create_account(engine, account)
     values = {
         "mode": "oidc",
         "oidc_client_id": "client",

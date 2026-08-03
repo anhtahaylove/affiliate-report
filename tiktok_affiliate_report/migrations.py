@@ -112,11 +112,53 @@ def _migration_0004_auth_rbac_tables(conn: Connection) -> None:
     metadata.create_all(conn, tables=[app_users, user_account_access, auth_sessions, oidc_login_states])
 
 
+def _migration_0005_account_registry_and_analytics_columns(conn: Connection) -> None:
+    from .accounts import seed_accounts_from_existing
+    from .db import accounts, metadata
+
+    metadata.create_all(conn, tables=[accounts])
+    seed_accounts_from_existing(conn)
+
+    analytics = {
+        "product_id": "ID sản phẩm",
+        "shop_id": "Mã cửa hàng",
+        "content_type": "Loại nội dung",
+        "content_id": "Id nội dung",
+        "order_type": "Loại đơn hàng",
+        "commission_type": "Loại hoa hồng",
+        "currency": "Đơn vị tiền tệ",
+    }
+    for column in analytics:
+        _add_column(conn, "order_line_versions", column, "VARCHAR(128)")
+
+    if _has_table(conn, "order_line_versions"):
+        for column, raw_key in analytics.items():
+            if conn.dialect.name == "postgresql":
+                conn.execute(text(
+                    f'UPDATE order_line_versions SET {column} = raw_json ->> :raw_key '
+                    f'WHERE {column} IS NULL AND raw_json IS NOT NULL'
+                ), {"raw_key": raw_key})
+            else:
+                conn.execute(text(
+                    f'UPDATE order_line_versions SET {column} = json_extract(raw_json, :path) '
+                    f'WHERE {column} IS NULL AND raw_json IS NOT NULL AND json_valid(raw_json)'
+                ), {"path": f'$."{raw_key}"'})
+
+    existing = _indexes(conn, "order_line_versions")
+    if "ix_order_line_versions_product_id" not in existing:
+        conn.execute(text("CREATE INDEX ix_order_line_versions_product_id ON order_line_versions (product_id)"))
+    if "ix_order_line_versions_shop_id" not in existing:
+        conn.execute(text("CREATE INDEX ix_order_line_versions_shop_id ON order_line_versions (shop_id)"))
+    if "ix_order_line_versions_content_id" not in existing:
+        conn.execute(text("CREATE INDEX ix_order_line_versions_content_id ON order_line_versions (content_id)"))
+
+
 MIGRATIONS = [
     Migration(1, "baseline_create_or_adopt", _migration_0001_baseline),
     Migration(2, "import_audit_columns_and_indexes", _migration_0002_import_audit_columns_and_indexes),
     Migration(3, "ensure_baseline_tables", _migration_0003_ensure_baseline_tables),
     Migration(4, "auth_rbac_tables", _migration_0004_auth_rbac_tables),
+    Migration(5, "account_registry_and_analytics_columns", _migration_0005_account_registry_and_analytics_columns),
 ]
 
 

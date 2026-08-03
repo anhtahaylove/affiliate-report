@@ -13,8 +13,8 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 
+from .accounts import active_account_codes
 from .db import app_users, auth_sessions, oidc_login_states, user_account_access
-from .parser import DEFAULT_ACCOUNTS
 
 ROLES = {"owner", "operator", "viewer"}
 
@@ -74,9 +74,6 @@ class AuthSettings:
         if default_role not in ROLES - {"owner"}:
             raise ValueError("AUTH_DEFAULT_ROLE phải là operator hoặc viewer.")
         accounts = tuple(_csv(os.getenv("AUTH_DEFAULT_ACCOUNTS")))
-        unknown_accounts = sorted(set(accounts) - set(DEFAULT_ACCOUNTS))
-        if unknown_accounts:
-            raise ValueError(f"AUTH_DEFAULT_ACCOUNTS không hợp lệ: {', '.join(unknown_accounts)}")
         settings = cls(
             mode=mode,
             cookie_name=os.getenv("AUTH_SESSION_COOKIE", "tt_affiliate_session").strip() or "tt_affiliate_session",
@@ -123,6 +120,7 @@ class Principal:
     email: str
     display_name: str | None
     role: str
+    active: bool
     accounts: tuple[str, ...]
     auth_method: str
     auth_subject: str
@@ -156,7 +154,8 @@ class AuthService:
             email="local-owner@localhost",
             display_name="Local owner",
             role="owner",
-            accounts=tuple(DEFAULT_ACCOUNTS),
+            active=True,
+            accounts=self._account_codes(),
             auth_method="local",
             auth_subject="local-owner",
         )
@@ -200,7 +199,7 @@ class AuthService:
                 "display_name": row["display_name"],
                 "role": row["role"],
                 "active": row["active"],
-                "accounts": tuple(DEFAULT_ACCOUNTS) if row["role"] == "owner" else accounts[row["id"]],
+                "accounts": self._account_codes() if row["role"] == "owner" else accounts[row["id"]],
             }
             for row in rows
         ]
@@ -217,7 +216,8 @@ class AuthService:
             raise ValueError("role phải là owner, operator hoặc viewer.")
         if accounts is not None:
             accounts = tuple(dict.fromkeys(accounts))
-        if accounts is not None and (set(accounts) - set(DEFAULT_ACCOUNTS)):
+        valid_accounts = set(self._account_codes())
+        if accounts is not None and (set(accounts) - valid_accounts):
             raise ValueError("accounts chứa account không hợp lệ.")
         with self.engine.begin() as conn:
             values: dict[str, Any] = {"updated_at": func.now()}
@@ -312,7 +312,10 @@ class AuthService:
                 active=True,
                 last_login_at=func.now(),
             )).inserted_primary_key[0]
-            accounts = DEFAULT_ACCOUNTS if role == "owner" else self.settings.default_accounts
+            valid_accounts = set(self._account_codes())
+            if set(self.settings.default_accounts) - valid_accounts:
+                raise ValueError("AUTH_DEFAULT_ACCOUNTS chứa account không hợp lệ.")
+            accounts = self._account_codes() if role == "owner" else self.settings.default_accounts
             for account in accounts:
                 conn.execute(user_account_access.insert().values(user_id=user_id, account=account))
             return self._principal(conn, user_id, email=email, display_name=display_name)
@@ -440,7 +443,11 @@ class AuthService:
             email=email or user["email"],
             display_name=display_name if display_name is not None else user["display_name"],
             role=user["role"],
-            accounts=tuple(DEFAULT_ACCOUNTS) if user["role"] == "owner" else accounts,
+            active=bool(user["active"]),
+            accounts=self._account_codes() if user["role"] == "owner" else accounts,
             auth_method="oidc",
             auth_subject=f"{user['issuer']}:{user['subject']}",
         )
+
+    def _account_codes(self) -> tuple[str, ...]:
+        return active_account_codes(self.engine)

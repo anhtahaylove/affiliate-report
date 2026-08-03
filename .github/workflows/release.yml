@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -54,6 +54,8 @@ jobs:
   windows-installer:
     needs: verify
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -90,7 +92,19 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
           .\packaging\build_installer.ps1 -AppVersion $version
-      - name: Create verified release
+      - name: Sign public update feed
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY_B64: ${{ secrets.UPDATE_SIGNING_KEY_B64 }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $keyId = "tiktok-report-updates-2026-08"
+          $publicKey = .\.venv\Scripts\python.exe .\scripts\sign_update_feed.py --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
+          $pinned = .\.venv\Scripts\python.exe -c "from tiktok_affiliate_report.updater import TRUSTED_UPDATE_KEYS; print(TRUSTED_UPDATE_KEYS['$keyId'])"
+          if ($publicKey -ne $pinned) { throw "UPDATE_SIGNING_KEY_B64 does not match pinned updater public key" }
+      - name: Create verified private release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,16 +112,127 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe"
-          gh release create $tag $installer "artifacts\installer\SHA256SUMS.txt" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $tag --yes
+          }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create $tag $installer "artifacts\installer\SHA256SUMS.txt" "artifacts\installer\stable.json" "artifacts\installer\stable.json.sig" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag }
+          $draft = gh release view $tag --json isDraft,tagName | ConvertFrom-Json
+          if ($draft.tagName -ne $tag) { throw "Private release tag verification failed" }
+      - name: Verify private draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
           $verify = Join-Path $env:RUNNER_TEMP "release-verify"
           New-Item -ItemType Directory -Path $verify -Force | Out-Null
           gh release download $tag --dir $verify
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe") | Sort-Object
-          if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer and SHA256SUMS.txt" }
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
+          if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer, SHA256SUMS.txt, stable.json and stable.json.sig" }
           $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
           $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
           if ($actual -ne $expected) { throw "Downloaded release checksum mismatch" }
-          gh release edit $tag --draft=false --latest
-          $published = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
-          if ($published.isDraft -or $published.isPrerelease -or $published.tagName -ne $tag) { throw "Release publish verification failed" }
+          $draft = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+          if ($draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Private release verification failed" }
+      - name: Create and verify public update release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
+          gh release view $tag --repo $repo *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $tag --repo $repo --yes
+          }
+          gh release view $tag --repo $repo *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create $tag @assets --repo $repo --draft --latest=false --title "TikTok Affiliate Report $tag" --notes "Public auto-update feed for $tag" }
+          $verify = Join-Path $env:RUNNER_TEMP "public-release-verify"
+          New-Item -ItemType Directory -Path $verify -Force | Out-Null
+          gh release download $tag --repo $repo --dir $verify
+          $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
+          if (Compare-Object $actualFiles $expectedFiles) { throw "Public mirror must contain exactly four verified assets" }
+          $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+          if ($actual -ne $expected) { throw "Public mirror checksum mismatch" }
+          .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+          $draft = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+          if ($draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
+      - uses: actions/checkout@v4
+        with:
+          repository: anhtahaylove/tiktok-affiliate-report-updates
+          token: ${{ secrets.UPDATE_FEED_TOKEN }}
+          path: update-feed
+      - name: Promote public stable feed and releases
+        shell: pwsh
+        env:
+          PRIVATE_GH_TOKEN: ${{ github.token }}
+          PUBLIC_GH_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart("v")
+          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $stableChanged = $false
+          $stableCommitted = $false
+          $publicPublished = $false
+          try {
+            Copy-Item "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig" update-feed\ -Force
+            Push-Location update-feed
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add stable.json stable.json.sig
+            if (git diff --cached --quiet) {
+              Write-Output "Public stable feed unchanged."
+            } else {
+              $stableChanged = $true
+              git commit -m "Update stable feed $tag"
+              $stableCommitted = $true
+              git push
+            }
+            Pop-Location
+
+            $verify = Join-Path $env:RUNNER_TEMP "live-update-verify"
+            New-Item -ItemType Directory -Path $verify -Force | Out-Null
+            Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json" -OutFile (Join-Path $verify "raw-stable.json")
+            Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json.sig" -OutFile (Join-Path $verify "raw-stable.json.sig")
+            $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
+            gh release download $tag --repo $repo --dir $verify
+            $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | Where-Object Name -notlike "raw-*" | ForEach-Object Name | Sort-Object)
+            $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
+            if (Compare-Object $actualFiles $expectedFiles) { throw "Live release must contain exactly four verified assets" }
+            $rawManifest = Get-Content (Join-Path $verify "raw-stable.json") -Raw
+            $releaseManifest = Get-Content (Join-Path $verify "stable.json") -Raw
+            $rawSignature = Get-Content (Join-Path $verify "raw-stable.json.sig") -Raw
+            $releaseSignature = Get-Content (Join-Path $verify "stable.json.sig") -Raw
+            if ($rawManifest -ne $releaseManifest -or $rawSignature -ne $releaseSignature) { throw "Live raw feed does not match release feed assets" }
+            $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
+            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+            if ($actual -ne $expected) { throw "Live release checksum mismatch" }
+            .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\raw-stable.json').read_bytes(), Path(r'$verify\raw-stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+
+            $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
+            gh release edit $tag --draft=false
+            $private = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+            if ($private.isDraft -or $private.isPrerelease -or $private.tagName -ne $tag) { throw "Private release publish verification failed" }
+            $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
+            gh release edit $tag --repo $repo --draft=false --latest
+            $public = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
+            if ($public.isDraft -or $public.isPrerelease -or $public.tagName -ne $tag) { throw "Public release publish verification failed" }
+            $publicPublished = $true
+          } catch {
+            if ((Split-Path -Leaf (Get-Location)) -eq "update-feed") { Pop-Location }
+            if ($stableCommitted -and !$publicPublished) {
+              Push-Location update-feed
+              git revert --no-edit HEAD
+              git push
+              Pop-Location
+            }
+            throw
+          }

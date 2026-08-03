@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import inspect, select, text
 
-from tiktok_affiliate_report.db import get_engine, import_batches, import_rows, init_db, monthly_targets
+from tiktok_affiliate_report.db import accounts, get_engine, import_batches, import_rows, init_db, monthly_targets, order_line_versions
 from tiktok_affiliate_report.migrations import schema_migrations
 from tests.test_imports import raw_row
 
@@ -23,9 +23,13 @@ def test_init_db_runs_versioned_migrations_and_seeds_targets():
     assert {i["name"] for i in inspector.get_indexes("raw_import_rows")} >= {"ix_raw_import_rows_batch_id"}
     assert {i["name"] for i in inspector.get_indexes("import_batches")} >= {"ix_import_batches_account_created_at"}
     with e.connect() as conn:
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4]
-        assert conn.execute(select(monthly_targets.c.id)).first() is not None
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5]
+        assert conn.execute(select(monthly_targets.c.id)).first() is None
+        assert conn.execute(select(accounts)).first() is None
     assert {"app_users", "user_account_access", "auth_sessions", "oidc_login_states"} <= set(inspector.get_table_names())
+    assert inspector.has_table("accounts")
+    assert {c["name"] for c in inspector.get_columns("accounts")} >= {"code", "display_name", "active", "display_order", "created_at", "updated_at"}
+    assert {c["name"] for c in inspector.get_columns("order_line_versions")} >= {"product_id", "shop_id", "content_type", "content_id", "order_type", "commission_type", "currency"}
 
 
 def test_migrations_adopt_existing_sqlite_and_preserve_data():
@@ -67,7 +71,8 @@ def test_migrations_adopt_existing_sqlite_and_preserve_data():
     with e.connect() as conn:
         old = conn.execute(text("select file_sha, filename, account, inserted from import_batches where id = 1")).mappings().one()
         assert dict(old) == {"file_sha": "abc", "filename": "old.xlsx", "account": "CHIISTORE", "inserted": 3}
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5]
+        assert conn.execute(select(accounts.c.code)).scalar_one() == "CHIISTORE"
 
 
 def test_import_rows_stores_optional_identity_audit():
@@ -90,6 +95,97 @@ def test_import_rows_stores_optional_identity_audit():
     assert batch["uploaded_by_label"] == "Local Operator"
     assert batch["auth_method"] == "local"
     assert batch["auth_subject"] == "operator@example.test"
+
+
+def test_import_rows_stores_normalized_analytics_fields():
+    e = engine()
+    init_db(e)
+    row = raw_row()
+    row.update({
+        "product_id": "P1",
+        "shop_id": "SHOP1",
+        "content_type": "Video",
+        "content_id": "C1",
+        "order_type": "Affiliate",
+        "commission_type": "Standard",
+        "currency": "VND",
+    })
+
+    import_rows(e, filename="analytics.xlsx", file_bytes=b"analytics", account="CHIISTORE", rows=[row])
+
+    with e.connect() as conn:
+        version = conn.execute(select(order_line_versions)).mappings().one()
+    assert {
+        "product_id": version["product_id"],
+        "shop_id": version["shop_id"],
+        "content_type": version["content_type"],
+        "content_id": version["content_id"],
+        "order_type": version["order_type"],
+        "commission_type": version["commission_type"],
+        "currency": version["currency"],
+    } == {
+        "product_id": "P1",
+        "shop_id": "SHOP1",
+        "content_type": "Video",
+        "content_id": "C1",
+        "order_type": "Affiliate",
+        "commission_type": "Standard",
+        "currency": "VND",
+    }
+
+
+def test_migration_backfills_analytics_columns_from_raw_json():
+    e = engine()
+    with e.begin() as conn:
+        conn.execute(text("""
+            create table order_line_versions (
+                id integer primary key,
+                business_key varchar(512) not null,
+                account varchar(64) not null,
+                order_id varchar(128),
+                sku_id varchar(128),
+                product_name text,
+                shop_name text,
+                status varchar(32) not null,
+                order_date datetime,
+                settlement_date datetime,
+                gmv bigint not null default 0,
+                units_sold integer not null default 0,
+                units_refunded integer not null default 0,
+                final_received bigint not null default 0,
+                estimated_commission bigint not null default 0,
+                estimated_shop_ads_commission bigint not null default 0,
+                estimated_bonus bigint not null default 0,
+                estimated_partner_bonus bigint not null default 0,
+                estimated_revenue_share bigint not null default 0,
+                normalized_hash varchar(64) not null,
+                batch_id integer not null,
+                raw_json text not null,
+                version integer not null default 1,
+                is_current boolean not null default 1,
+                created_at datetime default current_timestamp
+            )
+        """))
+        conn.execute(text("""
+            insert into order_line_versions (
+                id, business_key, account, order_id, sku_id, status, normalized_hash, batch_id, raw_json
+            ) values (
+                1, 'k', 'CHIISTORE', 'O1', 'S1', 'settled', 'hash', 1,
+                '{"ID sản phẩm":"P1","Mã cửa hàng":"SHOP1","Loại nội dung":"Video","Id nội dung":"C1","Loại đơn hàng":"Affiliate","Loại hoa hồng":"Standard","Đơn vị tiền tệ":"VND"}'
+            )
+        """))
+
+    init_db(e)
+
+    with e.connect() as conn:
+        version = conn.execute(select(order_line_versions)).mappings().one()
+    assert version["product_id"] == "P1"
+    assert version["shop_id"] == "SHOP1"
+    assert version["content_type"] == "Video"
+    assert version["content_id"] == "C1"
+    assert version["order_type"] == "Affiliate"
+    assert version["commission_type"] == "Standard"
+    assert version["currency"] == "VND"
 
 
 def test_migrations_repair_import_batches_only_partial_schema():

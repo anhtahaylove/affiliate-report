@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date
+import re
 from pathlib import Path
 from typing import Any
 
@@ -34,15 +34,28 @@ from sqlalchemy.exc import IntegrityError
 from .parser import file_sha256
 
 DEFAULT_DATABASE_URL = "sqlite:///data/tiktok_affiliate_report.db"
-DEFAULT_MONTHLY_TARGETS = {
-    date(2026, 3, 1): 350000,
-    date(2026, 4, 1): 400000,
-    date(2026, 5, 1): 450000,
-    date(2026, 6, 1): 500000,
-    date(2026, 7, 1): 500000,
-    date(2026, 8, 1): 500000,
+ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_-]{1,64}$")
+ANALYTICS_RAW_FIELDS = {
+    "product_id": "ID sản phẩm",
+    "shop_id": "Mã cửa hàng",
+    "content_type": "Loại nội dung",
+    "content_id": "Id nội dung",
+    "order_type": "Loại đơn hàng",
+    "commission_type": "Loại hoa hồng",
+    "currency": "Đơn vị tiền tệ",
 }
 metadata = MetaData()
+
+accounts = Table(
+    "accounts", metadata,
+    Column("code", String(64), primary_key=True),
+    Column("display_name", String(128), nullable=False),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("display_order", Integer, nullable=False, default=0),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+Index("ix_accounts_active_order", accounts.c.active, accounts.c.display_order, accounts.c.code)
 
 import_batches = Table(
     "import_batches", metadata,
@@ -81,8 +94,15 @@ order_line_versions = Table(
     Column("account", String(64), nullable=False),
     Column("order_id", String(128)),
     Column("sku_id", String(128)),
+    Column("product_id", String(128)),
     Column("product_name", Text),
+    Column("shop_id", String(128)),
     Column("shop_name", Text),
+    Column("content_type", String(128)),
+    Column("content_id", String(128)),
+    Column("order_type", String(128)),
+    Column("commission_type", String(128)),
+    Column("currency", String(32)),
     Column("status", String(32), nullable=False),
     Column("order_date", DateTime),
     Column("settlement_date", DateTime),
@@ -120,6 +140,9 @@ Index(
 )
 Index("ix_order_line_versions_order_id", order_line_versions.c.order_id)
 Index("ix_order_line_versions_sku_id", order_line_versions.c.sku_id)
+Index("ix_order_line_versions_product_id", order_line_versions.c.product_id)
+Index("ix_order_line_versions_shop_id", order_line_versions.c.shop_id)
+Index("ix_order_line_versions_content_id", order_line_versions.c.content_id)
 
 monthly_targets = Table(
     "monthly_targets", metadata,
@@ -195,20 +218,38 @@ def init_db(engine: Engine) -> None:
     from .migrations import apply_migrations
 
     apply_migrations(engine)
-    seed_targets(engine)
 
 
-def seed_targets(engine: Engine) -> None:
-    with engine.begin() as conn:
-        for month, amount in DEFAULT_MONTHLY_TARGETS.items():
-            values = {"account": "ALL", "month": month, "target_commission": amount}
-            if engine.dialect.name == "postgresql":
-                from sqlalchemy.dialects.postgresql import insert
-                stmt = insert(monthly_targets).values(**values).on_conflict_do_nothing(index_elements=["account", "month"])
-            else:
-                from sqlalchemy.dialects.sqlite import insert
-                stmt = insert(monthly_targets).values(**values).on_conflict_do_nothing(index_elements=["account", "month"])
-            conn.execute(stmt)
+def _normalize_account_code(code: str) -> str:
+    value = (code or "").strip().upper()
+    if value == "ALL":
+        raise ValueError("ALL là mã tổng hợp nội bộ, không được dùng làm affiliate account.")
+    if not ACCOUNT_CODE_RE.fullmatch(value):
+        raise ValueError("Affiliate account phải dài 1-64 ký tự và chỉ gồm A-Z, 0-9, _ hoặc -.")
+    return value
+
+
+def _ensure_account(conn, account: str) -> None:
+    existing = conn.execute(select(accounts.c.code).where(accounts.c.code == account)).first()
+    if existing:
+        return
+    order = int(conn.execute(select(func.max(accounts.c.display_order))).scalar() or 0) + 10
+    values = {
+        "code": account,
+        "display_name": account,
+        "active": True,
+        "display_order": order,
+        "updated_at": func.now(),
+    }
+    if conn.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+
+        stmt = insert(accounts).values(**values).on_conflict_do_nothing(index_elements=["code"])
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+
+        stmt = insert(accounts).values(**values).on_conflict_do_nothing(index_elements=["code"])
+    conn.execute(stmt)
 
 
 def import_rows(
@@ -222,6 +263,7 @@ def import_rows(
     auth_method: str | None = None,
     auth_subject: str | None = None,
 ) -> dict[str, Any]:
+    account = _normalize_account_code(account)
     hashes_by_key: dict[str, set[str]] = {}
     for row in rows:
         hashes_by_key.setdefault(row["business_key"], set()).add(row["normalized_hash"])
@@ -237,6 +279,7 @@ def import_rows(
                 text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
                 {"lock_key": f"tiktok-affiliate-import:{account}"},
             )
+        _ensure_account(conn, account)
         old_batch = conn.execute(
             select(import_batches).where(
                 import_batches.c.account == account,
@@ -297,8 +340,15 @@ def import_rows(
                         account=account,
                         order_id=row.get("ID đơn hàng"),
                         sku_id=row.get("ID SKU"),
+                        product_id=row.get("product_id") or row.get("ID sản phẩm"),
                         product_name=row.get("Tên sản phẩm"),
+                        shop_id=row.get("shop_id") or row.get("Mã cửa hàng"),
                         shop_name=row.get("shop_name"),
+                        content_type=row.get("content_type") or row.get("Loại nội dung"),
+                        content_id=row.get("content_id") or row.get("Id nội dung"),
+                        order_type=row.get("order_type") or row.get("Loại đơn hàng"),
+                        commission_type=row.get("commission_type") or row.get("Loại hoa hồng"),
+                        currency=row.get("currency") or row.get("Đơn vị tiền tệ"),
                         status=row.get("status", "unknown"),
                         order_date=row.get("Ngày đặt hàng"),
                         settlement_date=row.get("Ngày quyết toán hoa hồng"),

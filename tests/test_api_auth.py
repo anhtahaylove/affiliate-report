@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
 
 from tests.test_api import normalized, raw_export_row, xlsx_bytes
+from tiktok_affiliate_report.accounts import create_account
 from tiktok_affiliate_report.api import create_app
 from tiktok_affiliate_report.auth import AuthService, AuthSettings
 import tiktok_affiliate_report.reset_data as reset_data_module
@@ -37,7 +38,10 @@ def oidc_api(tmp_path):
         allowed_emails=("owner@example.test", "viewer@example.test"),
     )
     auth = AuthService(engine, settings)
-    return TestClient(create_app(engine, auth)), engine, auth
+    app = create_app(engine, auth)
+    for code in ("CHIISTORE", "EMLINHNOIY", "THAOBRA"):
+        create_account(engine, code, display_name=code)
+    return TestClient(app), engine, auth
 
 
 def login(client: TestClient, auth: AuthService, email: str, subject: str):
@@ -83,6 +87,12 @@ def test_viewer_only_sees_assigned_accounts_and_cannot_import(tmp_path):
     auth.update_user(viewer.user_id or 0, accounts=["CHIISTORE"])
 
     assert client.get("/api/v1/meta").json()["accounts"] == ["CHIISTORE"]
+    assert client.get("/api/v1/accounts").status_code == 403
+    assert client.post(
+        "/api/v1/accounts",
+        json={"code": "NEW", "display_name": "New"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
     overview = client.get("/api/v1/overview").json()
     assert {row["account"] for row in overview["items"]} == {"CHIISTORE", "ALL"}
     assert client.get("/api/v1/overview", params={"account": "EMLINHNOIY"}).status_code == 403
@@ -222,6 +232,7 @@ def test_owner_can_manage_users_but_cannot_remove_own_owner_access(tmp_path):
     )
     assert updated.status_code == 200
     assert updated.json()["role"] == "operator"
+    assert updated.json()["active"] is True
     assert updated.json()["accounts"] == ["THAOBRA"]
     self_demotion = client.patch(
         f"/api/v1/admin/users/{owner.user_id}",
@@ -266,9 +277,8 @@ def test_owner_reset_data_requires_csrf_confirmation_and_preserves_auth(tmp_path
         "raw_import_rows": 1,
         "order_line_versions": 1,
         "import_batches": 1,
-        "monthly_targets": 7,
     }
-    assert payload["default_targets_restored"] == 6
+    assert payload["targets_preserved"] is True
     backup_path = Path(payload["backup_path"])
     assert backup_path.exists()
     assert backup_path.parent.name == "backups"
@@ -281,7 +291,7 @@ def test_owner_reset_data_requires_csrf_confirmation_and_preserves_auth(tmp_path
         assert _count(conn, raw_import_rows) == 0
         assert _count(conn, order_line_versions) == 0
         assert _count(conn, import_batches) == 0
-        assert _count(conn, monthly_targets) == 6
+        assert _count(conn, monthly_targets) == 1
         assert _count(conn, app_users) == 1
         assert _count(conn, auth_sessions) == 1
     assert client.get("/auth/me").json()["email"] == owner.email
