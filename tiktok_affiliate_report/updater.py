@@ -653,10 +653,16 @@ try {
     if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
     Write-UpdateStatus 'restarting' $null
     Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-    if (-not (Wait-AppHealthy $InstanceStatePath 12000)) {
-        Write-UpdateLog 'Warning: app did not respond within 12s after restart; retrying launch once.'
+    # A freshly-installed onefile exe unpacks its bundled Python runtime + deps (pandas,
+    # sqlalchemy, uvicorn, ...) into a brand new _MEI temp dir on this very first run — there is
+    # no warm cache to reuse yet, and antivirus commonly scans each extracted file as it lands.
+    # That alone can take well over 12s under real disk/AV contention, so give the FIRST launch a
+    # long runway before assuming it's actually stuck (a premature relaunch would only add a
+    # second concurrent extraction competing for the same disk/AV budget, making it worse).
+    if (-not (Wait-AppHealthy $InstanceStatePath 60000)) {
+        Write-UpdateLog 'Warning: app did not respond within 60s after restart; retrying launch once.'
         Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-        if (Wait-AppHealthy $InstanceStatePath 10000) {
+        if (Wait-AppHealthy $InstanceStatePath 20000) {
             Write-UpdateLog 'App responded after retry launch.'
         } else {
             Write-UpdateLog 'Warning: app still not responding after retry; the update itself succeeded, but the user may need to reopen it manually.'

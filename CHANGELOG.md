@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.13 - 2026-08-05
+
+- Tăng thời gian chờ app tự mở lại sau khi cài cập nhật (v1.2.12) từ 12 giây lên 60 giây trước khi thử mở lại lần nữa. Lý do: bản .exe vừa cài là file hoàn toàn mới trên đĩa — lần chạy đầu tiên phải giải nén lại runtime bên trong (chưa có cache), có thể chậm hơn hẳn các lần chạy sau tuỳ tải hệ thống lúc đó. Mở lại quá sớm khi lần đầu chỉ đang chậm (chứ không phải bị treo) sẽ tạo thêm 1 lần giải nén thứ hai chạy song song, tranh chấp đĩa và làm chậm thêm — nên ưu tiên chờ đủ lâu cho lần đầu trước khi thử lại.
+
 ## v1.2.12 - 2026-08-05
 
 - Sửa lỗi app đôi khi không tự mở lại sau khi cài xong bản cập nhật (đứng ở "Đang chờ kết nối lại…" dù bản cài đã thành công). Nguyên nhân nghi vấn nhiều khả năng nhất: phần mềm diệt virus quét file .exe mới cài trước khi cho chạy, khiến bước tự mở lại app bị treo vài giây tới cả chục giây. Updater giờ chờ xác nhận app thật sự phản hồi (gọi `/health`) sau khi mở lại, và tự thử mở lại thêm 1 lần nếu chưa thấy phản hồi trong 12 giây, thay vì coi "đã gọi lệnh mở" là xong việc.

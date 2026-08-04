@@ -310,15 +310,17 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     assert "Wait-FileUnlocked $AppExe 15000" in helper
     assert helper.index("Wait-FileUnlocked $AppExe") > helper.index("$parentExited = $true")
     assert helper.index("Wait-FileUnlocked $AppExe") < helper.index("Start-Child $Installer")
-    # Start-Child launching the app back up isn't proof it's usable — the relaunch has been
-    # observed to stall for several seconds (antivirus scanning the freshly-installed exe is the
-    # leading theory). Wait for a real /health response and retry the launch once before giving up.
+    # Start-Child launching the app back up isn't proof it's usable — a freshly-installed onefile
+    # exe has to unpack its bundled runtime with no warm cache, and antivirus scanning each
+    # extracted file is the leading theory for why that first run can take a while. Give the
+    # first launch a long runway (a premature relaunch would just add a second concurrent
+    # extraction competing for the same disk/AV budget) and retry only once after that.
     assert "function Wait-AppHealthy" in helper
-    assert "Wait-AppHealthy $InstanceStatePath 12000" in helper
-    assert "Wait-AppHealthy $InstanceStatePath 10000" in helper
+    assert "Wait-AppHealthy $InstanceStatePath 60000" in helper
+    assert "Wait-AppHealthy $InstanceStatePath 20000" in helper
     restarting_index = helper.index("Write-UpdateStatus 'restarting'")
     first_start_child_index = helper.index("Start-Child $AppExe", restarting_index)
-    assert first_start_child_index < helper.index("Wait-AppHealthy $InstanceStatePath 12000")
+    assert first_start_child_index < helper.index("Wait-AppHealthy $InstanceStatePath 60000")
     for forbidden in ("Wait-Process", "Get-FileHash", "Get-Process", "Start-Process", "Remove-Item"):
         assert forbidden not in helper
     assert captured["args"][0] == str(powershell)
