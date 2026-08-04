@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.9 - 2026-08-05
+
+- Không có thay đổi tính năng. Bản này chỉ để xác nhận thật bản vá "Installer exited with code 5" ở v1.2.8: cài v1.2.8 trực tiếp (không qua auto-update, do máy đang mắc kẹt ở bản lỗi cũ), rồi từ đó bấm cập nhật thật lên v1.2.9 qua đúng luồng trong app để chứng minh `Wait-FileUnlocked` hoạt động khi bên thực hiện cập nhật đã có bản vá.
+
 ## v1.2.8 - 2026-08-05
 
 - Sửa lỗi cập nhật thất bại với "Installer exited with code 5" (Setup tự huỷ vì cho rằng ứng dụng còn đang chạy). Nguyên nhân: bước tự đóng app trước khi cài chỉ theo dõi đúng 1 tiến trình con, trong khi tiến trình cha của gói .exe onefile có thể còn giữ file .exe thêm vài trăm mili-giây để dọn dẹp thư mục tạm — installer chạy `/CLOSEAPPLICATIONS` đúng lúc đó, thấy file "đang bận" và Huỷ luôn vì chạy ở chế độ im lặng (không có hộp thoại để bấm Thử lại). Giờ updater chờ chắc chắn file .exe được nhả hoàn toàn (thử mở độc quyền, tối đa 15 giây) trước khi gọi installer, thay vì chỉ chờ đúng 1 tiến trình.
