@@ -442,6 +442,17 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   background: var(--teal);
 }
 
+/* Traffic-light tone shared by progress bars and inline achievement figures — reuses the
+   existing status colors so "đã đạt mục tiêu" reads consistently across Dashboard, Targets
+   and So sánh hiệu suất instead of always being teal regardless of how far behind it is. */
+.progress-track[data-tone="warning"] span { background: var(--warning); }
+.progress-track[data-tone="critical"] span { background: var(--danger); }
+
+.tone-text { font-variant-numeric: tabular-nums; }
+.tone-text[data-tone="good"] { color: var(--teal); }
+.tone-text[data-tone="warning"] { color: var(--warning); }
+.tone-text[data-tone="critical"] { color: var(--danger); }
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -852,7 +863,7 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   background: var(--surface-soft);
 }
 
-.analytics-svg rect { fill: var(--teal); }
+.analytics-svg path { fill: var(--teal); }
 .analytics-axis { stroke: var(--line-strong); stroke-width: 0.35; }
 
 .reset-form .field span {

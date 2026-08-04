@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.7 - 2026-08-05
+
+- Chuẩn hoá màu tiến độ mục tiêu (Dashboard, So sánh hiệu suất, Mục tiêu) theo kiểu đèn giao thông: xanh khi đạt (≥100%), vàng khi còn 50–99%, đỏ khi dưới 50% — dùng lại đúng bộ màu trạng thái sẵn có của app, không thêm màu mới.
+- Sửa hình dạng cột trong biểu đồ xu hướng Phân tích: bo góc trên, đáy phẳng neo vào trục — thay vì bo tròn đều 4 góc trông lơ lửng, đồng bộ với biểu đồ cột ở Dashboard.
+
 ## v1.2.6 - 2026-08-04
 
 - Sửa lỗi tự đóng ứng dụng để cài bản cập nhật có thể treo ở popup Windows "Failed to remove temporary directory" (cảnh báo gốc từ PyInstaller khi không xoá được thư mục tạm `_MEI...` do vẫn còn thư viện đang được nạp). App giờ thoát tiến trình ngay sau khi đã dọn dẹp xong (tắt tray, lưu trạng thái, nhả khoá single-instance) thay vì để trình bao bọc PyInstaller tự dọn dẹp và có thể treo — updater không còn bị timeout chờ app đóng.

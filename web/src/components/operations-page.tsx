@@ -51,7 +51,7 @@ import {
 import { AppShell, AuthCard } from "@/components/app-shell";
 import { BarChart } from "@/components/charts";
 import { FilterBar, useUrlFilters } from "@/components/filters";
-import { accountLabel, countsText, errorMessage, formatBytes, formatDateTime, formatMoney, integer, percent, roleLabel, statusLabel } from "@/lib/format";
+import { accountLabel, achievementTone, countsText, errorMessage, formatBytes, formatDateTime, formatMoney, integer, percent, roleLabel, statusLabel } from "@/lib/format";
 
 type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | "accounts" | "data" | "update" | "users";
 type UrlFilters = ReturnType<typeof useUrlFilters>;
@@ -254,7 +254,7 @@ function DashboardHome({ filters }: { filters: UrlFilters }) {
         <Metric title="GMV thực tế" value={formatMoney(summary?.actual_gmv ?? total?.actual_gmv)} hint={`GMV gốc ${formatMoney(summary?.gross_gmv ?? total?.gmv)}`} />
         <Metric title="Hoa hồng thực tế" value={formatMoney(summary?.actual_commission ?? activeKpi?.actual_commission)} hint={`${selectedLabel} · tỷ lệ HH ${percent(summary?.effective_commission_rate)} · kỳ trước ${commissionDelta == null ? "—" : formatMoney(commissionDelta)}`} />
         <Metric title="Đã nhận cuối cùng" value={formatMoney(summary?.final_received ?? total?.final_received)} hint={`Lệch HH ${formatMoney(summary?.final_received_variance)} · hoàn ${percent(summary?.refund_rate)} · loại ${percent(summary?.ineligible_rate)}`} />
-        <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu tháng {formatMoney(activeKpi?.monthly_target)}</small></article>
+        <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" data-tone={achievementTone(activeKpi?.target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu tháng {formatMoney(activeKpi?.monthly_target)}</small></article>
         <article className="metric danger-metric panel"><span>{analytics?.target?.projected_month_end == null ? "Còn thiếu" : "Dự báo cuối tháng"}</span><strong>{formatMoney(analytics?.target?.projected_month_end ?? analytics?.target?.remaining ?? gap)}</strong><small>Còn thiếu {formatMoney(analytics?.target?.remaining ?? gap)} · cần/ngày {formatMoney(analytics?.target?.required_per_remaining_day)}</small></article>
       </section>
       {analytics ? <section className="notice data-quality-notice" role="status"><strong>Cập nhật gần nhất: {formatDateTime(analytics.data_quality.latest_import_at)}</strong><span>Trạng thái chưa xác định: <Link href={unknownOrdersHref}>{integer.format(analytics.data_quality.unknown_status_rows)} dòng</Link> · Tiền tệ khác VND: {integer.format(analytics.data_quality.non_vnd_rows)} · Thiếu ngày quyết toán: {integer.format(analytics.data_quality.missing_settlement_date_rows)} · Dòng nhập bị từ chối: <Link href="/imports">{integer.format(analytics.data_quality.import_rejected)} dòng</Link></span></section> : null}
@@ -313,6 +313,12 @@ function AnalyticsPage({ filters }: { filters: UrlFilters }) {
   );
 }
 
+/** Bar path with rounded top corners and a flat bottom, so the mark stays anchored to the baseline. */
+function roundedTopBarPath(x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.max(0, Math.min(radius, width / 2, height));
+  return `M${x},${y + height} V${y + r} Q${x},${y} ${x + r},${y} H${x + width - r} Q${x + width},${y} ${x + width},${y + r} V${y + height} Z`;
+}
+
 function AnalyticsTrend({ rows }: { rows: AnalyticsResponse["trend"] }) {
   const chartRows = rows.slice(-30);
   const max = Math.max(...chartRows.map((row) => row.actual_commission), 1);
@@ -328,7 +334,9 @@ function AnalyticsTrend({ rows }: { rows: AnalyticsResponse["trend"] }) {
             <line x1="5" y1="36" x2="95" y2="36" className="analytics-axis" />
             {chartRows.map((row, index) => {
               const height = Math.max((row.actual_commission / max) * 31, 0.8);
-              return <rect key={row.period} x={5 + index * step + step * 0.12} y={36 - height} width={step * 0.76} height={height} rx="0.8"><title>{`${row.period}: ${formatMoney(row.actual_commission)}`}</title></rect>;
+              const width = step * 0.76;
+              const x = 5 + index * step + step * 0.12;
+              return <path key={row.period} d={roundedTopBarPath(x, 36 - height, width, height, 0.8)}><title>{`${row.period}: ${formatMoney(row.actual_commission)}`}</title></path>;
             })}
           </svg>
           <div className="table-wrap chart-fallback" role="region" aria-label="Bảng xu hướng hoa hồng, có thể cuộn ngang" tabIndex={0}><table><thead><tr><th>Kỳ</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Đã nhận</th></tr></thead><tbody>{rows.map((row) => <tr key={row.period}><td>{row.period}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(row.final_received)}</td></tr>)}</tbody></table></div>
@@ -516,7 +524,7 @@ function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: 
   }
   const targetMap = new Map(targets.map((target) => [target.account, target]));
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
-  return <section className="section panel wide"><div className="section-heading"><div><p className="section-label">KPI mỗi ngày</p><h2>Mục tiêu tháng {filters.month}</h2></div>{!canWrite(user) ? <span className="read-only">Chỉ xem</span> : null}</div><div className="target-list">{allowedAccounts.map((account) => <div className="target-row" key={account}><div><strong>{accountLabel(account)}</strong><span>Hoa hồng {formatMoney(kpiMap.get(account)?.actual_commission)} · KPI/ngày {formatMoney(targetMap.get(account)?.target_commission)} · đã đạt {percent(kpiMap.get(account)?.target_achievement)}</span></div><input type="number" min="0" step="1" value={drafts[account] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${accountLabel(account)}`} /><button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button></div>)}</div>{message ? <p className="upload-result" role="status">{message}</p> : null}</section>;
+  return <section className="section panel wide"><div className="section-heading"><div><p className="section-label">KPI mỗi ngày</p><h2>Mục tiêu tháng {filters.month}</h2></div>{!canWrite(user) ? <span className="read-only">Chỉ xem</span> : null}</div><div className="target-list">{allowedAccounts.map((account) => { const achievement = kpiMap.get(account)?.target_achievement; return <div className="target-row" key={account}><div><strong>{accountLabel(account)}</strong><span>Hoa hồng {formatMoney(kpiMap.get(account)?.actual_commission)} · KPI/ngày {formatMoney(targetMap.get(account)?.target_commission)} · đã đạt <span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></span></div><input type="number" min="0" step="1" value={drafts[account] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${accountLabel(account)}`} /><button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button></div>; })}</div>{message ? <p className="upload-result" role="status">{message}</p> : null}</section>;
 }
 
 function AccountsPage() {
@@ -943,5 +951,5 @@ function RecentImports({ rows }: { rows: ImportHistoryRow[] }) {
 
 function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpiRow[] }) {
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
-  return <section className="section panel wide" id="accounts"><div className="section-heading"><div><p className="section-label">Theo tài khoản</p><h2>So sánh hiệu suất</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng so sánh hiệu suất tài khoản, có thể cuộn ngang" tabIndex={0}>{rows.length ? <table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => <tr key={row.account}><td>{row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.gmv)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td>{percent(kpiMap.get(row.account)?.target_achievement)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu tài khoản trong bộ lọc. Hãy nhập file TikTok hoặc đổi phạm vi ngày.</p>}</div></section>;
+  return <section className="section panel wide" id="accounts"><div className="section-heading"><div><p className="section-label">Theo tài khoản</p><h2>So sánh hiệu suất</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng so sánh hiệu suất tài khoản, có thể cuộn ngang" tabIndex={0}>{rows.length ? <table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => { const achievement = kpiMap.get(row.account)?.target_achievement; return <tr key={row.account}><td>{row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.gmv)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td><span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></td></tr>; })}</tbody></table> : <p className="empty">Chưa có dữ liệu tài khoản trong bộ lọc. Hãy nhập file TikTok hoặc đổi phạm vi ngày.</p>}</div></section>;
 }

@@ -23,6 +23,17 @@ export function percent(value: number | null | undefined) {
   return value == null || Number.isNaN(Number(value)) ? "—" : `${(Number(value) * 100).toFixed(1)}%`;
 }
 
+export type AchievementTone = "good" | "warning" | "critical" | "neutral";
+
+/** Traffic-light tone for a target-achievement ratio (0–1+), reusing the app's existing status colors. */
+export function achievementTone(value: number | null | undefined): AchievementTone {
+  if (value == null || Number.isNaN(Number(value))) return "neutral";
+  const ratio = Number(value);
+  if (ratio >= 1) return "good";
+  if (ratio >= 0.5) return "warning";
+  return "critical";
+}
+
 export function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
   const parsed = new Date(value);
