@@ -133,9 +133,22 @@ export type UpdateStatus = {
 
 export type InstallUpdateResponse = {
   version: string;
-  sha256: string;
   status: string;
   release_url: string;
+};
+
+export type UpdateProgressPhase = "idle" | "downloading" | "verifying" | "waiting_for_exit" | "installing" | "restarting" | "installed" | "failed";
+
+export type UpdateProgress = {
+  schema: string;
+  phase: UpdateProgressPhase;
+  current_version: string;
+  target_version: string | null;
+  bytes_downloaded: number;
+  bytes_total: number;
+  percent: number | null;
+  error: string | null;
+  updated_at: string | null;
 };
 
 export type MetaResponse = {
@@ -529,6 +542,10 @@ export async function installUpdate(confirmation: string) {
     method: "POST",
     body: JSON.stringify({ confirmation }),
   });
+}
+
+export async function loadUpdateProgress() {
+  return request<UpdateProgress>("/api/v1/admin/update/progress");
 }
 
 export async function loadUsers() {

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.4 - 2026-08-04
+
+- Sửa lỗi auto-update trên Windows: helper không còn bị chặn bởi `DETACHED_PROCESS`, chuyển sang API .NET để chờ tiến trình, tính SHA-256 và chạy installer thay vì phụ thuộc `Get-FileHash`.
+- App chỉ đóng sau khi helper xác nhận khởi động thành công (handshake); tải installer bằng background worker để không treo API.
+- Giao diện Cập nhật hiển thị tiến độ thật theo phase `downloading → verifying → waiting_for_exit → installing → restarting → installed/failed`, kèm số MB và phần trăm.
+- Khi cài đặt thất bại, tự khởi động lại phiên bản hiện tại và hiển thị nguyên nhân để thử lại.
+
 ## v1.2.3 - 2026-08-04
 
 - Thu gọn bộ lọc trên mobile, hiển thị tóm tắt phạm vi và giữ đầy đủ thao tác khi mở rộng.

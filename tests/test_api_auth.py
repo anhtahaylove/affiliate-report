@@ -334,6 +334,7 @@ def test_update_admin_routes_are_owner_only_and_local_only(tmp_path):
     auth.update_user(viewer.user_id or 0, role="operator", accounts=["CHIISTORE"])
 
     assert client.get("/api/v1/admin/update").status_code == 403
+    assert client.get("/api/v1/admin/update/progress").status_code == 403
     assert client.post(
         "/api/v1/admin/update/install",
         json={"confirmation": "CAP NHAT UNG DUNG"},
@@ -342,6 +343,7 @@ def test_update_admin_routes_are_owner_only_and_local_only(tmp_path):
 
     _, owner_tokens = login(client, auth, "owner@example.test", "owner")
     assert client.get("/api/v1/admin/update").status_code == 409
+    assert client.get("/api/v1/admin/update/progress").status_code == 409
     assert client.post(
         "/api/v1/admin/update/install",
         json={"confirmation": "CAP NHAT UNG DUNG"},

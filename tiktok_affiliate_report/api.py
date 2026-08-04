@@ -8,7 +8,7 @@ import threading
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import pandas as pd
 from fastapi import (
@@ -56,7 +56,9 @@ from .updater import (
     UpdateError,
     check_for_update,
     download_latest_update,
+    read_update_status,
     schedule_installer,
+    write_update_status,
 )
 from .version import APP_VERSION
 
@@ -191,6 +193,10 @@ def _desktop_shutdown_supported(app: FastAPI) -> bool:
         and _automatic_update_supported(app)
         and bool(os.getenv("DESKTOP_CONTROL_TOKEN"))
     )
+
+
+def _start_update_worker(target: Callable[[], None]) -> None:
+    threading.Thread(target=target, name="app-updater", daemon=True).start()
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -749,6 +755,21 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         result["automatic_install_supported"] = _automatic_update_supported(app)
         return result
 
+    @app.get("/api/v1/admin/update/progress")
+    def update_progress_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
+        if _auth(app).settings.mode != "local":
+            raise HTTPException(status_code=409, detail="Automatic updates are only available in local mode.")
+        try:
+            data_dir = sqlite_file_path(_engine(app)).parent
+            result = read_update_status(data_dir / "update-status.json")
+        except (ValueError, UpdateError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        downloaded = int(result.get("bytes_downloaded") or 0)
+        total = int(result.get("bytes_total") or 0)
+        result["current_version"] = APP_VERSION
+        result["percent"] = round(downloaded * 100 / total, 1) if total > 0 else None
+        return result
+
     @app.post("/api/v1/admin/update/install")
     def install_update_endpoint(
         request: InstallUpdateRequest,
@@ -762,28 +783,90 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         shutdown = getattr(app.state, "update_shutdown", None)
         if not _automatic_update_supported(app):
             raise HTTPException(status_code=409, detail="Automatic installation requires the installed Windows app.")
+        try:
+            data_dir = sqlite_file_path(_engine(app)).parent
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        status_path = data_dir / "update-status.json"
         with app.state.update_lock:
             if app.state.update_scheduled:
                 raise HTTPException(status_code=409, detail="An update is already scheduled.")
             try:
-                data_dir = sqlite_file_path(_engine(app)).parent
-                downloaded = download_latest_update(data_dir)
-                schedule_installer(
-                    Path(downloaded["installer_path"]),
-                    downloaded["sha256"],
-                    data_dir / "updater.log",
-                    shutdown,
+                latest = check_for_update()
+                if not latest["available"]:
+                    raise ValueError("Ứng dụng đang ở phiên bản mới nhất.")
+                version = str(latest["latest_version"])
+                write_update_status(
+                    status_path,
+                    phase="downloading",
+                    target_version=version,
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             except UpdateError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
             app.state.update_scheduled = True
+            release_url = str(latest["release_url"])
+
+            def run_update() -> None:
+                try:
+                    def report_download(downloaded_bytes: int, total_bytes: int) -> None:
+                        write_update_status(
+                            status_path,
+                            phase="downloading",
+                            target_version=version,
+                            bytes_downloaded=downloaded_bytes,
+                            bytes_total=total_bytes,
+                        )
+
+                    downloaded = download_latest_update(data_dir, progress_callback=report_download)
+                    downloaded_version = str(downloaded["version"])
+                    installer_path = Path(downloaded["installer_path"])
+                    write_update_status(
+                        status_path,
+                        phase="verifying",
+                        target_version=downloaded_version,
+                        bytes_downloaded=installer_path.stat().st_size,
+                        bytes_total=installer_path.stat().st_size,
+                    )
+                    schedule_installer(
+                        installer_path,
+                        downloaded["sha256"],
+                        data_dir / "updater.log",
+                        shutdown,
+                        status_path=status_path,
+                        target_version=downloaded_version,
+                        installer_size=installer_path.stat().st_size,
+                    )
+                except Exception as exc:
+                    try:
+                        write_update_status(
+                            status_path,
+                            phase="failed",
+                            target_version=version,
+                            error=str(exc),
+                        )
+                    except Exception as status_exc:
+                        print(f"Update failed: {exc}; status write failed: {status_exc}")
+                    with app.state.update_lock:
+                        app.state.update_scheduled = False
+
+        try:
+            _start_update_worker(run_update)
+        except RuntimeError as exc:
+            with app.state.update_lock:
+                app.state.update_scheduled = False
+            write_update_status(
+                status_path,
+                phase="failed",
+                target_version=version,
+                error="Không thể khởi chạy tiến trình cập nhật.",
+            )
+            raise HTTPException(status_code=500, detail="Không thể khởi chạy tiến trình cập nhật.") from exc
         return {
-            "status": "scheduled",
-            "version": downloaded["version"],
-            "sha256": downloaded["sha256"],
-            "release_url": downloaded["release_url"],
+            "status": "started",
+            "version": version,
+            "release_url": release_url,
         }
 
     @app.post("/api/v1/admin/shutdown")

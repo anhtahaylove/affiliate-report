@@ -97,6 +97,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"verified")
     scheduled = {}
+    pending_workers = []
 
     monkeypatch.setattr(
         api_module,
@@ -106,13 +107,14 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
             "latest_version": "1.2.1",
             "available": True,
             "installable": True,
+            "release_url": "https://github.com/example/release",
         },
     )
     monkeypatch.setattr(api_module, "_automatic_update_supported", lambda _app: True)
     monkeypatch.setattr(
         api_module,
         "download_latest_update",
-        lambda _data_dir: {
+        lambda _data_dir, progress_callback=None: {
             "version": "1.2.1",
             "installer_path": str(installer),
             "sha256": "A" * 64,
@@ -120,10 +122,19 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
         },
     )
 
-    def capture_schedule(path, sha256, log_path, shutdown):
-        scheduled.update(path=path, sha256=sha256, log_path=log_path, shutdown=shutdown)
+    def capture_schedule(path, sha256, log_path, shutdown, *, status_path, target_version, installer_size):
+        scheduled.update(
+            path=path,
+            sha256=sha256,
+            log_path=log_path,
+            shutdown=shutdown,
+            status_path=status_path,
+            target_version=target_version,
+            installer_size=installer_size,
+        )
 
     monkeypatch.setattr(api_module, "schedule_installer", capture_schedule)
+    monkeypatch.setattr(api_module, "_start_update_worker", pending_workers.append)
     client.app.state.update_shutdown = lambda: None
 
     checked = client.get("/api/v1/admin/update")
@@ -142,14 +153,22 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     assert wrong.status_code == 422
     assert installed.status_code == 200
     assert installed.json() == {
-        "status": "scheduled",
+        "status": "started",
         "version": "1.2.1",
-        "sha256": "A" * 64,
         "release_url": "https://github.com/example/release",
     }
+    assert len(pending_workers) == 1
+    pending_workers.pop()()
     assert scheduled["path"] == installer
     assert scheduled["sha256"] == "A" * 64
     assert scheduled["log_path"].name == "updater.log"
+    assert scheduled["status_path"].name == "update-status.json"
+    assert scheduled["target_version"] == "1.2.1"
+    assert scheduled["installer_size"] == installer.stat().st_size
+    progress = client.get("/api/v1/admin/update/progress")
+    assert progress.status_code == 200
+    assert progress.json()["phase"] == "verifying"
+    assert progress.json()["percent"] == 100.0
     assert duplicate.status_code == 409
 
 

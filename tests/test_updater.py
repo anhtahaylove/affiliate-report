@@ -4,6 +4,8 @@ import base64
 import hashlib
 import io
 import json
+import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -132,7 +134,8 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     seen_headers = install_feed(monkeypatch, manifest, signature, installer)
 
     checked = updater.check_for_update(current_version="1.1.1", token="ignored")
-    downloaded = updater.download_latest_update(tmp_path, current_version="1.1.1", token="ignored")
+    progress = []
+    downloaded = updater.download_latest_update(tmp_path, current_version="1.1.1", token="ignored", progress_callback=lambda done, total: progress.append((done, total)))
 
     assert set(json.loads(manifest)) == {"schema", "app_id", "channel", "version", "published_at", "release_url", "installer"}
     assert checked["available"] is True
@@ -140,6 +143,7 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     assert checked["source_repo"] == "anhtahaylove/tiktok-affiliate-report-updates"
     assert downloaded["sha256"] == hashlib.sha256(installer).hexdigest().upper()
     assert Path(downloaded["installer_path"]).read_bytes() == installer
+    assert progress == [(len(installer), len(installer))]
     assert all("Authorization" not in headers for headers in seen_headers)
 
 
@@ -287,19 +291,82 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
 
     monkeypatch.setattr(updater.subprocess, "Popen", fake_popen)
 
-    updater._launch_update_helper(installer, expected, tmp_path / "updater.log")
+    updater._launch_update_helper(installer, expected, tmp_path / "updater.log", tmp_path / "update-status.json", "1.2.1", installer.stat().st_size)
 
     helper_path = installer.parent / "install-update.ps1"
     helper = helper_path.read_text(encoding="utf-8-sig")
-    assert "Wait-Process -Timeout 120" in helper
-    assert "Get-FileHash -LiteralPath $Installer -Algorithm SHA256" in helper
-    assert "'/VERYSILENT'" in helper
-    assert "Start-Process -FilePath $AppExe" in helper
+    assert "Write-UpdateStatus 'waiting_for_exit'" in helper
+    assert "[System.Diagnostics.Process]::GetProcessById($ParentPid)" in helper
+    assert "[System.Security.Cryptography.SHA256]::Create()" in helper
+    assert "Start-Child $Installer" in helper
+    assert "Start-Child $AppExe" in helper
+    for forbidden in ("Wait-Process", "Get-FileHash", "Get-Process", "Start-Process", "Remove-Item"):
+        assert forbidden not in helper
     assert captured["args"][0] == str(powershell)
     assert captured["args"][captured["args"].index("-File") + 1] == str(helper_path)
     assert captured["args"][captured["args"].index("-ExpectedSha256") + 1] == expected
     assert captured["kwargs"]["cwd"] == installer.parent
-    assert captured["kwargs"]["creationflags"] == 56
+    assert captured["kwargs"]["creationflags"] == 48
+    assert captured["kwargs"]["stdout"] is captured["kwargs"]["stderr"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
+def test_windows_update_helper_replaces_existing_status_file(tmp_path):
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer.write_bytes(b"not-an-installer")
+    helper = tmp_path / "install-update.ps1"
+    helper.write_text(updater._powershell_helper_script(), encoding="utf-8-sig")
+    status_path = tmp_path / "update-status.json"
+    updater.write_update_status(
+        status_path,
+        phase="verifying",
+        target_version="1.2.1",
+        bytes_downloaded=installer.stat().st_size,
+        bytes_total=installer.stat().st_size,
+    )
+
+    result = subprocess.run(
+        [
+            str(powershell),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(helper),
+            "-ParentPid",
+            str(2_147_483_647),
+            "-Installer",
+            str(installer),
+            "-ExpectedSha256",
+            "0" * 64,
+            "-AppExe",
+            str(tmp_path / "TikTokAffiliateReport.exe"),
+            "-LogPath",
+            str(tmp_path / "updater.log"),
+            "-InstallerLog",
+            str(tmp_path / "installer.log"),
+            "-StatusPath",
+            str(status_path),
+            "-TargetVersion",
+            "1.2.1",
+            "-InstallerSize",
+            str(installer.stat().st_size),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    status = updater.read_update_status(status_path)
+    assert status["phase"] == "failed"
+    assert "SHA-256" in status["error"]
+    assert "Updater helper started." in (tmp_path / "updater.log").read_text(encoding="utf-8")
+    assert not list(tmp_path.glob("update-status.json.*.tmp"))
 
 
 def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch):
@@ -310,8 +377,65 @@ def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch
     monkeypatch.setattr(updater, "_windows_frozen", lambda: True)
 
     with pytest.raises(updater.UpdateError, match="đã thay đổi"):
-        updater.schedule_installer(installer, "0" * 64, log_path, shutdown.set, delay_seconds=0)
+        updater.schedule_installer(installer, "0" * 64, log_path, shutdown.set, status_path=tmp_path / "update-status.json", target_version="1.2.1", delay_seconds=0)
 
+    assert not shutdown.is_set()
+
+
+def test_update_status_is_atomic_validated_and_normalizes_installed(tmp_path):
+    status_path = tmp_path / "update-status.json"
+
+    assert updater.read_update_status(status_path)["phase"] == "idle"
+    written = updater.write_update_status(
+        status_path,
+        phase="waiting_for_exit",
+        target_version="1.2.1",
+        bytes_downloaded=7,
+        bytes_total=9,
+    )
+
+    assert json.loads(status_path.read_text(encoding="utf-8")) == written
+    assert updater.read_update_status(status_path, current_version="1.2.0")["phase"] == "waiting_for_exit"
+    assert updater.read_update_status(status_path, current_version="1.2.1")["phase"] == "installed"
+
+    status_path.write_text("{}", encoding="utf-8")
+    with pytest.raises(updater.UpdateError, match="schema"):
+        updater.read_update_status(status_path)
+
+
+def test_schedule_installer_waits_for_helper_handshake_before_shutdown(tmp_path, monkeypatch):
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer.write_bytes(b"installer")
+    expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
+    status_path = tmp_path / "update-status.json"
+    shutdown = threading.Event()
+
+    def fake_launch(installer_path, expected_sha256, log_path, status, target_version, installer_size):
+        assert installer_path == installer.resolve()
+        assert expected_sha256 == expected
+        assert installer_size == len(b"installer")
+        updater.write_update_status(status, phase="waiting_for_exit", target_version=target_version, bytes_downloaded=installer_size, bytes_total=installer_size)
+
+    monkeypatch.setattr(updater, "_windows_frozen", lambda: True)
+    monkeypatch.setattr(updater, "_launch_update_helper", fake_launch)
+
+    updater.schedule_installer(installer, expected, tmp_path / "updater.log", shutdown.set, status_path=status_path, target_version="1.2.1", delay_seconds=0)
+
+    shutdown.wait(1)
+    assert shutdown.is_set()
+
+
+def test_schedule_installer_fails_without_helper_handshake(tmp_path, monkeypatch):
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer.write_bytes(b"installer")
+    expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
+    shutdown = threading.Event()
+
+    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: None)
+    monkeypatch.setattr(updater, "_wait_for_helper_handshake", lambda *_args: (_ for _ in ()).throw(updater.UpdateError("no handshake")))
+
+    with pytest.raises(updater.UpdateError, match="no handshake"):
+        updater.schedule_installer(installer, expected, tmp_path / "updater.log", shutdown.set, status_path=tmp_path / "update-status.json", target_version="1.2.1", delay_seconds=0)
     assert not shutdown.is_set()
 
 

@@ -7,7 +7,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -24,6 +27,8 @@ DEFAULT_UPDATE_REPO = "anhtahaylove/tiktok-affiliate-report-updates"
 UPDATE_SCHEMA = "tiktok-affiliate-report.update.v1"
 UPDATE_APP_ID = "tiktok-affiliate-report"
 UPDATE_CHANNEL = "stable"
+UPDATE_STATUS_SCHEMA = "tiktok-affiliate-report.update-status.v1"
+UPDATE_STATUS_PHASES = {"idle", "downloading", "verifying", "waiting_for_exit", "installing", "restarting", "installed", "failed"}
 INSTALL_CONFIRMATION_PHRASE = "CAP NHAT UNG DUNG"
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
@@ -83,7 +88,13 @@ def check_for_update(*, current_version: str = APP_VERSION, token: str | None = 
     }
 
 
-def download_latest_update(data_dir: Path, *, current_version: str = APP_VERSION, token: str | None = None) -> dict[str, Any]:
+def download_latest_update(
+    data_dir: Path,
+    *,
+    current_version: str = APP_VERSION,
+    token: str | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
     manifest = _latest_release(configured_feed_url())
     latest = _parse_version(str(manifest["version"]))
     if latest <= _parse_version(current_version):
@@ -95,7 +106,7 @@ def download_latest_update(data_dir: Path, *, current_version: str = APP_VERSION
     target_dir = Path(data_dir).resolve() / "updates" / f"v{version}"
     target_dir.mkdir(parents=True, exist_ok=True)
     installer_path = target_dir / installer_name
-    actual_hash = _download_file(str(installer["url"]), installer_path, int(installer["size"]), MAX_INSTALLER_BYTES)
+    actual_hash = _download_file(str(installer["url"]), installer_path, int(installer["size"]), MAX_INSTALLER_BYTES, progress_callback)
     expected_hash = str(installer["sha256"]).upper()
     if actual_hash != expected_hash:
         installer_path.unlink(missing_ok=True)
@@ -184,7 +195,13 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
     }
 
 
-def _download_file(url: str, destination: Path, expected_size: int, max_bytes: int) -> str:
+def _download_file(
+    url: str,
+    destination: Path,
+    expected_size: int,
+    max_bytes: int,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> str:
     if expected_size <= 0 or expected_size > max_bytes:
         raise UpdateError("Kích thước update asset không hợp lệ.")
     temporary = destination.with_suffix(destination.suffix + ".download")
@@ -199,6 +216,8 @@ def _download_file(url: str, destination: Path, expected_size: int, max_bytes: i
                     raise UpdateError("Update asset vượt giới hạn tải xuống.")
                 digest.update(chunk)
                 handle.write(chunk)
+                if progress_callback:
+                    progress_callback(written, expected_size)
     except UpdateError:
         temporary.unlink(missing_ok=True)
         raise
@@ -244,26 +263,149 @@ def _checksum_for(text: str, filename: str) -> str:
             return match.group(1).upper()
     raise UpdateError(f"SHA256SUMS.txt không có checksum cho {filename}.")
 
+
+def write_update_status(
+    path: Path,
+    *,
+    phase: str,
+    target_version: str | None = None,
+    bytes_downloaded: int = 0,
+    bytes_total: int = 0,
+    error: str | None = None,
+) -> dict[str, Any]:
+    status = _validate_update_status(
+        {
+            "schema": UPDATE_STATUS_SCHEMA,
+            "phase": phase,
+            "target_version": target_version,
+            "bytes_downloaded": bytes_downloaded,
+            "bytes_total": bytes_total,
+            "error": error,
+            "updated_at": _utc_now(),
+        }
+    )
+    target = Path(path).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=target.name + ".", suffix=".tmp", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(status, handle, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+        os.replace(tmp_name, target)
+    except OSError as exc:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise UpdateError("Không thể ghi trạng thái cập nhật.") from exc
+    return status
+
+
+def read_update_status(path: Path, current_version: str = APP_VERSION) -> dict[str, Any]:
+    target = Path(path)
+    if not target.exists():
+        return _idle_update_status()
+    try:
+        value = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise UpdateError("Trạng thái cập nhật không hợp lệ.") from exc
+    status = _validate_update_status(value)
+    if (
+        status["target_version"]
+        and status["phase"] in {"waiting_for_exit", "installing", "restarting"}
+        and _parse_version(str(current_version)) == _parse_version(str(status["target_version"]))
+    ):
+        return {**status, "phase": "installed", "error": None}
+    return status
+
+
+def _idle_update_status() -> dict[str, Any]:
+    return {
+        "schema": UPDATE_STATUS_SCHEMA,
+        "phase": "idle",
+        "target_version": None,
+        "bytes_downloaded": 0,
+        "bytes_total": 0,
+        "error": None,
+        "updated_at": _utc_now(),
+    }
+
+
+def _validate_update_status(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("schema") != UPDATE_STATUS_SCHEMA:
+        raise UpdateError("Trạng thái cập nhật không đúng schema.")
+    phase = str(value.get("phase") or "")
+    if phase not in UPDATE_STATUS_PHASES:
+        raise UpdateError("Trạng thái cập nhật không đúng phase.")
+    target_version = value.get("target_version")
+    if target_version is not None:
+        target_version = str(target_version)
+        _parse_version(target_version)
+    try:
+        bytes_downloaded = int(value.get("bytes_downloaded", 0))
+        bytes_total = int(value.get("bytes_total", 0))
+    except (TypeError, ValueError) as exc:
+        raise UpdateError("Trạng thái cập nhật không đúng bytes.") from exc
+    if bytes_downloaded < 0 or bytes_total < 0 or bytes_downloaded > bytes_total > 0:
+        raise UpdateError("Trạng thái cập nhật không đúng bytes.")
+    error = value.get("error")
+    updated_at = str(value.get("updated_at") or "")
+    if not updated_at:
+        raise UpdateError("Trạng thái cập nhật thiếu thời điểm cập nhật.")
+    return {
+        "schema": UPDATE_STATUS_SCHEMA,
+        "phase": phase,
+        "target_version": target_version,
+        "bytes_downloaded": bytes_downloaded,
+        "bytes_total": bytes_total,
+        "error": None if error is None else str(error),
+        "updated_at": updated_at,
+    }
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def schedule_installer(
     installer_path: Path,
     expected_sha256: str,
     log_path: Path,
     shutdown: Callable[[], None],
     *,
+    status_path: Path,
+    target_version: str,
+    installer_size: int | None = None,
     delay_seconds: float = 1.0,
 ) -> None:
     installer = Path(installer_path).resolve()
     expected = expected_sha256.strip().upper()
     if not re.fullmatch(r"[0-9A-F]{64}", expected):
         raise UpdateError("SHA-256 của installer cập nhật không hợp lệ.")
+    if _parse_version(target_version) <= (0, 0, 0):
+        raise UpdateError("Phiên bản cập nhật không hợp lệ.")
     log = Path(log_path).resolve()
-    _launch_update_helper(installer, expected, log)
+    status = Path(status_path).resolve()
+    size = installer_size or installer.stat().st_size
+    write_update_status(
+        status,
+        phase="verifying",
+        target_version=target_version,
+        bytes_downloaded=size,
+        bytes_total=size,
+    )
+    _launch_update_helper(installer, expected, log, status, target_version, size)
+    _wait_for_helper_handshake(status, target_version, installer.parent / "updater-bootstrap.log")
     timer = threading.Timer(delay_seconds, shutdown)
     timer.daemon = True
     timer.start()
 
 
-def _launch_update_helper(installer_path: Path, expected_sha256: str, log_path: Path) -> None:
+def _launch_update_helper(
+    installer_path: Path,
+    expected_sha256: str,
+    log_path: Path,
+    status_path: Path,
+    target_version: str,
+    installer_size: int,
+) -> None:
     if not _windows_frozen():
         raise UpdateError("Cập nhật tự động chỉ chạy trong bản cài Windows.")
     if not installer_path.is_file() or not re.fullmatch(
@@ -291,84 +433,180 @@ def _launch_update_helper(installer_path: Path, expected_sha256: str, log_path: 
 
     helper_path = installer_path.parent / "install-update.ps1"
     installer_log = installer_path.parent / "installer.log"
+    bootstrap_log = installer_path.parent / "updater-bootstrap.log"
     try:
-        helper_path.write_text(
-            """param(
+        helper_path.write_text(_powershell_helper_script(), encoding="utf-8-sig")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise UpdateError("Không thể tạo updater helper.") from exc
+    flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        with bootstrap_log.open("ab") as bootstrap:
+            subprocess.Popen(
+                [
+                    str(powershell),
+                    "-NoLogo",
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-File",
+                    str(helper_path),
+                    "-ParentPid",
+                    str(os.getpid()),
+                    "-Installer",
+                    str(installer_path),
+                    "-ExpectedSha256",
+                    expected_sha256,
+                    "-AppExe",
+                    str(app_path),
+                    "-LogPath",
+                    str(log_path),
+                    "-InstallerLog",
+                    str(installer_log),
+                    "-StatusPath",
+                    str(status_path),
+                    "-TargetVersion",
+                    target_version,
+                    "-InstallerSize",
+                    str(installer_size),
+                ],
+                cwd=installer_path.parent,
+                close_fds=True,
+                creationflags=flags,
+                stdout=bootstrap,
+                stderr=bootstrap,
+            )
+    except OSError as exc:
+        raise UpdateError("Không thể khởi chạy updater helper.") from exc
+
+
+def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap_log: Path, timeout_seconds: float = 5.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            status = read_update_status(status_path)
+        except UpdateError:
+            status = None
+        if status and status["target_version"] == target_version:
+            if status["phase"] in {"waiting_for_exit", "installing", "restarting", "installed"}:
+                return
+            if status["phase"] == "failed":
+                raise UpdateError(str(status["error"] or "Updater helper khởi động thất bại."))
+        time.sleep(0.1)
+    detail = ""
+    try:
+        if bootstrap_log.is_file() and bootstrap_log.stat().st_size <= 64 * 1024:
+            detail = bootstrap_log.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        detail = ""
+    raise UpdateError("Updater helper không xác nhận khởi động." + (f" {detail}" if detail else ""))
+
+
+def _powershell_helper_script() -> str:
+    return r'''
+param(
     [Parameter(Mandatory=$true)][int]$ParentPid,
     [Parameter(Mandatory=$true)][string]$Installer,
     [Parameter(Mandatory=$true)][string]$ExpectedSha256,
     [Parameter(Mandatory=$true)][string]$AppExe,
     [Parameter(Mandatory=$true)][string]$LogPath,
-    [Parameter(Mandatory=$true)][string]$InstallerLog
+    [Parameter(Mandatory=$true)][string]$InstallerLog,
+    [Parameter(Mandatory=$true)][string]$StatusPath,
+    [Parameter(Mandatory=$true)][string]$TargetVersion,
+    [Parameter(Mandatory=$true)][int64]$InstallerSize
 )
 $ErrorActionPreference = 'Stop'
-function Write-UpdateLog([string]$Message) {
-    Add-Content -LiteralPath $LogPath -Value ((Get-Date -Format o) + ' ' + $Message) -Encoding UTF8
+$Utf8 = [System.Text.UTF8Encoding]::new($false)
+function Escape-Json([string]$Value) {
+    if ($null -eq $Value) { return '' }
+    return $Value.Replace('\', '\\').Replace('"', '\"').Replace("`r", '\r').Replace("`n", '\n')
 }
+function Ensure-Directory([string]$FilePath) {
+    $directory = [System.IO.Path]::GetDirectoryName($FilePath)
+    if ($directory) { [System.IO.Directory]::CreateDirectory($directory) > $null }
+}
+function Write-UpdateLog([string]$Message) {
+    Ensure-Directory $LogPath
+    [System.IO.File]::AppendAllText($LogPath, ([System.DateTimeOffset]::UtcNow.ToString('o') + ' ' + $Message + [System.Environment]::NewLine), $Utf8)
+}
+function Write-UpdateStatus([string]$Phase, [string]$ErrorText) {
+    Ensure-Directory $StatusPath
+    $errorJson = 'null'
+    if ($ErrorText) { $errorJson = '"' + (Escape-Json $ErrorText) + '"' }
+    $json = '{"bytes_downloaded":' + $InstallerSize + ',"bytes_total":' + $InstallerSize + ',"error":' + $errorJson + ',"phase":"' + $Phase + '","schema":"tiktok-affiliate-report.update-status.v1","target_version":"' + (Escape-Json $TargetVersion) + '","updated_at":"' + [System.DateTimeOffset]::UtcNow.ToString('o') + '"}'
+    $tmp = $StatusPath + '.' + $PID + '.tmp'
+    [System.IO.File]::WriteAllText($tmp, $json + [System.Environment]::NewLine, $Utf8)
+    if ([System.IO.File]::Exists($StatusPath)) {
+        $backup = $StatusPath + '.' + $PID + '.bak'
+        try {
+            if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) }
+            [System.IO.File]::Replace($tmp, $StatusPath, $backup, $true)
+        } finally {
+            try { if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) } } catch {}
+        }
+    } else {
+        [System.IO.File]::Move($tmp, $StatusPath)
+    }
+}
+function Get-Sha256Hex([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try { return ([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToUpperInvariant() }
+        finally { $sha.Dispose() }
+    } finally { $stream.Dispose() }
+}
+function Start-Child([string]$FilePath, [string]$Arguments, [string]$WorkingDirectory, [bool]$Wait) {
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = $FilePath
+    $psi.Arguments = $Arguments
+    $psi.WorkingDirectory = $WorkingDirectory
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $process = [System.Diagnostics.Process]::Start($psi)
+    if ($Wait) { $process.WaitForExit(); return $process.ExitCode }
+    return 0
+}
+$parentExited = $false
 try {
-    $parent = Get-Process -Id $ParentPid -ErrorAction SilentlyContinue
-    if ($parent) { $parent | Wait-Process -Timeout 120 -ErrorAction Stop }
-    $actual = (Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash.ToUpperInvariant()
+    Write-UpdateLog 'Updater helper started.'
+    Write-UpdateStatus 'waiting_for_exit' $null
+    try {
+        $parent = [System.Diagnostics.Process]::GetProcessById($ParentPid)
+        if (-not $parent.WaitForExit(120000)) { throw 'Timed out waiting for app to exit.' }
+    } catch [System.ArgumentException] {
+    }
+    $parentExited = $true
+    Write-UpdateStatus 'installing' $null
+    if (([System.IO.FileInfo]::new($Installer)).Length -ne $InstallerSize) { throw 'Installer size changed after download.' }
+    $actual = Get-Sha256Hex $Installer
     if ($actual -ne $ExpectedSha256) { throw 'Installer SHA-256 changed after download.' }
-    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CLOSEAPPLICATIONS', ('/LOG="' + $InstallerLog + '"'))
-    $process = Start-Process -FilePath $Installer -ArgumentList $arguments -WorkingDirectory (Split-Path -Parent $Installer) -WindowStyle Hidden -Wait -PassThru
-    if ($process.ExitCode -ne 0) { throw "Installer exited with code $($process.ExitCode)." }
+    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG="' + $InstallerLog + '"'
+    $exitCode = Start-Child $Installer $arguments ([System.IO.Path]::GetDirectoryName($Installer)) $true
+    if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
+    Write-UpdateStatus 'restarting' $null
+    Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
     Write-UpdateLog 'Update installed successfully.'
 } catch {
-    Write-UpdateLog ('Update failed: ' + $_.Exception.Message)
-} finally {
-    try {
-        if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) {
-            Start-Process -FilePath $AppExe -WorkingDirectory (Split-Path -Parent $AppExe)
+    $failure = $_.Exception.Message
+    try { Write-UpdateStatus 'failed' $failure } catch {}
+    try { Write-UpdateLog ('Update failed: ' + $failure) } catch {}
+    if ($parentExited -and [System.IO.File]::Exists($AppExe)) {
+        try {
+            Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
+            Write-UpdateLog 'Previous app version restarted after update failure.'
+        } catch {
+            Write-UpdateLog ('App restart failed: ' + $_.Exception.Message)
         }
-    } catch {
-        Write-UpdateLog ('App restart failed: ' + $_.Exception.Message)
     }
-    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+} finally {
+    try { [System.IO.File]::Delete($PSCommandPath) } catch {}
 }
-""",
-            encoding="utf-8-sig",
-        )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise UpdateError("Không thể tạo updater helper.") from exc
-    flags = (
-        getattr(subprocess, "DETACHED_PROCESS", 0)
-        | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    )
-    try:
-        subprocess.Popen(
-            [
-                str(powershell),
-                "-NoLogo",
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-WindowStyle",
-                "Hidden",
-                "-File",
-                str(helper_path),
-                "-ParentPid",
-                str(os.getpid()),
-                "-Installer",
-                str(installer_path),
-                "-ExpectedSha256",
-                expected_sha256,
-                "-AppExe",
-                str(app_path),
-                "-LogPath",
-                str(log_path),
-                "-InstallerLog",
-                str(installer_log),
-            ],
-            cwd=installer_path.parent,
-            close_fds=True,
-            creationflags=flags,
-        )
-    except OSError as exc:
-        raise UpdateError("Không thể khởi chạy updater helper.") from exc
+'''
 
 
 def _windows_frozen() -> bool:
