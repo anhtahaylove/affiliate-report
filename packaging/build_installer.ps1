@@ -1,6 +1,6 @@
 param(
     [switch]$SkipAppBuild,
-    [string]$AppVersion = '1.2.2'
+    [string]$AppVersion = '1.2.3'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +10,7 @@ $appExe = Join-Path $root 'build\installer-app\TikTokAffiliateReport.exe'
 $outputDir = Join-Path $root 'artifacts\installer'
 $setupExe = Join-Path $root "artifacts\installer\TikTokAffiliateReportSetup-v$AppVersion.exe"
 $checksumFile = Join-Path $root 'artifacts\installer\SHA256SUMS.txt'
+$staleMetadata = @($checksumFile, (Join-Path $outputDir 'stable.json'), (Join-Path $outputDir 'stable.json.sig'))
 $installerScript = Join-Path $PSScriptRoot 'TikTokAffiliateReport.iss'
 $privacyGate = Join-Path $PSScriptRoot 'assert_no_embedded_database.ps1'
 $iscc = @(
@@ -30,7 +31,7 @@ if (!$iscc) { throw 'Inno Setup 6 is required. Install it with: winget install -
 
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 Get-ChildItem -LiteralPath $outputDir -Filter 'TikTokAffiliateReportSetup*.exe' -File | Remove-Item -Force
-Remove-Item -LiteralPath $checksumFile -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $staleMetadata -Force -ErrorAction SilentlyContinue
 
 & $iscc "/DMyAppVersion=$AppVersion" $installerScript
 if ($LASTEXITCODE) { throw "Inno Setup failed with exit code $LASTEXITCODE" }

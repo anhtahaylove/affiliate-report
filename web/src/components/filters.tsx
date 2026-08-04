@@ -45,10 +45,16 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
   const pathname = usePathname();
   const [draft, setDraft] = useState(initialFilters);
   const [error, setError] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
   const monthStart = draft.month ? firstDayOfMonth(draft.month) : "";
   const monthEnd = draft.month ? lastDayOfMonth(draft.month) : "";
   const allAccountsSelected = accounts.length > 0 && draft.accounts.length === accounts.length;
   const allStatusesSelected = statuses.length > 0 && draft.statuses.length === statuses.length;
+  const compactSummary = [
+    `${draft.start.split("-").reverse().join("/")} – ${draft.end.split("-").reverse().join("/")}`,
+    allAccountsSelected ? "Tất cả tài khoản" : `${draft.accounts.length}/${accounts.length} tài khoản`,
+    statuses.length ? (allStatusesSelected ? "Tất cả trạng thái" : `${draft.statuses.length}/${statuses.length} trạng thái`) : null,
+  ].filter(Boolean).join(" · ");
 
   function toggle(list: "accounts" | "statuses", value: string) {
     setError("");
@@ -65,6 +71,7 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     const nextDraft = { month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1 };
     setError("");
     setDraft(nextDraft);
+    setMobileOpen(false);
     router.replace(buildFilterHref(pathname, nextDraft, accounts, statuses));
   }
 
@@ -73,74 +80,81 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     if (!draft.accounts.length) return setError("Hãy chọn ít nhất một tài khoản.");
     if (statuses.length && !draft.statuses.length) return setError("Hãy chọn ít nhất một trạng thái.");
     setError("");
+    setMobileOpen(false);
     router.push(buildFilterHref(pathname, draft, accounts, statuses));
   }
 
   return (
     <form className="command-bar panel" onSubmit={apply}>
-      <div className="field compact">
-        <label htmlFor="target-month">Tháng KPI</label>
-        <input
-          id="target-month"
-          type="month"
-          value={draft.month}
-          required
-          onChange={(event) => {
-            const next = event.target.value;
-            if (!next) return;
-            setDraft((current) => ({ ...current, month: next, start: firstDayOfMonth(next), end: lastDayOfMonth(next) }));
-          }}
-        />
-      </div>
-      <div className="field compact">
-        <label htmlFor="start-date">Từ ngày</label>
-        <input id="start-date" type="date" value={draft.start} min={monthStart || undefined} max={draft.end || monthEnd || undefined} onChange={(event) => setDraft((current) => ({ ...current, start: event.target.value }))} />
-      </div>
-      <div className="field compact">
-        <label htmlFor="end-date">Đến ngày</label>
-        <input id="end-date" type="date" value={draft.end} min={draft.start || monthStart || undefined} max={monthEnd || undefined} onChange={(event) => setDraft((current) => ({ ...current, end: event.target.value }))} />
-      </div>
-      {showSearch ? (
-        <div className="field compact search-field">
-          <label htmlFor="order-search">Tìm đơn/SKU</label>
-          <input id="order-search" value={draft.search} onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Mã đơn, SKU, sản phẩm" />
+      <button className="filter-toggle" type="button" aria-expanded={mobileOpen} aria-controls="report-filters" onClick={() => setMobileOpen((open) => !open)}>
+        <span><strong>Bộ lọc báo cáo</strong><small>{compactSummary}</small></span>
+        <span aria-hidden="true">{mobileOpen ? "Thu gọn" : "Chỉnh sửa"}</span>
+      </button>
+      <div id="report-filters" className={`filter-body${mobileOpen ? " is-open" : ""}`}>
+        <div className="field compact">
+          <label htmlFor="target-month">Tháng KPI</label>
+          <input
+            id="target-month"
+            type="month"
+            value={draft.month}
+            required
+            onChange={(event) => {
+              const next = event.target.value;
+              if (!next) return;
+              setDraft((current) => ({ ...current, month: next, start: firstDayOfMonth(next), end: lastDayOfMonth(next) }));
+            }}
+          />
         </div>
-      ) : null}
-      <fieldset className="filter-stack">
-        <legend className="field-label">Tài khoản</legend>
-        <div className="account-options">
-          <label className="account-option select-all-option">
-            <input type="checkbox" checked={allAccountsSelected} onChange={() => toggleAll("accounts", accounts)} />
-            Tất cả tài khoản
-          </label>
-          {accounts.map((account) => (
-            <label className="account-option" key={account}>
-              <input type="checkbox" checked={draft.accounts.includes(account)} onChange={() => toggle("accounts", account)} />
-              {account}
-            </label>
-          ))}
+        <div className="field compact">
+          <label htmlFor="start-date">Từ ngày</label>
+          <input id="start-date" type="date" value={draft.start} min={monthStart || undefined} max={draft.end || monthEnd || undefined} onChange={(event) => setDraft((current) => ({ ...current, start: event.target.value }))} />
         </div>
-      </fieldset>
-      {statuses.length ? (
+        <div className="field compact">
+          <label htmlFor="end-date">Đến ngày</label>
+          <input id="end-date" type="date" value={draft.end} min={draft.start || monthStart || undefined} max={monthEnd || undefined} onChange={(event) => setDraft((current) => ({ ...current, end: event.target.value }))} />
+        </div>
+        {showSearch ? (
+          <div className="field compact search-field">
+            <label htmlFor="order-search">Tìm đơn/SKU</label>
+            <input id="order-search" value={draft.search} onChange={(event) => setDraft((current) => ({ ...current, search: event.target.value }))} placeholder="Mã đơn, SKU, sản phẩm" />
+          </div>
+        ) : null}
         <fieldset className="filter-stack">
-          <legend className="field-label">Trạng thái</legend>
+          <legend className="field-label">Tài khoản</legend>
           <div className="account-options">
             <label className="account-option select-all-option">
-              <input type="checkbox" checked={allStatusesSelected} onChange={() => toggleAll("statuses", statuses)} />
-              Tất cả trạng thái
+              <input type="checkbox" checked={allAccountsSelected} onChange={() => toggleAll("accounts", accounts)} />
+              Tất cả tài khoản
             </label>
-            {statuses.map((status) => (
-              <label className="account-option" key={status} title={`Mã hệ thống: ${status}`}>
-                <input type="checkbox" checked={draft.statuses.includes(status)} onChange={() => toggle("statuses", status)} />
-                {statusLabel(status)}
+            {accounts.map((account) => (
+              <label className="account-option" key={account}>
+                <input type="checkbox" checked={draft.accounts.includes(account)} onChange={() => toggle("accounts", account)} />
+                {account}
               </label>
             ))}
           </div>
         </fieldset>
-      ) : null}
-      <div className="filter-actions">
-        <button className="primary" type="submit">Áp dụng bộ lọc</button>
-        <button type="button" onClick={reset}>Đặt lại</button>
+        {statuses.length ? (
+          <fieldset className="filter-stack">
+            <legend className="field-label">Trạng thái</legend>
+            <div className="account-options">
+              <label className="account-option select-all-option">
+                <input type="checkbox" checked={allStatusesSelected} onChange={() => toggleAll("statuses", statuses)} />
+                Tất cả trạng thái
+              </label>
+              {statuses.map((status) => (
+                <label className="account-option" key={status} title={`Mã hệ thống: ${status}`}>
+                  <input type="checkbox" checked={draft.statuses.includes(status)} onChange={() => toggle("statuses", status)} />
+                  {statusLabel(status)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+        <div className="filter-actions">
+          <button className="primary" type="submit">Áp dụng bộ lọc</button>
+          <button type="button" onClick={reset}>Đặt lại</button>
+        </div>
       </div>
       {error ? <p className="filter-error" role="alert">{error}</p> : null}
     </form>

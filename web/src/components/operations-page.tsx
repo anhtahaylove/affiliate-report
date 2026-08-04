@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AdminUser,
@@ -20,6 +21,7 @@ import {
   UpdateStatus,
   checkUpdate,
   createAccount,
+  dailyReportExportUrl,
   deleteAccount,
   installUpdate,
   loadAnalytics,
@@ -35,12 +37,14 @@ import {
   loadUsers,
   ordersExportUrl,
   previewDeleteAccount,
+  queryString,
   resetData,
   restoreBackup,
   saveTarget,
   updateUser,
   updateAccount,
   uploadExport,
+  visibleRejectedRows,
 } from "@/lib/api";
 import { AppShell, AuthCard } from "@/components/app-shell";
 import { FilterBar, useUrlFilters } from "@/components/filters";
@@ -214,9 +218,14 @@ function DashboardHome({ filters }: { filters: UrlFilters }) {
   const progress = Math.max(0, Math.min((activeKpi?.target_achievement ?? 0) * 100, 100));
   const gap = activeKpi?.gap == null ? null : Math.max(-Number(activeKpi.gap), 0);
   const selectedLabel = filters.accounts.length ? filters.accounts.join(" + ") : accountLabel("ALL");
+  const unknownOrdersHref = `/orders${queryString({ month: filters.month, start: filters.start, end: filters.end, account: filters.accounts, status: "unknown" })}`;
 
   return (
     <>
+      <section className="dashboard-toolbar panel" aria-label="Phạm vi báo cáo hiện tại">
+        <div><span>Phạm vi báo cáo</span><strong>{selectedLabel}</strong><small>{filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}</small></div>
+        <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a>
+      </section>
       <section className="hero-grid" aria-label="Tổng quan KPI">
         <Metric title="Đơn hàng" value={summary ? integer.format(summary.orders) : total ? integer.format(total.orders) : "—"} hint={`${summary ? integer.format(summary.order_lines) : total ? integer.format(total.order_lines) : "—"} dòng · kỳ trước ${orderDelta == null ? "—" : integer.format(orderDelta)}`} />
         <Metric title="GMV thực tế" value={formatMoney(summary?.actual_gmv ?? total?.actual_gmv)} hint={`GMV gốc ${formatMoney(summary?.gross_gmv ?? total?.gmv)}`} />
@@ -225,7 +234,7 @@ function DashboardHome({ filters }: { filters: UrlFilters }) {
         <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu tháng {formatMoney(activeKpi?.monthly_target)}</small></article>
         <article className="metric danger-metric panel"><span>{analytics?.target?.projected_month_end == null ? "Còn thiếu" : "Dự báo cuối tháng"}</span><strong>{formatMoney(analytics?.target?.projected_month_end ?? analytics?.target?.remaining ?? gap)}</strong><small>Còn thiếu {formatMoney(analytics?.target?.remaining ?? gap)} · cần/ngày {formatMoney(analytics?.target?.required_per_remaining_day)}</small></article>
       </section>
-      {analytics ? <section className="notice data-quality-notice" role="status"><strong>Cập nhật gần nhất: {formatDateTime(analytics.data_quality.latest_import_at)}</strong><span>Trạng thái chưa xác định: {integer.format(analytics.data_quality.unknown_status_rows)} · Tiền tệ khác VND: {integer.format(analytics.data_quality.non_vnd_rows)} · Thiếu ngày quyết toán: {integer.format(analytics.data_quality.missing_settlement_date_rows)} · Dòng nhập bị từ chối: {integer.format(analytics.data_quality.import_rejected)}</span></section> : null}
+      {analytics ? <section className="notice data-quality-notice" role="status"><strong>Cập nhật gần nhất: {formatDateTime(analytics.data_quality.latest_import_at)}</strong><span>Trạng thái chưa xác định: <Link href={unknownOrdersHref}>{integer.format(analytics.data_quality.unknown_status_rows)} dòng</Link> · Tiền tệ khác VND: {integer.format(analytics.data_quality.non_vnd_rows)} · Thiếu ngày quyết toán: {integer.format(analytics.data_quality.missing_settlement_date_rows)} · Dòng nhập bị từ chối: <Link href="/imports">{integer.format(analytics.data_quality.import_rejected)} dòng</Link></span></section> : null}
       <div className="content-grid">
         <RecentImports rows={history} />
         <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />
@@ -406,6 +415,7 @@ function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser; accou
   const [files, setFiles] = useState<FileList | null>(null);
   const [history, setHistory] = useState<ImportHistoryRow[]>([]);
   const [message, setMessage] = useState("");
+  const [rejectedRows, setRejectedRows] = useState<Array<{ file: string; total: number; rows: ReturnType<typeof visibleRejectedRows> }>>([]);
   const [busy, setBusy] = useState(false);
   const refreshHistory = useCallback(async () => {
     const data = await loadImportHistory(20);
@@ -419,26 +429,31 @@ function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser; accou
     void load();
   }, [refreshHistory]);
   async function submit() {
+    setRejectedRows([]);
     if (!canWrite(user)) return setMessage("Tài khoản chỉ xem không có quyền nhập dữ liệu.");
     if (!account || !files?.length) return setMessage("Hãy chọn tài khoản và ít nhất một file .xlsx.");
     setBusy(true);
     const results: string[] = [];
+    const nextRejectedRows: typeof rejectedRows = [];
     try {
       for (const file of Array.from(files)) {
         if (!file.name.toLowerCase().endsWith(".xlsx")) { results.push(`${file.name}: bỏ qua vì không phải .xlsx`); continue; }
         const result = await uploadExport(account, file);
         const imported = result.inserted + result.updated + result.unchanged;
-        results.push(result.duplicate ? `${file.name}: đã import trước đó, không nhân đôi` : `${file.name}: ${integer.format(imported)} dòng, lỗi ${integer.format(result.rejected)}`);
+        results.push(result.duplicate ? `${file.name}: đã import trước đó, không nhân đôi` : `${file.name}: ${integer.format(imported)} dòng, ${integer.format(result.rejected)} dòng bị từ chối`);
+        if (result.rejected_rows?.length) nextRejectedRows.push({ file: file.name, total: result.rejected, rows: visibleRejectedRows(result.rejected_rows) });
       }
       setMessage(results.join(" · "));
+      setRejectedRows(nextRejectedRows);
       await refreshHistory();
     } catch (reason) {
       setMessage(errorMessage(reason, "Nhập dữ liệu thất bại."));
+      setRejectedRows([]);
     } finally {
       setBusy(false);
     }
   }
-  return <div className="content-grid"><section className="section panel"><div className="section-heading"><div><p className="section-label">Nhập tuần tự</p><h2>Chọn nhiều file TikTok</h2><p>Tối đa {integer.format(maxUploadMb)} MB mỗi file; chỉ hỗ trợ định dạng .xlsx.</p></div></div><div className="upload-form"><div className="field"><label htmlFor="import-account">Tài khoản TikTok</label><select id="import-account" value={account} onChange={(event) => setAccount(event.target.value)}>{accounts.map((item) => <option key={item}>{item}</option>)}</select></div><div className="field dropzone"><label htmlFor="import-files">File Excel đã xuất từ TikTok</label><input id="import-files" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} /><span>Có thể chọn nhiều file; hệ thống sẽ nhập lần lượt và tự chống trùng.</span></div><button className="primary" type="button" onClick={() => void submit()} disabled={busy}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>{message ? <p className="upload-result" role="status">{message}</p> : null}</div></section><RecentImports rows={history} /></div>;
+  return <div className="content-grid"><section className="section panel"><div className="section-heading"><div><p className="section-label">Nhập tuần tự</p><h2>Chọn nhiều file TikTok</h2><p>Tối đa {integer.format(maxUploadMb)} MB mỗi file; chỉ hỗ trợ định dạng .xlsx.</p></div></div><div className="upload-form"><div className="field"><label htmlFor="import-account">Tài khoản TikTok</label><select id="import-account" value={account} onChange={(event) => setAccount(event.target.value)}>{accounts.map((item) => <option key={item}>{item}</option>)}</select></div><div className="field dropzone"><label htmlFor="import-files">File Excel đã xuất từ TikTok</label><input id="import-files" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} /><span>Có thể chọn nhiều file; hệ thống sẽ nhập lần lượt và tự chống trùng.</span></div><button className="primary" type="button" onClick={() => void submit()} disabled={busy}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>{message ? <p className="upload-result" role="status">{message}</p> : null}{rejectedRows.map((group, index) => <section className="import-item" key={`${group.file}-${index}`} aria-label={`Dòng bị từ chối trong ${group.file}`}><strong>{group.file}: {group.total > group.rows.length ? `hiển thị ${integer.format(group.rows.length)} / ${integer.format(group.total)} dòng bị từ chối` : `${integer.format(group.total)} dòng bị từ chối`}</strong><ul>{group.rows.map((row) => <li key={`${group.file}-${row.row_number}`}>Dòng {integer.format(row.row_number)}: {row.reason}</li>)}</ul></section>)}</div></section><RecentImports rows={history} /></div>;
 }
 
 function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: UrlFilters; accounts: string[] }) {

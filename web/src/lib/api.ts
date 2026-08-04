@@ -86,7 +86,12 @@ export type UploadResponse = {
   updated: number;
   unchanged: number;
   rejected: number;
-  rejected_rows?: unknown[];
+  rejected_rows?: RejectedRow[];
+};
+
+export type RejectedRow = {
+  row_number: number;
+  reason: string;
 };
 
 export type ResetDataResponse = {
@@ -301,11 +306,11 @@ export type AnalyticsResponse = {
 };
 
 export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-  ) {
+  public readonly status: number;
+
+  constructor(message: string, status: number) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -459,6 +464,19 @@ export async function loadOrders(filters: ReportFilters & { search?: string; lim
 
 export function ordersExportUrl(filters: ReportFilters & { search?: string }) {
   return `${apiUrl()}/api/v1/orders/export.xlsx${reportQuery(filters)}`;
+}
+
+export function dailyReportExportUrl(filters: ReportFilters) {
+  return `${apiUrl()}/api/v1/reports/daily.xlsx${queryString({
+    account: filters.accounts,
+    status: filters.statuses,
+    start: filters.start,
+    end: filters.end,
+  })}`;
+}
+
+export function visibleRejectedRows(rows: RejectedRow[] = []) {
+  return rows.slice(0, 10);
 }
 
 export async function loadMonthlyKpi(filters: ReportFilters) {

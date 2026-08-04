@@ -2,47 +2,99 @@ name: Windows installer smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      current_version:
+        description: Current public installer version to smoke test
+        required: true
+        default: "1.2.3"
+      previous_version:
+        description: Previous public installer version used for upgrade smoke
+        required: true
+        default: "1.2.2"
   pull_request:
     paths:
       - ".github/workflows/windows-installer-smoke.yml"
       - "scripts/ci/windows_installer_smoke.ps1"
+      - "tests/test_packaging_contract.py"
 
 permissions:
   contents: read
 
 jobs:
-  fresh-install-v120:
-    runs-on: windows-latest
-    timeout-minutes: 10
+  contract-checks:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Download public v1.2.0 installer
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install pytest
+      - name: Run packaging contract checks
+        run: python -m pytest tests/test_packaging_contract.py -q
+
+  fresh-install:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      CURRENT_VERSION: ${{ inputs.current_version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download current public installer and checksums
         shell: pwsh
         run: |
-          $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe"
-          Invoke-WebRequest -UseBasicParsing "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.0/TikTokAffiliateReportSetup-v1.2.0.exe" -OutFile $installer
+          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $currentVersion = $env:CURRENT_VERSION
+          if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid current_version: $currentVersion" }
+          $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe"
+          $checksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" -OutFile $installer
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$currentVersion/SHA256SUMS.txt" -OutFile $checksums
       - name: Smoke fresh install
         shell: pwsh
         run: |
-          .\scripts\ci\windows_installer_smoke.ps1 -Mode Fresh -V120Installer (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe")
+          $currentVersion = $env:CURRENT_VERSION
+          .\scripts\ci\windows_installer_smoke.ps1 -Mode Fresh `
+            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentVersion $currentVersion `
+            -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt")
 
-  upgrade-v111-to-v120:
+  upgrade-install:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 10
+    env:
+      CURRENT_VERSION: ${{ inputs.current_version }}
+      PREVIOUS_VERSION: ${{ inputs.previous_version }}
     steps:
       - uses: actions/checkout@v7
-      - name: Download v1.1.1 and public v1.2.0 installers
+      - name: Download current and previous public installers and checksums
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v1.1.1 --repo anhtahaylove/tiktok-affiliate-report --pattern "TikTokAffiliateReportSetup-v1.1.1.exe" --dir $env:RUNNER_TEMP
-          if ($LASTEXITCODE -ne 0) { throw "Could not download private v1.1.1 installer" }
-          $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe"
-          Invoke-WebRequest -UseBasicParsing "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.0/TikTokAffiliateReportSetup-v1.2.0.exe" -OutFile $installer
+          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $currentVersion = $env:CURRENT_VERSION
+          $previousVersion = $env:PREVIOUS_VERSION
+          if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid current_version: $currentVersion" }
+          if ($previousVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid previous_version: $previousVersion" }
+          if ([version]$previousVersion -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
+          $currentInstaller = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe"
+          $previousInstaller = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$previousVersion.exe"
+          $currentChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
+          $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" -OutFile $currentInstaller
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$currentVersion/SHA256SUMS.txt" -OutFile $currentChecksums
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$previousVersion/TikTokAffiliateReportSetup-v$previousVersion.exe" -OutFile $previousInstaller
+          Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$previousVersion/SHA256SUMS.txt" -OutFile $previousChecksums
       - name: Smoke upgrade and data preservation
         shell: pwsh
         run: |
+          $currentVersion = $env:CURRENT_VERSION
+          $previousVersion = $env:PREVIOUS_VERSION
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Upgrade `
-            -V111Installer (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.1.1.exe") `
-            -V120Installer (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v1.2.0.exe")
+            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentVersion $currentVersion `
+            -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt") `
+            -PreviousInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$previousVersion.exe") `
+            -PreviousVersion $previousVersion `
+            -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt")

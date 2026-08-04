@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.3 - 2026-08-04
+
+- Thu gọn bộ lọc trên mobile, hiển thị tóm tắt phạm vi và giữ đầy đủ thao tác khi mở rộng.
+- Cải thiện Dashboard với thanh phạm vi báo cáo và nút xuất báo cáo ngày riêng, rõ ràng hơn.
+- Liên kết cảnh báo dữ liệu tới đúng đơn hàng/import liên quan và hiển thị chi tiết tối đa 10 dòng nhập bị từ chối.
+- Chuẩn hoá smoke installer theo tham số phiên bản để kiểm tra cài mới và nâng cấp cho mọi release tiếp theo.
+
 ## v1.2.2 - 2026-08-04
 
 - Việt hoá trạng thái dashboard/analytics/order: Đã quyết toán, Không đủ điều kiện, Đang chờ quyết toán và Chưa xác định.
