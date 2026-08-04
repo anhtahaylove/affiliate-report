@@ -571,6 +571,27 @@ function Start-Child([string]$FilePath, [string]$Arguments, [string]$WorkingDire
     if ($Wait) { $process.WaitForExit(); return $process.ExitCode }
     return 0
 }
+function Wait-FileUnlocked([string]$Path, [int]$TimeoutMs) {
+    # $ParentPid is only the PyInstaller onefile *child* process. Its bootloader parent keeps
+    # $AppExe open a little longer while it unpacks/cleans up its _MEI temp directory, so
+    # WaitForExit($ParentPid) alone can return before the file is actually unlocked. If the
+    # installer's /CLOSEAPPLICATIONS still finds it in use it defaults to Abort (exit code 5)
+    # instead of prompting, since Setup runs /SUPPRESSMSGBOXES. Poll the file handle itself
+    # (deliberately not enumerating processes — see forbidden cmdlets in test_updater.py) so we
+    # cover any lingering process, not just the one PID we happen to know about.
+    $deadline = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($deadline.ElapsedMilliseconds -lt $TimeoutMs) {
+        if (-not [System.IO.File]::Exists($Path)) { return $true }
+        try {
+            $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            $stream.Close()
+            return $true
+        } catch [System.IO.IOException] {
+            Start-Sleep -Milliseconds 200
+        }
+    }
+    return $false
+}
 $parentExited = $false
 try {
     Write-UpdateLog 'Updater helper started.'
@@ -581,6 +602,9 @@ try {
     } catch [System.ArgumentException] {
     }
     $parentExited = $true
+    if (-not (Wait-FileUnlocked $AppExe 15000)) {
+        Write-UpdateLog 'Warning: app executable still locked 15s after process exit; proceeding anyway.'
+    }
     Write-UpdateStatus 'installing' $null
     if (([System.IO.FileInfo]::new($Installer)).Length -ne $InstallerSize) { throw 'Installer size changed after download.' }
     $actual = Get-Sha256Hex $Installer

@@ -5,9 +5,11 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -300,6 +302,13 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     assert "[System.Security.Cryptography.SHA256]::Create()" in helper
     assert "Start-Child $Installer" in helper
     assert "Start-Child $AppExe" in helper
+    # $ParentPid only tracks the PyInstaller onefile child; its bootloader parent can still hold
+    # $AppExe open briefly after that PID exits, so we must also wait for the file handle itself
+    # to free up before invoking /CLOSEAPPLICATIONS, or Setup aborts with exit code 5.
+    assert "function Wait-FileUnlocked" in helper
+    assert "Wait-FileUnlocked $AppExe 15000" in helper
+    assert helper.index("Wait-FileUnlocked $AppExe") > helper.index("$parentExited = $true")
+    assert helper.index("Wait-FileUnlocked $AppExe") < helper.index("Start-Child $Installer")
     for forbidden in ("Wait-Process", "Get-FileHash", "Get-Process", "Start-Process", "Remove-Item"):
         assert forbidden not in helper
     assert captured["args"][0] == str(powershell)
@@ -367,6 +376,42 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
     assert "SHA-256" in status["error"]
     assert "Updater helper started." in (tmp_path / "updater.log").read_text(encoding="utf-8")
     assert not list(tmp_path.glob("update-status.json.*.tmp"))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows file locking semantics")
+def test_wait_file_unlocked_detects_a_file_still_held_open_by_another_process(tmp_path):
+    # Regression test for the v1.2.7 update failure: $ParentPid only tracks the PyInstaller
+    # onefile child, so WaitForExit($ParentPid) can return while the bootloader parent still
+    # holds $AppExe open, and Setup's /CLOSEAPPLICATIONS then aborts (exit code 5). Exercise the
+    # real Wait-FileUnlocked function (extracted from the generated helper) against actual
+    # Windows file-sharing semantics rather than mocking them.
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    helper_source = updater._powershell_helper_script()
+    match = re.search(r"function Wait-FileUnlocked\b.*?\n}\n", helper_source, re.DOTALL)
+    assert match, "Wait-FileUnlocked function not found in generated helper script"
+    probe = tmp_path / "probe.ps1"
+    probe.write_text(match.group(0) + "\nWrite-Output (Wait-FileUnlocked $args[0] ([int]$args[1]))\n", encoding="utf-8-sig")
+    target = tmp_path / "TikTokAffiliateReport.exe"
+    target.write_bytes(b"app")
+
+    def run_probe(timeout_ms):
+        return subprocess.run(
+            [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(target), str(timeout_ms)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+    unlocked = run_probe(5000)
+    assert unlocked.stdout.strip() == "True", unlocked.stderr
+
+    with open(target, "rb"):
+        started = time.monotonic()
+        locked = run_probe(300)
+        elapsed = time.monotonic() - started
+    assert locked.stdout.strip() == "False", locked.stderr
+    assert elapsed < 5, f"Wait-FileUnlocked should give up around its own timeout, took {elapsed:.1f}s"
 
 
 def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch):
