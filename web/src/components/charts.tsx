@@ -1,6 +1,6 @@
 "use client";
 
-import { DailyRow, MonthlyKpiRow } from "@/lib/api";
+import { DailyRow } from "@/lib/api";
 import { formatMoney, integer, percent } from "@/lib/format";
 
 export function BarChart({ title, description, rows }: { title: string; description: string; rows: DailyRow[] }) {
@@ -29,26 +29,6 @@ export function BarChart({ title, description, rows }: { title: string; descript
           <thead><tr><th>Ngày</th><th>Đơn</th><th>Hoa hồng</th><th>Đạt KPI</th></tr></thead>
           <tbody>{rows.map((row) => <tr key={`${row.day}-${row.account}-fallback`}><td>{row.day}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.target_achievement)}</td></tr>)}</tbody>
         </table>
-      </div>
-    </section>
-  );
-}
-
-export function ProgressList({ rows }: { rows: MonthlyKpiRow[] }) {
-  return (
-    <section className="section panel" aria-labelledby="kpi-progress-title">
-      <div className="section-heading"><div><p className="section-label">KPI</p><h2 id="kpi-progress-title">Tiến độ theo tài khoản</h2></div></div>
-      <div className="target-list">
-        {rows.map((row) => {
-          const progress = Math.max(0, Math.min((row.target_achievement ?? 0) * 100, 100));
-          return (
-            <article className="progress-row" key={`${row.month}-${row.account}`}>
-              <div><strong>{row.account}</strong><span>{formatMoney(row.actual_commission)} / {formatMoney(row.monthly_target)}</span></div>
-              <div className="progress-track" role="progressbar" aria-label={`Tiến độ ${row.account}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div>
-              <small>{percent(row.target_achievement)}</small>
-            </article>
-          );
-        })}
       </div>
     </section>
   );

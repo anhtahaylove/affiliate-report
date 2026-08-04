@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.5 - 2026-08-04
+
+- Trang Tài khoản chỉ còn CRUD tài khoản (thêm/sửa/lưu trữ/xóa); bảng so sánh hiệu suất đã dời hẳn về Dashboard, không còn trùng lặp và không còn bộ lọc gây hiểu nhầm phạm vi ảnh hưởng.
+- Rút gọn tóm tắt Analytics từ 6 xuống 3 chỉ số không lặp với Dashboard (so kỳ trước, tỷ lệ hoa hồng hiệu dụng, độ mới dữ liệu), nhường trọng tâm cho xu hướng và xếp hạng.
+- Thêm dòng chú thích phạm vi ảnh hưởng ngay dưới bộ lọc ở từng trang (Tổng quan, Phân tích, Đơn hàng, Mục tiêu).
+- Gộp 3 mục Dữ liệu/Cập nhật/Người dùng thành một mục **Cài đặt** trên sidebar, chuyển sang dạng tab trong trang; URL từng trang không đổi.
+- Dashboard dùng biểu đồ cột thật cho nhịp 14 ngày gần nhất thay vì chỉ bảng số; dọn code chết (`ProgressList`) không còn được dùng ở đâu.
+
 ## v1.2.4 - 2026-08-04
 
 - Sửa lỗi auto-update trên Windows: helper không còn bị chặn bởi `DETACHED_PROCESS`, chuyển sang API .NET để chờ tiến trình, tính SHA-256 và chạy installer thay vì phụ thuộc `Get-FileHash`.

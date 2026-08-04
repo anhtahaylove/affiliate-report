@@ -16,9 +16,7 @@ const navItems: NavItem[] = [
   { href: "/imports", label: "Nhập dữ liệu", roles: ["operator", "owner"] },
   { href: "/targets", label: "Mục tiêu" },
   { href: "/accounts", label: "Tài khoản", roles: ["owner"] },
-  { href: "/settings/data", label: "Dữ liệu", roles: ["owner"] },
-  { href: "/settings/update", label: "Cập nhật", roles: ["owner"] },
-  { href: "/settings/users", label: "Người dùng", roles: ["owner"] },
+  { href: "/settings/data", label: "Cài đặt", roles: ["owner"] },
 ];
 
 export function AppShell({ user, apiError, children }: { user: CurrentUser; apiError?: string; children: ReactNode }) {
@@ -70,11 +68,14 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
           </div>
         </div>
         <nav>
-          {visibleItems.map((item) => (
-            <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} onClick={() => setOpen(false)}>
-              {item.label}
-            </Link>
-          ))}
+          {visibleItems.map((item) => {
+            const active = item.href === "/settings/data" ? pathname.startsWith("/settings") : pathname === item.href;
+            return (
+              <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} onClick={() => setOpen(false)}>
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
         <div className={`health-card${apiError ? " offline" : ""}`}>
           <span>{apiError ? "API gặp lỗi" : "API hoạt động"}</span>

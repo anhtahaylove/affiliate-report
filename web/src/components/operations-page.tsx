@@ -49,6 +49,7 @@ import {
   visibleRejectedRows,
 } from "@/lib/api";
 import { AppShell, AuthCard } from "@/components/app-shell";
+import { BarChart } from "@/components/charts";
 import { FilterBar, useUrlFilters } from "@/components/filters";
 import { accountLabel, countsText, errorMessage, formatBytes, formatDateTime, formatMoney, integer, percent, roleLabel, statusLabel } from "@/lib/format";
 
@@ -56,17 +57,36 @@ type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | 
 type UrlFilters = ReturnType<typeof useUrlFilters>;
 const ORDER_PAGE_SIZE = 100;
 
-const routeMeta: Record<RouteKind, { label: string; title: string; copy: string; needsWrite?: boolean; needsOwner?: boolean; filters?: boolean; search?: boolean }> = {
-  dashboard: { label: "Tổng quan", title: "Tổng quan hiệu suất", copy: "Theo dõi hoa hồng, tiến độ mục tiêu và phạm vi dữ liệu hiện tại.", filters: true },
-  analytics: { label: "Phân tích", title: "Phân tích xu hướng", copy: "Phân tích tài chính, sản phẩm, cửa hàng, nội dung, quyết toán và chất lượng dữ liệu.", filters: true },
-  orders: { label: "Đơn hàng", title: "Tra cứu đơn hàng", copy: "Tìm kiếm, lọc và xuất Excel toàn bộ đơn hàng theo phạm vi hiện tại.", filters: true, search: true },
+const routeMeta: Record<RouteKind, { label: string; title: string; copy: string; needsWrite?: boolean; needsOwner?: boolean; filters?: boolean; search?: boolean; filterHint?: string }> = {
+  dashboard: { label: "Tổng quan", title: "Tổng quan hiệu suất", copy: "Theo dõi hoa hồng, tiến độ mục tiêu và phạm vi dữ liệu hiện tại.", filters: true, filterHint: "Bộ lọc áp dụng cho toàn bộ số liệu và bảng biểu trên trang này." },
+  analytics: { label: "Phân tích", title: "Phân tích xu hướng", copy: "Phân tích tài chính, sản phẩm, cửa hàng, nội dung, quyết toán và chất lượng dữ liệu.", filters: true, filterHint: "Bộ lọc áp dụng cho toàn bộ phân tích, xu hướng và xếp hạng bên dưới." },
+  orders: { label: "Đơn hàng", title: "Tra cứu đơn hàng", copy: "Tìm kiếm, lọc và xuất Excel toàn bộ đơn hàng theo phạm vi hiện tại.", filters: true, search: true, filterHint: "Bộ lọc áp dụng trực tiếp cho danh sách đơn hàng và các file xuất." },
   imports: { label: "Nhập dữ liệu", title: "Nhập file TikTok", copy: "Chọn tài khoản TikTok và nhập nhiều file Excel tuần tự; hệ thống báo kết quả từng file.", needsWrite: true },
-  targets: { label: "Mục tiêu", title: "Mục tiêu theo tài khoản", copy: "Điều chỉnh KPI mỗi ngày theo tháng; mục tiêu tháng được hệ thống tự tính.", filters: true },
-  accounts: { label: "Tài khoản", title: "Quản lý tài khoản TikTok", copy: "Quản lý toàn bộ tài khoản; bộ lọc chỉ áp dụng cho phần so sánh hiệu suất.", needsOwner: true, filters: true },
+  targets: { label: "Mục tiêu", title: "Mục tiêu theo tài khoản", copy: "Điều chỉnh KPI mỗi ngày theo tháng; mục tiêu tháng được hệ thống tự tính.", filters: true, filterHint: "Bộ lọc áp dụng cho phạm vi KPI hiển thị; mục tiêu vẫn được lưu riêng theo từng tài khoản." },
+  accounts: { label: "Tài khoản", title: "Quản lý tài khoản TikTok", copy: "Thêm, sửa, lưu trữ và xóa tài khoản TikTok dùng để nhập dữ liệu.", needsOwner: true },
   data: { label: "Dữ liệu", title: "Xóa và khôi phục dữ liệu", copy: "Chỉ chủ sở hữu được thao tác; hệ thống luôn tạo bản sao lưu an toàn trước khi thay đổi.", needsOwner: true },
   update: { label: "Cập nhật", title: "Cập nhật ứng dụng", copy: "Kiểm tra nguồn cập nhật công khai đã ký và cài phiên bản mới trong ứng dụng Windows.", needsOwner: true },
   users: { label: "Người dùng", title: "Quản lý người dùng", copy: "Phân quyền vai trò và phạm vi tài khoản cho từng người dùng.", needsOwner: true },
 };
+
+const settingsTabs: Array<{ href: string; label: string }> = [
+  { href: "/settings/data", label: "Dữ liệu" },
+  { href: "/settings/update", label: "Cập nhật" },
+  { href: "/settings/users", label: "Người dùng" },
+];
+
+function SettingsTabs() {
+  const pathname = usePathname();
+  return (
+    <nav className="settings-tabs" aria-label="Mục cài đặt">
+      {settingsTabs.map((tab) => (
+        <Link key={tab.href} href={tab.href} className={pathname === tab.href ? "active" : undefined} aria-current={pathname === tab.href ? "page" : undefined}>
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 function canWrite(user: CurrentUser | null) {
   return user?.role === "operator" || user?.role === "owner";
@@ -142,13 +162,14 @@ export function OperationsPage({ route }: { route: RouteKind }) {
   return (
     <AppShell user={user} apiError={apiError}>
       <div className="page-heading"><p className="section-label">{meta.label}</p><h1>{meta.title}</h1><p className="subtle">{meta.copy}</p></div>
-      {meta.filters ? <FilterBar accounts={accounts} statuses={route === "targets" ? [] : statuses} showSearch={meta.search} /> : null}
+      {["data", "update", "users"].includes(route) ? <SettingsTabs /> : null}
+      {meta.filters ? <><FilterBar accounts={accounts} statuses={route === "targets" ? [] : statuses} showSearch={meta.search} />{meta.filterHint ? <p className="hint">{meta.filterHint}</p> : null}</> : null}
       {route === "dashboard" ? <DashboardHome filters={filters} /> : null}
       {route === "analytics" ? <AnalyticsPage filters={filters} /> : null}
       {route === "orders" ? <OrdersPage filters={filters} /> : null}
       {route === "imports" ? <ImportsPage user={user} accounts={accounts} maxUploadMb={maxUploadMb} /> : null}
       {route === "targets" ? <TargetsPage user={user} filters={filters} accounts={accounts} /> : null}
-      {route === "accounts" ? <AccountsPage filters={filters} /> : null}
+      {route === "accounts" ? <AccountsPage /> : null}
       {route === "data" ? <DataSettingsPage /> : null}
       {route === "update" ? <UpdateSettingsPage /> : null}
       {route === "users" ? <UsersSettingsPage currentUser={user} accounts={accounts} /> : null}
@@ -240,7 +261,7 @@ function DashboardHome({ filters }: { filters: UrlFilters }) {
       <div className="content-grid">
         <RecentImports rows={history} />
         <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />
-        <DailyTable rows={daily.filter((row) => row.account === "ALL").slice(0, 14)} />
+        <BarChart title="Nhịp ngày" description="Hoa hồng thực tế 14 ngày gần nhất." rows={daily.filter((row) => row.account === "ALL").slice(0, 14)} />
       </div>
     </>
   );
@@ -277,11 +298,8 @@ function AnalyticsPage({ filters }: { filters: UrlFilters }) {
   return (
     <div className="content-grid">
       <section className="hero-grid wide" aria-label="Tóm tắt analytics">
-        <Metric title="Đơn / dòng" value={`${integer.format(summary.orders)} / ${integer.format(summary.order_lines)}`} hint={`Kỳ trước ${previous ? integer.format(previous.orders) : "—"} đơn`} />
-        <Metric title="Hoa hồng" value={formatMoney(summary.actual_commission)} hint={`So kỳ trước ${commissionDelta == null ? "—" : formatMoney(commissionDelta)}`} />
-        <Metric title="Đã nhận" value={formatMoney(summary.final_received)} hint={`Lệch ${formatMoney(summary.final_received_variance)}`} />
+        <Metric title="Hoa hồng so kỳ trước" value={commissionDelta == null ? "—" : formatMoney(commissionDelta)} hint={`${integer.format(summary.orders)} đơn kỳ này · ${previous ? integer.format(previous.orders) : "—"} đơn kỳ trước`} />
         <Metric title="Tỷ lệ hoa hồng hiệu dụng" value={percent(summary.effective_commission_rate)} hint={`Hoàn tiền ${percent(summary.refund_rate)} · không đủ điều kiện ${percent(summary.ineligible_rate)}`} />
-        <Metric title="Dự báo mục tiêu" value={formatMoney(data.target?.projected_month_end)} hint={`Cần/ngày ${formatMoney(data.target?.required_per_remaining_day)} · dự kiến đạt ${percent(data.target?.projected_achievement)}`} />
         <Metric title="Độ mới dữ liệu" value={formatDateTime(data.data_quality.latest_import_at)} hint={`Đơn mới nhất ${summary.latest_order_date ?? "—"}`} />
       </section>
       <AnalyticsTrend rows={data.trend} />
@@ -501,9 +519,7 @@ function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: 
   return <section className="section panel wide"><div className="section-heading"><div><p className="section-label">KPI mỗi ngày</p><h2>Mục tiêu tháng {filters.month}</h2></div>{!canWrite(user) ? <span className="read-only">Chỉ xem</span> : null}</div><div className="target-list">{allowedAccounts.map((account) => <div className="target-row" key={account}><div><strong>{accountLabel(account)}</strong><span>Hoa hồng {formatMoney(kpiMap.get(account)?.actual_commission)} · KPI/ngày {formatMoney(targetMap.get(account)?.target_commission)} · đã đạt {percent(kpiMap.get(account)?.target_achievement)}</span></div><input type="number" min="0" step="1" value={drafts[account] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${accountLabel(account)}`} /><button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button></div>)}</div>{message ? <p className="upload-result" role="status">{message}</p> : null}</section>;
 }
 
-function AccountsPage({ filters }: { filters: UrlFilters }) {
-  const [overview, setOverview] = useState<OverviewRow[]>([]);
-  const [kpi, setKpi] = useState<MonthlyKpiRow[]>([]);
+function AccountsPage() {
   const [records, setRecords] = useState<AccountItem[]>([]);
   const [hardDeleteSupported, setHardDeleteSupported] = useState(false);
   const [draft, setDraft] = useState({ code: "", display_name: "" });
@@ -524,18 +540,6 @@ function AccountsPage({ filters }: { filters: UrlFilters }) {
     }
     void load();
   }, [refreshAccounts]);
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      loadDashboard({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end }),
-      loadMonthlyKpi({ month: filters.month, accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end }),
-    ]).then(([dash, monthly]) => {
-      if (!active) return;
-      setOverview(dash.overview);
-      setKpi(monthly.items);
-    }).catch((reason) => setMessage(errorMessage(reason, "Không thể tải dữ liệu tài khoản.")));
-    return () => { active = false; };
-  }, [filters.accounts, filters.end, filters.month, filters.start, filters.statuses]);
   async function create() {
     const code = draft.code.trim().toUpperCase();
     const displayName = draft.display_name.trim() || code;
@@ -598,40 +602,37 @@ function AccountsPage({ filters }: { filters: UrlFilters }) {
     }
   }
   return (
-    <div className="content-grid">
-      <section className="section panel">
-        <div className="section-heading">
-          <div>
-            <p className="section-label">Danh sách tài khoản</p>
-            <h2>Thêm và quản lý tài khoản</h2>
-            <p>{hardDeleteSupported ? "Có thể xóa vĩnh viễn sau khi tạo bản sao lưu." : "Dữ liệu dùng chung chỉ cho phép lưu trữ tài khoản; lịch sử vẫn được giữ lại."}</p>
-          </div>
+    <section className="section panel">
+      <div className="section-heading">
+        <div>
+          <p className="section-label">Danh sách tài khoản</p>
+          <h2>Thêm và quản lý tài khoản</h2>
+          <p>{hardDeleteSupported ? "Có thể xóa vĩnh viễn sau khi tạo bản sao lưu." : "Dữ liệu dùng chung chỉ cho phép lưu trữ tài khoản; lịch sử vẫn được giữ lại."}</p>
         </div>
-        <div className="upload-form">
-          <div className="field"><label htmlFor="new-account-code">Mã tài khoản</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="SHOP_1" /></div>
-          <div className="field"><label htmlFor="new-account-name">Tên hiển thị</label><input id="new-account-name" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Cửa hàng 1" /></div>
-          <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
-          {records.map((record) => {
-            const rowDraft = accountDrafts[record.code] ?? { display_name: record.display_name, display_order: String(record.display_order) };
-            return (
-              <article className="import-item" key={record.code}>
-                <div className="record-title"><strong>{record.display_name}</strong><span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span></div>
-                <span>{record.code} · thứ tự {record.display_order}</span>
-                <div className="account-edit-grid">
-                  <div className="field"><label htmlFor={`account-name-${record.code}`}>Tên hiển thị</label><input id={`account-name-${record.code}`} value={rowDraft.display_name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_name: event.target.value } }))} /></div>
-                  <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_order: event.target.value } }))} /></div>
-                </div>
-                <div className="row-actions"><button type="button" onClick={() => void saveAccount(record)}>Lưu thay đổi</button><button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button><button type="button" className="danger-button" onClick={() => void previewDelete(record)}>Xem trước khi xóa</button></div>
-              </article>
-            );
-          })}
-          {deletePreview ? <div className="notice" role="alert"><strong>{deletePreview.action === "hard_delete" ? "Xem trước khi xóa vĩnh viễn" : "Xem trước khi lưu trữ"}: {deletePreview.code}</strong><p>{countsText(deletePreview.dependency_counts)}</p><div className="field"><label htmlFor="delete-account-confirm">Nhập chính xác <strong>XOA {deletePreview.code}</strong></label><input id="delete-account-confirm" value={deletePhrase} onChange={(event) => setDeletePhrase(event.target.value)} /></div><button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={deletePhrase.trim() !== `XOA ${deletePreview.code}`}>Xác nhận xóa</button></div> : null}
-          {message ? <p className="upload-result" role="status">{message}</p> : null}
-          {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
-        </div>
-      </section>
-      <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />
-    </div>
+      </div>
+      <div className="upload-form">
+        <div className="field"><label htmlFor="new-account-code">Mã tài khoản</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="SHOP_1" /></div>
+        <div className="field"><label htmlFor="new-account-name">Tên hiển thị</label><input id="new-account-name" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Cửa hàng 1" /></div>
+        <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
+        {records.map((record) => {
+          const rowDraft = accountDrafts[record.code] ?? { display_name: record.display_name, display_order: String(record.display_order) };
+          return (
+            <article className="import-item" key={record.code}>
+              <div className="record-title"><strong>{record.display_name}</strong><span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span></div>
+              <span>{record.code} · thứ tự {record.display_order}</span>
+              <div className="account-edit-grid">
+                <div className="field"><label htmlFor={`account-name-${record.code}`}>Tên hiển thị</label><input id={`account-name-${record.code}`} value={rowDraft.display_name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_name: event.target.value } }))} /></div>
+                <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_order: event.target.value } }))} /></div>
+              </div>
+              <div className="row-actions"><button type="button" onClick={() => void saveAccount(record)}>Lưu thay đổi</button><button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button><button type="button" className="danger-button" onClick={() => void previewDelete(record)}>Xem trước khi xóa</button></div>
+            </article>
+          );
+        })}
+        {deletePreview ? <div className="notice" role="alert"><strong>{deletePreview.action === "hard_delete" ? "Xem trước khi xóa vĩnh viễn" : "Xem trước khi lưu trữ"}: {deletePreview.code}</strong><p>{countsText(deletePreview.dependency_counts)}</p><div className="field"><label htmlFor="delete-account-confirm">Nhập chính xác <strong>XOA {deletePreview.code}</strong></label><input id="delete-account-confirm" value={deletePhrase} onChange={(event) => setDeletePhrase(event.target.value)} /></div><button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={deletePhrase.trim() !== `XOA ${deletePreview.code}`}>Xác nhận xóa</button></div> : null}
+        {message ? <p className="upload-result" role="status">{message}</p> : null}
+        {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
+      </div>
+    </section>
   );
 }
 
@@ -943,8 +944,4 @@ function RecentImports({ rows }: { rows: ImportHistoryRow[] }) {
 function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpiRow[] }) {
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
   return <section className="section panel wide" id="accounts"><div className="section-heading"><div><p className="section-label">Theo tài khoản</p><h2>So sánh hiệu suất</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng so sánh hiệu suất tài khoản, có thể cuộn ngang" tabIndex={0}>{rows.length ? <table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => <tr key={row.account}><td>{row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.gmv)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td>{percent(kpiMap.get(row.account)?.target_achievement)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu tài khoản trong bộ lọc. Hãy nhập file TikTok hoặc đổi phạm vi ngày.</p>}</div></section>;
-}
-
-function DailyTable({ rows }: { rows: DailyRow[] }) {
-  return <section className="section panel wide"><div className="section-heading"><div><p className="section-label">Nhịp ngày</p><h2>14 ngày gần nhất</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng hiệu suất 14 ngày gần nhất, có thể cuộn ngang" tabIndex={0}>{rows.length ? <table><thead><tr><th>Ngày</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Đạt KPI</th></tr></thead><tbody>{rows.map((row) => <tr key={row.day}><td>{row.day}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.target_achievement)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu ngày trong bộ lọc.</p>}</div></section>;
 }

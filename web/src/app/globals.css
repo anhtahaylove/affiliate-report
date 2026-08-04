@@ -215,6 +215,30 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   letter-spacing: -0.035em;
 }
 
+.settings-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-tabs a {
+  padding: 10px 16px;
+  border-radius: 10px 10px 0 0;
+  color: var(--ink-soft);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.settings-tabs a:hover {
+  color: var(--ink);
+}
+
+.settings-tabs a.active {
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+
 .cockpit-header h1 {
   font-size: 2rem;
   line-height: 1.15;
@@ -511,7 +535,6 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .target-row span { display: block; }
 .target-row span { margin-top: 4px; color: var(--ink-soft); font-size: 0.84rem; }
 
-.progress-row,
 .user-card {
   display: grid;
   gap: 10px;
@@ -521,14 +544,11 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   background: var(--surface);
 }
 
-.progress-row strong,
-.progress-row span,
 .user-card strong,
 .user-card span {
   display: block;
 }
 
-.progress-row span,
 .user-card span {
   color: var(--ink-soft);
   font-size: 0.84rem;
