@@ -37,6 +37,13 @@ export type MonthlyKpiRow = {
   actual_commission: number;
   gap: number | null;
   target_achievement: number | null;
+  // "Hiệu suất gộp" — kể cả đơn Không đủ điều kiện. Chỉ để theo dõi sức bán, KHÔNG dùng thay
+  // actual_commission/target_achievement khi quyết định đã đạt mục tiêu hay chưa.
+  combined_commission: number;
+  combined_gap: number | null;
+  combined_target_achievement: number | null;
+  ineligible_commission: number;
+  ineligible_rate: number | null;
   order_lines: number;
 };
 

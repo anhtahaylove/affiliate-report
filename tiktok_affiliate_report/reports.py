@@ -13,7 +13,14 @@ from .db import accounts as account_registry
 from .db import import_batches, monthly_targets, order_line_versions
 
 
-MONTHLY_KPI_COLUMNS = ["month", "account", "daily_target", "days_in_scope", "monthly_target", "actual_commission", "gap", "target_achievement", "order_lines"]
+MONTHLY_KPI_COLUMNS = [
+    "month", "account", "daily_target", "days_in_scope", "monthly_target",
+    "actual_commission", "gap", "target_achievement",
+    # "Hiệu suất gộp": hoa hồng ước tính kể cả đơn Không đủ điều kiện — cho thấy sức bán thật sự,
+    # KHÔNG dùng để quyết định đã đạt mục tiêu (đơn ineligible sẽ không được TikTok trả tiền).
+    "combined_commission", "combined_gap", "combined_target_achievement", "ineligible_commission", "ineligible_rate",
+    "order_lines",
+]
 
 
 def _active_account_codes(engine: Engine) -> list[str]:
@@ -171,18 +178,23 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
     )[["month", "account", "target_commission"]].rename(columns={"target_commission": "daily_target"})
     df = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
     if df.empty:
-        actual = pd.DataFrame(columns=["month", "account", "actual_commission", "order_lines"])
+        actual = pd.DataFrame(columns=["month", "account", "actual_commission", "combined_commission", "order_lines"])
     else:
         df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
         df = df[df["order_date"].notna()].copy()
         df["month"] = df["order_date"].dt.to_period("M").dt.to_timestamp().dt.date
         df["actual_commission"] = df["estimated_commission"].where(df["status"] != "ineligible", 0)
+        # combined_commission = hoa hồng ước tính của MỌI đơn, kể cả Không đủ điều kiện — dùng cho
+        # lớp "Hiệu suất gộp" (theo dõi sức bán), tách biệt với actual_commission (tiền thật sẽ nhận).
+        df["combined_commission"] = df["estimated_commission"]
         per_account = df.groupby(["month", "account"], as_index=False).agg(
             actual_commission=("actual_commission", "sum"),
+            combined_commission=("combined_commission", "sum"),
             order_lines=("id", "count"),
         )
         totals = df.groupby("month", as_index=False).agg(
             actual_commission=("actual_commission", "sum"),
+            combined_commission=("combined_commission", "sum"),
             order_lines=("id", "count"),
         )
         totals["account"] = "ALL"
@@ -222,6 +234,7 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
             dtype="Int64",
         )
     out["actual_commission"] = pd.to_numeric(out["actual_commission"], errors="coerce").astype("Int64")
+    out["combined_commission"] = pd.to_numeric(out["combined_commission"], errors="coerce").astype("Int64")
     out["order_lines"] = out["order_lines"].fillna(0).astype(int)
     out["days_in_scope"] = out["month"].map(days_in_scope)
     if statuses:
@@ -230,6 +243,11 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
     out["gap"] = out["actual_commission"] - out["monthly_target"]
     denominator = pd.to_numeric(out["monthly_target"], errors="coerce").where(lambda values: values > 0)
     out["target_achievement"] = out["actual_commission"].div(denominator)
+    out["combined_gap"] = out["combined_commission"] - out["monthly_target"]
+    out["combined_target_achievement"] = out["combined_commission"].div(denominator)
+    out["ineligible_commission"] = out["combined_commission"] - out["actual_commission"]
+    combined_denominator = pd.to_numeric(out["combined_commission"], errors="coerce").where(lambda values: values > 0)
+    out["ineligible_rate"] = out["ineligible_commission"].div(combined_denominator)
     return out[MONTHLY_KPI_COLUMNS].sort_values(["month", "account"])
 
 

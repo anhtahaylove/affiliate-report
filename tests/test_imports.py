@@ -197,6 +197,37 @@ def test_monthly_kpi_does_not_report_missing_imports_as_zero_actual():
     assert kpi.empty
 
 
+def test_monthly_kpi_combined_layer_includes_ineligible_without_touching_actual():
+    # "Hiệu suất gộp": actual_commission phải giữ nguyên logic cũ (loại ineligible), trong khi
+    # combined_commission phản ánh sức bán thật sự (gồm cả ineligible) để theo dõi riêng, không
+    # được dùng làm số chính thức quyết định đã đạt mục tiêu hay chưa.
+    e = engine()
+    with e.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=1000))
+    import_rows(
+        e,
+        filename="a.xlsx",
+        file_bytes=b"a",
+        account="CHIISTORE",
+        rows=[
+            raw_row(order="O1", sku="S1", gmv="100.000", commission="10.000"),
+            raw_row(order="O2", sku="S2", gmv="50.000", status="Không đủ điều kiện", commission="5.000"),
+        ],
+    )
+
+    kpi = monthly_kpi(e)
+    row = kpi[(kpi["account"] == "CHIISTORE") & (kpi["month"] == date(2026, 3, 1))].iloc[0]
+
+    assert row["actual_commission"] == 20000
+    assert row["combined_commission"] == 35000
+    assert row["ineligible_commission"] == 15000
+    assert row["ineligible_rate"] == pytest.approx(15000 / 35000)
+    assert row["monthly_target"] == 31000
+    assert row["target_achievement"] == pytest.approx(20000 / 31000)
+    assert row["combined_target_achievement"] == pytest.approx(35000 / 31000)
+    assert row["combined_gap"] == 35000 - 31000
+
+
 def test_google_sheets_output_fills_calendar_gaps_and_missing_kpi_is_blank():
     e = engine()
     import_rows(

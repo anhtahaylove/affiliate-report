@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.11 - 2026-08-05
+
+- Thêm thẻ KPI mới trên Dashboard: **"Tiến độ gộp (kể cả Không đủ điều kiện)"** — hoa hồng ước tính của mọi đơn kể cả bị loại, hiện cạnh thẻ "Tiến độ mục tiêu" chính thức (không đổi, vẫn chỉ tính tiền thật sẽ nhận). Thẻ mới kèm dòng "mất X đ (Y%) do không đủ điều kiện" để thấy ngay đang hao hụt bao nhiêu doanh số.
+- Đây là lớp xem bổ sung cho việc theo dõi sức bán, tách biệt hoàn toàn khỏi số liệu chính thức dùng để đánh giá đã đạt mục tiêu tháng hay chưa — tránh báo "đạt 100%" trong khi một phần tiền đó chắc chắn không về.
+
 ## v1.2.10 - 2026-08-05
 
 - Trang Tài khoản chỉ còn một định danh — Mã tài khoản (đã bỏ "Tên hiển thị" riêng, dùng chung một giá trị duy nhất).
