@@ -122,7 +122,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
         },
     )
 
-    def capture_schedule(path, sha256, log_path, shutdown, *, status_path, target_version, installer_size):
+    def capture_schedule(path, sha256, log_path, shutdown, *, status_path, target_version, installer_size, instance_state_path=None):
         scheduled.update(
             path=path,
             sha256=sha256,
@@ -131,6 +131,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
             status_path=status_path,
             target_version=target_version,
             installer_size=installer_size,
+            instance_state_path=instance_state_path,
         )
 
     monkeypatch.setattr(api_module, "schedule_installer", capture_schedule)
@@ -165,6 +166,7 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     assert scheduled["status_path"].name == "update-status.json"
     assert scheduled["target_version"] == "1.2.1"
     assert scheduled["installer_size"] == installer.stat().st_size
+    assert scheduled["instance_state_path"].name == "instance.json"
     progress = client.get("/api/v1/admin/update/progress")
     assert progress.status_code == 200
     assert progress.json()["phase"] == "verifying"

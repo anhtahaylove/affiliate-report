@@ -374,6 +374,7 @@ def schedule_installer(
     target_version: str,
     installer_size: int | None = None,
     delay_seconds: float = 1.0,
+    instance_state_path: Path | None = None,
 ) -> None:
     installer = Path(installer_path).resolve()
     expected = expected_sha256.strip().upper()
@@ -383,6 +384,10 @@ def schedule_installer(
         raise UpdateError("Phiên bản cập nhật không hợp lệ.")
     log = Path(log_path).resolve()
     status = Path(status_path).resolve()
+    # installer sits at <data_dir>/updates/v<version>/<name>.exe; instance.json (written by
+    # desktop_launcher on every launch) lives at <data_dir>/instance.json unless the caller
+    # points at a different location explicitly.
+    state = Path(instance_state_path).resolve() if instance_state_path else installer.parent.parent.parent / "instance.json"
     size = installer_size or installer.stat().st_size
     write_update_status(
         status,
@@ -391,7 +396,7 @@ def schedule_installer(
         bytes_downloaded=size,
         bytes_total=size,
     )
-    _launch_update_helper(installer, expected, log, status, target_version, size)
+    _launch_update_helper(installer, expected, log, status, target_version, size, state)
     _wait_for_helper_handshake(status, target_version, installer.parent / "updater-bootstrap.log")
     timer = threading.Timer(delay_seconds, shutdown)
     timer.daemon = True
@@ -405,6 +410,7 @@ def _launch_update_helper(
     status_path: Path,
     target_version: str,
     installer_size: int,
+    instance_state_path: Path,
 ) -> None:
     if not _windows_frozen():
         raise UpdateError("Cập nhật tự động chỉ chạy trong bản cài Windows.")
@@ -473,6 +479,8 @@ def _launch_update_helper(
                     target_version,
                     "-InstallerSize",
                     str(installer_size),
+                    "-InstanceStatePath",
+                    str(instance_state_path),
                 ],
                 cwd=installer_path.parent,
                 close_fds=True,
@@ -517,7 +525,8 @@ param(
     [Parameter(Mandatory=$true)][string]$InstallerLog,
     [Parameter(Mandatory=$true)][string]$StatusPath,
     [Parameter(Mandatory=$true)][string]$TargetVersion,
-    [Parameter(Mandatory=$true)][int64]$InstallerSize
+    [Parameter(Mandatory=$true)][int64]$InstallerSize,
+    [Parameter(Mandatory=$true)][string]$InstanceStatePath
 )
 $ErrorActionPreference = 'Stop'
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
@@ -592,6 +601,36 @@ function Wait-FileUnlocked([string]$Path, [int]$TimeoutMs) {
     }
     return $false
 }
+function Test-Health([string]$Url) {
+    try {
+        $client = [System.Net.WebClient]::new()
+        try {
+            $client.DownloadString($Url + '/health') | Out-Null
+            return $true
+        } finally { $client.Dispose() }
+    } catch {
+        return $false
+    }
+}
+function Wait-AppHealthy([string]$StatePath, [int]$TimeoutMs) {
+    # The relaunched app writes instance.json (with its /health URL) once its window-station-
+    # bound startup (single-instance mutex, then the system tray icon) clears — that step has
+    # been observed to stall for several seconds right after a fresh install, likely antivirus
+    # scanning the newly-written exe. Poll for a real response instead of assuming Start-Child
+    # succeeding means the app is actually usable yet.
+    $deadline = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($deadline.ElapsedMilliseconds -lt $TimeoutMs) {
+        if ([System.IO.File]::Exists($StatePath)) {
+            try {
+                $raw = [System.IO.File]::ReadAllText($StatePath)
+                $match = [System.Text.RegularExpressions.Regex]::Match($raw, '"url"\s*:\s*"([^"]+)"')
+                if ($match.Success -and (Test-Health $match.Groups[1].Value)) { return $true }
+            } catch {}
+        }
+        Start-Sleep -Milliseconds 400
+    }
+    return $false
+}
 $parentExited = $false
 try {
     Write-UpdateLog 'Updater helper started.'
@@ -614,6 +653,15 @@ try {
     if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
     Write-UpdateStatus 'restarting' $null
     Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
+    if (-not (Wait-AppHealthy $InstanceStatePath 12000)) {
+        Write-UpdateLog 'Warning: app did not respond within 12s after restart; retrying launch once.'
+        Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
+        if (Wait-AppHealthy $InstanceStatePath 10000) {
+            Write-UpdateLog 'App responded after retry launch.'
+        } else {
+            Write-UpdateLog 'Warning: app still not responding after retry; the update itself succeeded, but the user may need to reopen it manually.'
+        }
+    }
     Write-UpdateLog 'Update installed successfully.'
 } catch {
     $failure = $_.Exception.Message

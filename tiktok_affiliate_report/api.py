@@ -837,6 +837,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
                         status_path=status_path,
                         target_version=downloaded_version,
                         installer_size=installer_path.stat().st_size,
+                        instance_state_path=data_dir / "instance.json",
                     )
                 except Exception as exc:
                     try:

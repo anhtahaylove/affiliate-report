@@ -293,7 +293,8 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
 
     monkeypatch.setattr(updater.subprocess, "Popen", fake_popen)
 
-    updater._launch_update_helper(installer, expected, tmp_path / "updater.log", tmp_path / "update-status.json", "1.2.1", installer.stat().st_size)
+    instance_state = tmp_path / "instance.json"
+    updater._launch_update_helper(installer, expected, tmp_path / "updater.log", tmp_path / "update-status.json", "1.2.1", installer.stat().st_size, instance_state)
 
     helper_path = installer.parent / "install-update.ps1"
     helper = helper_path.read_text(encoding="utf-8-sig")
@@ -309,11 +310,21 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     assert "Wait-FileUnlocked $AppExe 15000" in helper
     assert helper.index("Wait-FileUnlocked $AppExe") > helper.index("$parentExited = $true")
     assert helper.index("Wait-FileUnlocked $AppExe") < helper.index("Start-Child $Installer")
+    # Start-Child launching the app back up isn't proof it's usable — the relaunch has been
+    # observed to stall for several seconds (antivirus scanning the freshly-installed exe is the
+    # leading theory). Wait for a real /health response and retry the launch once before giving up.
+    assert "function Wait-AppHealthy" in helper
+    assert "Wait-AppHealthy $InstanceStatePath 12000" in helper
+    assert "Wait-AppHealthy $InstanceStatePath 10000" in helper
+    restarting_index = helper.index("Write-UpdateStatus 'restarting'")
+    first_start_child_index = helper.index("Start-Child $AppExe", restarting_index)
+    assert first_start_child_index < helper.index("Wait-AppHealthy $InstanceStatePath 12000")
     for forbidden in ("Wait-Process", "Get-FileHash", "Get-Process", "Start-Process", "Remove-Item"):
         assert forbidden not in helper
     assert captured["args"][0] == str(powershell)
     assert captured["args"][captured["args"].index("-File") + 1] == str(helper_path)
     assert captured["args"][captured["args"].index("-ExpectedSha256") + 1] == expected
+    assert captured["args"][captured["args"].index("-InstanceStatePath") + 1] == str(instance_state)
     assert captured["kwargs"]["cwd"] == installer.parent
     assert captured["kwargs"]["creationflags"] == 48
     assert captured["kwargs"]["stdout"] is captured["kwargs"]["stderr"]
@@ -363,6 +374,8 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
             "1.2.1",
             "-InstallerSize",
             str(installer.stat().st_size),
+            "-InstanceStatePath",
+            str(tmp_path / "instance.json"),
         ],
         capture_output=True,
         text=True,
@@ -414,6 +427,62 @@ def test_wait_file_unlocked_detects_a_file_still_held_open_by_another_process(tm
     assert elapsed < 5, f"Wait-FileUnlocked should give up around its own timeout, took {elapsed:.1f}s"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell + real sockets")
+def test_wait_app_healthy_polls_instance_state_and_health_endpoint(tmp_path):
+    # Regression test for the v1.2.11 restart hang: Start-Child launching the relaunched app is
+    # not proof it's usable — the relaunch can stall for several seconds right after install.
+    # Exercise the real Wait-AppHealthy/Test-Health functions against an actual HTTP listener and
+    # actual instance.json contents, not mocks.
+    import http.server
+
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    helper_source = updater._powershell_helper_script()
+    health_match = re.search(r"function Test-Health\b.*?\n}\n", helper_source, re.DOTALL)
+    wait_match = re.search(r"function Wait-AppHealthy\b.*?\n}\n", helper_source, re.DOTALL)
+    assert health_match, "Test-Health function not found in generated helper script"
+    assert wait_match, "Wait-AppHealthy function not found in generated helper script"
+    probe = tmp_path / "probe.ps1"
+    probe.write_text(health_match.group(0) + "\n" + wait_match.group(0) + "\nWrite-Output (Wait-AppHealthy $args[0] ([int]$args[1]))\n", encoding="utf-8-sig")
+    state_path = tmp_path / "instance.json"
+
+    def run_probe(timeout_ms):
+        return subprocess.run(
+            [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(state_path), str(timeout_ms)],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+
+    # No instance.json yet at all -> gives up around its own timeout, no exception.
+    started = time.monotonic()
+    missing = run_probe(300)
+    elapsed = time.monotonic() - started
+    assert missing.stdout.strip() == "False", missing.stderr
+    assert elapsed < 5
+
+    class HealthHandler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}"
+        state_path.write_text(json.dumps({"pid": 1234, "url": url}), encoding="utf-8")
+        healthy = run_probe(5000)
+        assert healthy.stdout.strip() == "True", healthy.stderr
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch):
     installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"tampered")
@@ -455,7 +524,7 @@ def test_schedule_installer_waits_for_helper_handshake_before_shutdown(tmp_path,
     status_path = tmp_path / "update-status.json"
     shutdown = threading.Event()
 
-    def fake_launch(installer_path, expected_sha256, log_path, status, target_version, installer_size):
+    def fake_launch(installer_path, expected_sha256, log_path, status, target_version, installer_size, instance_state_path):
         assert installer_path == installer.resolve()
         assert expected_sha256 == expected
         assert installer_size == len(b"installer")

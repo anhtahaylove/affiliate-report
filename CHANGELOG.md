@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.2.12 - 2026-08-05
+
+- Sửa lỗi app đôi khi không tự mở lại sau khi cài xong bản cập nhật (đứng ở "Đang chờ kết nối lại…" dù bản cài đã thành công). Nguyên nhân nghi vấn nhiều khả năng nhất: phần mềm diệt virus quét file .exe mới cài trước khi cho chạy, khiến bước tự mở lại app bị treo vài giây tới cả chục giây. Updater giờ chờ xác nhận app thật sự phản hồi (gọi `/health`) sau khi mở lại, và tự thử mở lại thêm 1 lần nếu chưa thấy phản hồi trong 12 giây, thay vì coi "đã gọi lệnh mở" là xong việc.
+- Bản cập nhật (file cài đè, thay thế .exe) vẫn thành công như trước — đây chỉ là bước "mở lại app cho người dùng thấy" sau khi cài xong, không ảnh hưởng tới việc cài đặt có thành công hay không.
+
 ## v1.2.11 - 2026-08-05
 
 - Thêm thẻ KPI mới trên Dashboard: **"Tiến độ gộp (kể cả Không đủ điều kiện)"** — hoa hồng ước tính của mọi đơn kể cả bị loại, hiện cạnh thẻ "Tiến độ mục tiêu" chính thức (không đổi, vẫn chỉ tính tiền thật sẽ nhận). Thẻ mới kèm dòng "mất X đ (Y%) do không đủ điều kiện" để thấy ngay đang hao hụt bao nhiêu doanh số.
