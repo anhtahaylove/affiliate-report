@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.2.6 - 2026-08-04
+
+- Sửa lỗi tự đóng ứng dụng để cài bản cập nhật có thể treo ở popup Windows "Failed to remove temporary directory" (cảnh báo gốc từ PyInstaller khi không xoá được thư mục tạm `_MEI...` do vẫn còn thư viện đang được nạp). App giờ thoát tiến trình ngay sau khi đã dọn dẹp xong (tắt tray, lưu trạng thái, nhả khoá single-instance) thay vì để trình bao bọc PyInstaller tự dọn dẹp và có thể treo — updater không còn bị timeout chờ app đóng.
+
 ## v1.2.5 - 2026-08-04
 
 - Trang Tài khoản chỉ còn CRUD tài khoản (thêm/sửa/lưu trữ/xóa); bảng so sánh hiệu suất đã dời hẳn về Dashboard, không còn trùng lặp và không còn bộ lọc gây hiểu nhầm phạm vi ảnh hưởng.

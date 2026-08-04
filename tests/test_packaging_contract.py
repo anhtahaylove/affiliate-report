@@ -27,9 +27,9 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    assert APP_VERSION == "1.2.5"
-    assert "[string]$AppVersion = '1.2.5'" in build
-    assert '#define MyAppVersion "1.2.5"' in installer
+    assert APP_VERSION == "1.2.6"
+    assert "[string]$AppVersion = '1.2.6'" in build
+    assert '#define MyAppVersion "1.2.6"' in installer
     assert "actions/checkout@v7" in workflow
     assert "actions/setup-python@v7" in workflow
     assert "pnpm/action-setup@v6" in workflow
@@ -122,9 +122,9 @@ def test_windows_installer_smoke_is_version_parameterized():
 
     assert "workflow_dispatch:" in workflow
     assert "current_version:" in workflow
-    assert 'default: "1.2.5"' in workflow
+    assert 'default: "1.2.6"' in workflow
     assert "previous_version:" in workflow
-    assert 'default: "1.2.4"' in workflow
+    assert 'default: "1.2.5"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow

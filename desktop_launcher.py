@@ -215,6 +215,13 @@ def main() -> None:
             tray_thread.join(timeout=3)
         _clear_instance_state(state_path)
         _release_single_instance(mutex_handle)
+        if getattr(sys, "frozen", False):
+            # A normal return lets PyInstaller's onefile bootloader try to delete its _MEI
+            # extraction dir; loaded C-extension DLLs make that fail with a blocking "Failed to
+            # remove temporary directory" dialog, which hangs exit and breaks the updater's
+            # bounded wait for this process to close. Hard-exit skips that cleanup path.
+            sys.stdout.flush()
+            os._exit(0)
 
 
 if __name__ == "__main__":
