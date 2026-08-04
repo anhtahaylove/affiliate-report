@@ -347,10 +347,16 @@ function AnalyticsTrend({ rows }: { rows: AnalyticsResponse["trend"] }) {
 }
 
 function AnalyticsBreakdown({ title, rows, labelKey }: { title: string; rows: AnalyticsResponse["status_breakdown"]; labelKey: "status" | "account" }) {
+  // Bảng "Theo trạng thái" nhóm chính theo status, nên với dòng "Không đủ điều kiện" thì
+  // actual_gmv/actual_commission luôn = 0 do định nghĩa (bị trừ hết) — hiện số đó ở đây sẽ trông
+  // như thiếu dữ liệu. Dùng gross_gmv/initial_commission (số thô, chưa trừ đơn không đủ điều
+  // kiện) để mỗi dòng vẫn phản ánh đúng quy mô đơn thật sự có trong file gốc. Bảng "Theo tài
+  // khoản" thì giữ actual vì đó là con số thực nhận có ý nghĩa để so sánh giữa các account.
+  const byStatus = labelKey === "status";
   return (
     <section className="section panel">
       <div className="section-heading"><div><p className="section-label">Phân bổ</p><h2>{title}</h2></div></div>
-      <div className="table-wrap" role="region" aria-label={`${title}, có thể cuộn ngang`} tabIndex={0}>{rows.length ? <table><thead><tr><th>{labelKey === "status" ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>GMV</th><th>Hoa hồng</th><th>Tỷ trọng HH</th></tr></thead><tbody>{rows.map((row) => <tr key={row[labelKey] ?? "unknown"}><td>{labelKey === "status" ? <StatusBadge status={row.status} /> : accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu {title.toLowerCase()}.</p>}</div>
+      <div className="table-wrap" role="region" aria-label={`${title}, có thể cuộn ngang`} tabIndex={0}>{rows.length ? <table><thead><tr><th>{byStatus ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>{byStatus ? "GMV" : "GMV thực tế"}</th><th>{byStatus ? "Hoa hồng ước tính" : "Hoa hồng thực tế"}</th><th>Tỷ trọng HH</th></tr></thead><tbody>{rows.map((row) => <tr key={row[labelKey] ?? "unknown"}><td>{byStatus ? <StatusBadge status={row.status} /> : accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(byStatus ? row.gross_gmv : row.actual_gmv)}</td><td>{formatMoney(byStatus ? row.initial_commission : row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu {title.toLowerCase()}.</p>}</div>
     </section>
   );
 }
@@ -432,7 +438,7 @@ function OrdersPage({ filters }: { filters: UrlFilters }) {
   return (
     <section className="section panel wide">
       <div className="section-heading"><div><p className="section-label">Danh sách đơn hàng</p><h2>{integer.format(total)} đơn trong bộ lọc</h2></div><div className="row-actions"><a className="button-link" download="tiktok-affiliate-orders.xlsx" href={ordersExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end, search: filters.search })}>Xuất toàn bộ ra Excel</a><button type="button" onClick={() => downloadCsv(`orders-${filters.start}-${filters.end}.csv`, orders)} disabled={!orders.length}>Xuất CSV trang này</button></div></div>
-      <div className="table-wrap orders-table" role="region" aria-label="Danh sách đơn hàng, có thể cuộn ngang" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Mã đơn</th><th>SKU</th><th>Sản phẩm</th><th>Trạng thái</th><th>Ngày</th><th>GMV</th><th>Hoa hồng</th><th>Chi tiết</th></tr></thead><tbody>{orders.map((row, index) => <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}><td>{row.account}</td><td>{row.order_id ?? "—"}</td><td>{row.sku_id ?? "—"}</td><td className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</td><td><StatusBadge status={row.status} /></td><td>{row.order_date ?? "—"}</td><td>{formatMoney(row.gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td><details className="order-detail"><summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary><span>ID sản phẩm: {row.product_id ?? "—"}</span><span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span><span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span><span>Loại đơn: {row.order_type ?? "—"}</span><span>Loại hoa hồng: {row.commission_type ?? "—"}</span><span>Ngày quyết toán: {row.settlement_date ?? "—"}</span><span>Đã nhận: {formatMoney(row.final_received)}</span></details></td></tr>)}</tbody></table>{!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}</div>
+      <div className="table-wrap orders-table" role="region" aria-label="Danh sách đơn hàng, có thể cuộn ngang" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Mã đơn</th><th>SKU</th><th>Sản phẩm</th><th>Trạng thái</th><th>Ngày</th><th>SL bán</th><th>GMV</th><th>Hoa hồng ước tính</th><th>Chi tiết</th></tr></thead><tbody>{orders.map((row, index) => <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}><td>{row.account}</td><td>{row.order_id ?? "—"}</td><td>{row.sku_id ?? "—"}</td><td className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</td><td><StatusBadge status={row.status} /></td><td>{row.order_date ?? "—"}</td><td>{row.units_sold == null ? "—" : integer.format(row.units_sold)}</td><td>{formatMoney(row.gmv)}</td><td title="Hoa hồng ước tính theo file gốc, chưa trừ đơn Không đủ điều kiện">{formatMoney(row.estimated_commission)}</td><td><details className="order-detail"><summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary><span>ID sản phẩm: {row.product_id ?? "—"}</span><span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span><span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span><span>Loại đơn: {row.order_type ?? "—"}</span><span>Loại hoa hồng: {row.commission_type ?? "—"}</span><span>Ngày quyết toán: {row.settlement_date ?? "—"}</span><span>Hoa hồng thực tế (sau khi trừ không đủ điều kiện): {formatMoney(row.actual_commission)}</span><span>Đã nhận: {formatMoney(row.final_received)}</span></details></td></tr>)}</tbody></table>{!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}</div>
       <nav className="pagination" aria-label="Phân trang đơn hàng"><button type="button" onClick={() => goToPage(filters.page - 1)} disabled={filters.page <= 1}>Trang trước</button><span>Trang {integer.format(filters.page)} / {integer.format(totalPages)}</span><button type="button" onClick={() => goToPage(filters.page + 1)} disabled={filters.page >= totalPages}>Trang sau</button></nav>
     </section>
   );
@@ -530,15 +536,15 @@ function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: 
 function AccountsPage() {
   const [records, setRecords] = useState<AccountItem[]>([]);
   const [hardDeleteSupported, setHardDeleteSupported] = useState(false);
-  const [draft, setDraft] = useState({ code: "", display_name: "" });
-  const [accountDrafts, setAccountDrafts] = useState<Record<string, { display_name: string; display_order: string }>>({});
+  const [draft, setDraft] = useState({ code: "" });
+  const [accountDrafts, setAccountDrafts] = useState<Record<string, { display_order: string }>>({});
   const [deletePreview, setDeletePreview] = useState<AccountDeletePreview | null>(null);
   const [deletePhrase, setDeletePhrase] = useState("");
   const [message, setMessage] = useState("");
   const refreshAccounts = useCallback(async () => {
     const data = await loadAccounts();
     setRecords(data.items);
-    setAccountDrafts(Object.fromEntries(data.items.map((item) => [item.code, { display_name: item.display_name, display_order: String(item.display_order) }])));
+    setAccountDrafts(Object.fromEntries(data.items.map((item) => [item.code, { display_order: String(item.display_order) }])));
     setHardDeleteSupported(data.hard_delete_supported);
   }, []);
   useEffect(() => {
@@ -550,11 +556,12 @@ function AccountsPage() {
   }, [refreshAccounts]);
   async function create() {
     const code = draft.code.trim().toUpperCase();
-    const displayName = draft.display_name.trim() || code;
     if (!code) return setMessage("Hãy nhập mã tài khoản.");
     try {
-      await createAccount({ code, display_name: displayName });
-      setDraft({ code: "", display_name: "" });
+      // Mỗi account chỉ có một định danh — mã tài khoản. display_name vẫn tồn tại trong DB
+      // (không đổi schema) nhưng luôn khớp code, không cho người dùng đặt riêng nữa.
+      await createAccount({ code, display_name: code });
+      setDraft({ code: "" });
       setMessage(`Đã tạo tài khoản ${code}.`);
       await refreshAccounts();
     } catch (reason) {
@@ -564,7 +571,6 @@ function AccountsPage() {
   async function patch(record: AccountItem, changes: Partial<AccountItem>) {
     try {
       await updateAccount(record.code, {
-        display_name: changes.display_name,
         display_order: changes.display_order,
         active: changes.active,
       });
@@ -578,11 +584,9 @@ function AccountsPage() {
   async function saveAccount(record: AccountItem) {
     const current = accountDrafts[record.code];
     if (!current) return;
-    const name = current.display_name.trim();
     const order = Number(current.display_order);
-    if (!name) return setMessage("Tên hiển thị không được để trống.");
     if (!Number.isInteger(order)) return setMessage("Thứ tự hiển thị phải là số nguyên.");
-    await patch(record, { display_name: name, display_order: order });
+    await patch(record, { display_order: order });
   }
   async function previewDelete(record: AccountItem) {
     try {
@@ -619,18 +623,16 @@ function AccountsPage() {
         </div>
       </div>
       <div className="upload-form">
-        <div className="field"><label htmlFor="new-account-code">Mã tài khoản</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="SHOP_1" /></div>
-        <div className="field"><label htmlFor="new-account-name">Tên hiển thị</label><input id="new-account-name" value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Cửa hàng 1" /></div>
+        <div className="field"><label htmlFor="new-account-code">Mã tài khoản</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft({ code: event.target.value })} placeholder="SHOP_1 hoặc username TikTok" /></div>
         <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
         {records.map((record) => {
-          const rowDraft = accountDrafts[record.code] ?? { display_name: record.display_name, display_order: String(record.display_order) };
+          const rowDraft = accountDrafts[record.code] ?? { display_order: String(record.display_order) };
           return (
             <article className="import-item" key={record.code}>
-              <div className="record-title"><strong>{record.display_name}</strong><span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span></div>
-              <span>{record.code} · thứ tự {record.display_order}</span>
+              <div className="record-title"><strong>{record.code}</strong><span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span></div>
+              <span>Thứ tự {record.display_order}</span>
               <div className="account-edit-grid">
-                <div className="field"><label htmlFor={`account-name-${record.code}`}>Tên hiển thị</label><input id={`account-name-${record.code}`} value={rowDraft.display_name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_name: event.target.value } }))} /></div>
-                <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_order: event.target.value } }))} /></div>
+                <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { display_order: event.target.value } }))} /></div>
               </div>
               <div className="row-actions"><button type="button" onClick={() => void saveAccount(record)}>Lưu thay đổi</button><button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button><button type="button" className="danger-button" onClick={() => void previewDelete(record)}>Xem trước khi xóa</button></div>
             </article>
@@ -951,5 +953,5 @@ function RecentImports({ rows }: { rows: ImportHistoryRow[] }) {
 
 function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpiRow[] }) {
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
-  return <section className="section panel wide" id="accounts"><div className="section-heading"><div><p className="section-label">Theo tài khoản</p><h2>So sánh hiệu suất</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng so sánh hiệu suất tài khoản, có thể cuộn ngang" tabIndex={0}>{rows.length ? <table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => { const achievement = kpiMap.get(row.account)?.target_achievement; return <tr key={row.account}><td>{row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.gmv)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td><span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></td></tr>; })}</tbody></table> : <p className="empty">Chưa có dữ liệu tài khoản trong bộ lọc. Hãy nhập file TikTok hoặc đổi phạm vi ngày.</p>}</div></section>;
+  return <section className="section panel wide" id="accounts"><div className="section-heading"><div><p className="section-label">Theo tài khoản</p><h2>So sánh hiệu suất</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng so sánh hiệu suất tài khoản, có thể cuộn ngang" tabIndex={0}>{rows.length ? <table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>SL bán</th><th>GMV</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => { const achievement = kpiMap.get(row.account)?.target_achievement; return <tr key={row.account}><td>{row.account}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{formatMoney(row.gmv)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td><span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></td></tr>; })}</tbody></table> : <p className="empty">Chưa có dữ liệu tài khoản trong bộ lọc. Hãy nhập file TikTok hoặc đổi phạm vi ngày.</p>}</div></section>;
 }

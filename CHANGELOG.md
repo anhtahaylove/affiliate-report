@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.10 - 2026-08-05
+
+- Trang Tài khoản chỉ còn một định danh — Mã tài khoản (đã bỏ "Tên hiển thị" riêng, dùng chung một giá trị duy nhất).
+- Sửa lỗi hiển thị 0đ ở các đơn "Không đủ điều kiện": cột "Hoa hồng ước tính" trong bảng Đơn hàng và bảng "Theo trạng thái" trong Phân tích giờ hiện đúng số ước tính từ file gốc thay vì luôn là 0 (0đ vẫn đúng cho "Hoa hồng thực tế" tổng — đơn ineligible không tính vào tổng thực nhận, nhưng số ước tính của từng đơn không được phép biến mất khỏi màn hình).
+- Thêm cột "Số món bán ra" vào bảng Đơn hàng và bảng So sánh hiệu suất (Dashboard), khớp với chỉ số REPORT_AFF.xlsx người dùng đang theo dõi thủ công.
+- Bộ lọc Tài khoản/Trạng thái giờ giới hạn chiều cao ~3 hàng và cuộn nội bộ khi có nhiều lựa chọn, không còn đẩy cả trang xuống dài dằng dặc.
+
 ## v1.2.9 - 2026-08-05
 
 - Không có thay đổi tính năng. Bản này chỉ để xác nhận thật bản vá "Installer exited with code 5" ở v1.2.8: cài v1.2.8 trực tiếp (không qua auto-update, do máy đang mắc kẹt ở bản lỗi cũ), rồi từ đó bấm cập nhật thật lên v1.2.9 qua đúng luồng trong app để chứng minh `Wait-FileUnlocked` hoạt động khi bên thực hiện cập nhật đã có bản vá.

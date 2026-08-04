@@ -332,6 +332,12 @@ def test_analytics_returns_finance_dimensions_settlement_quality_and_forecast():
     assert result["summary"]["actual_commission"] == 35000
     assert result["previous_period"]["summary"]["orders"] == 1
     assert {row["status"] for row in result["status_breakdown"]} == {"settled", "pending", "ineligible"}
+    ineligible_row = next(row for row in result["status_breakdown"] if row["status"] == "ineligible")
+    # actual_commission == 0 là đúng thiết kế (đơn ineligible không tính vào tổng thực tế), nhưng
+    # initial_commission phải giữ nguyên giá trị ước tính thô — không được zero-out theo, nếu
+    # không UI sẽ hiện "0" cho toàn bộ nhóm ineligible dù file gốc có số liệu.
+    assert ineligible_row["actual_commission"] == 0
+    assert ineligible_row["initial_commission"] == 12000
     assert result["account_breakdown"][0]["commission_share"] == 1
     assert result["products"][0]["id"] == "P1"
     assert next(row for row in result["products"] if row["id"] == "P2")["cancellation_rate"] == 1

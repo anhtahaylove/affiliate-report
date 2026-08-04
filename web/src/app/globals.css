@@ -346,9 +346,16 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .account-options {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 8px;
   min-width: 0;
   max-width: 100%;
+  /* Caps growth to ~3 rows so a long account/status list scrolls in place instead of pushing
+     the rest of the page down; harmless when there are few options (never reaches the cap). */
+  max-height: 160px;
+  overflow-y: auto;
+  padding: 2px 4px 2px 2px;
+  margin: -2px -4px -2px -2px;
 }
 
 .account-option {
@@ -917,7 +924,7 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .account-edit-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 140px;
+  grid-template-columns: 140px;
   gap: 10px;
 }
 

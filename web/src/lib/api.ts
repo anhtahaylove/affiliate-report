@@ -242,6 +242,7 @@ export type AnalyticsBreakdownRow = {
   orders: number;
   order_lines: number;
   gross_gmv: number;
+  initial_commission: number;
   actual_gmv: number;
   actual_commission: number;
   order_share: number;

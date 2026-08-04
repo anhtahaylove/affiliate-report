@@ -389,6 +389,7 @@ def _breakdown(df: pd.DataFrame, column: str, key: str) -> list[dict[str, object
         orders=("order_key", "nunique"),
         order_lines=("id", "count"),
         gross_gmv=("gmv", "sum"),
+        initial_commission=("initial_commission", "sum"),
         actual_gmv=("actual_gmv", "sum"),
         actual_commission=("actual_commission", "sum"),
     )
@@ -401,6 +402,10 @@ def _breakdown(df: pd.DataFrame, column: str, key: str) -> list[dict[str, object
             "orders": int(row.orders),
             "order_lines": int(row.order_lines),
             "gross_gmv": int(row.gross_gmv),
+            # Hoa hồng ước tính thô (chưa trừ đơn "Không đủ điều kiện") — actual_commission luôn
+            # bằng 0 khi cả nhóm là ineligible (đúng theo thiết kế, xem docs/DATA_MAPPING.md), nên
+            # UI cần trường này để không hiển thị "0" gây hiểu nhầm là thiếu dữ liệu.
+            "initial_commission": int(row.initial_commission),
             "actual_gmv": int(row.actual_gmv),
             "actual_commission": int(row.actual_commission),
             "order_share": int(row.orders) / total_orders,
