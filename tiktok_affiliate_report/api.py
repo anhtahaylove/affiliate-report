@@ -42,7 +42,7 @@ from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .db import accounts as account_registry
 from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
 from .parser import read_xlsx
-from .reports import analytics, daily_report, monthly_kpi, orders, overview, sheets_output
+from .reports import analytics, count_orders, daily_report, monthly_kpi, orders, overview, sheets_output
 from .reset_data import (
     RESET_CONFIRMATION_PHRASE,
     RESTORE_CONFIRMATION_PHRASE,
@@ -597,9 +597,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         current: Principal = Depends(principal),
     ) -> dict[str, Any]:
         accounts = permitted_accounts(current, _list(account))
-        df = orders(_engine(app), accounts, start, end, _list(status), search)
-        total = len(df)
-        page = df.iloc[offset : offset + limit]
+        statuses = _list(status)
+        engine = _engine(app)
+        total = count_orders(engine, accounts, start, end, statuses, search)
+        page = orders(engine, accounts, start, end, statuses, search, limit=limit, offset=offset)
         items = _items(page)
         return {"items": items, "count": len(items), "total": total, "limit": limit, "offset": offset}
 
