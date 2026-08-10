@@ -18,7 +18,7 @@ type DashboardData = {
   history: ImportHistoryRow[];
 };
 
-export function DashboardHome({ filters }: { filters: UrlFilters }) {
+export function DashboardHome({ filters, accounts }: { filters: UrlFilters; accounts: string[] }) {
   const scope = { accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end };
   const { data, error, loading } = useApi<DashboardData>(
     `dashboard:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end, filters.month])}`,
@@ -50,7 +50,10 @@ export function DashboardHome({ filters }: { filters: UrlFilters }) {
   const unknownOrdersHref = `/orders${queryString({ month: filters.month, start: filters.start, end: filters.end, account: filters.accounts, status: "unknown" })}`;
 
   // Chưa nhập file nào thì một dàn thẻ 0 đồng không nói lên điều gì; chỉ đường ba bước đầu tiên.
-  if (!history.length && (summary?.order_lines ?? 0) === 0) return <FirstRun />;
+  // Chỉ tính là "chưa có gì" khi đang xem toàn bộ tài khoản — lọc sang một account trống trong
+  // khi account khác vẫn có dữ liệu thì phải hiện số 0 bình thường, không phải màn hình khởi đầu.
+  const wholeScope = filters.accounts.length === 0 || filters.accounts.length === accounts.length;
+  if (wholeScope && !history.length && (summary?.order_lines ?? 0) === 0) return <FirstRun />;
 
   return (
     <>

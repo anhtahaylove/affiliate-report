@@ -33,6 +33,7 @@ export function AccountsPage() {
       // Mỗi account chỉ có một định danh — mã tài khoản. display_name vẫn tồn tại trong DB
       // (không đổi schema) nhưng luôn khớp code, không cho người dùng đặt riêng nữa.
       await createAccount({ code, display_name: code });
+      invalidateApiCache();
       setDraft({ code: "" });
       setMessage(`Đã tạo tài khoản ${code}.`);
       await refreshAccounts();
@@ -42,6 +43,7 @@ export function AccountsPage() {
   }
   async function patch(record: AccountItem, changes: Partial<AccountItem>) {
     try {
+      invalidateApiCache();
       await updateAccount(record.code, {
         display_order: changes.display_order,
         active: changes.active,

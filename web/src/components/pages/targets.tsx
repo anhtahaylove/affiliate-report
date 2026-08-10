@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CurrentUser, MonthlyKpiRow, TargetRow, loadMonthlyKpi, loadTargets, saveTarget } from "@/lib/api";
 import { UrlFilters } from "@/components/filters";
 import { canWrite } from "@/components/ui";
+import { invalidateApiCache } from "@/lib/use-api";
 import { accountLabel, achievementTone, errorMessage, formatMoney, percent } from "@/lib/format";
 
 export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: UrlFilters; accounts: string[] }) {
@@ -36,6 +37,7 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
     setSaving(account);
     try {
       await saveTarget(account, filters.month, Number(draft));
+      invalidateApiCache();
       setMessage(`Đã lưu KPI/ngày cho ${account}.`);
       await refresh();
     } catch (reason) {
