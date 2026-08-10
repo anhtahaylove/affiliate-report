@@ -48,6 +48,7 @@ jobs:
           pnpm --dir web install --frozen-lockfile
           pnpm --dir web lint
           pnpm --dir web exec tsc --noEmit --pretty false
+          pnpm --dir web test:unit
           pnpm --dir web build
           pnpm --dir web audit --prod
 
@@ -86,6 +87,7 @@ jobs:
           pnpm --dir web install --frozen-lockfile
           pnpm --dir web lint
           pnpm --dir web exec tsc --noEmit --pretty false
+          pnpm --dir web test:unit
           pnpm --dir web audit --prod
       - name: Build installer
         shell: pwsh

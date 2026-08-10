@@ -1,0 +1,53 @@
+import { expect, test } from "@playwright/test";
+import { resolve } from "node:path";
+
+// Fixture có ngày cố định trong 03/2026, nên mọi trang báo cáo đều mở kèm start/end tường minh
+// thay vì phụ thuộc tháng hiện tại.
+const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "e2e-sample.xlsx");
+const ACCOUNT = "E2ESHOP";
+const SCOPE = `?start=2026-03-01&end=2026-03-31&account=${ACCOUNT}`;
+
+test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async ({ page }) => {
+  await test.step("tạo tài khoản", async () => {
+    await page.goto("/accounts/");
+    await page.getByLabel("Mã tài khoản").fill(ACCOUNT);
+    await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+    await expect(page.getByText(`Đã tạo tài khoản ${ACCOUNT}.`)).toBeVisible();
+  });
+
+  await test.step("nhập file TikTok mẫu", async () => {
+    await page.goto("/imports/");
+    await page.getByLabel("Tài khoản TikTok").selectOption(ACCOUNT);
+    await page.getByLabel("File Excel đã xuất từ TikTok").setInputFiles(SAMPLE);
+    await page.getByRole("button", { name: "Nhập dữ liệu" }).click();
+    await expect(page.getByRole("status")).toContainText("2 dòng, 0 dòng bị từ chối");
+  });
+
+  await test.step("dashboard hiện đúng tổng hoa hồng", async () => {
+    await page.goto(`/${SCOPE}`);
+    const commission = page.locator("article.metric", { hasText: "Hoa hồng thực tế" });
+    await expect(commission.locator("strong")).toContainText("40.000");
+  });
+
+  await test.step("bảng đơn hàng có đúng 2 đơn", async () => {
+    await page.goto(`/orders/${SCOPE}`);
+    await expect(page.getByRole("heading", { level: 2 })).toContainText("2 đơn trong bộ lọc");
+  });
+
+  await test.step("hoàn tác lần nhập", async () => {
+    await page.goto("/imports/");
+    await page.getByRole("button", { name: "Hoàn tác lần nhập này" }).first().click();
+    const confirmation = page.getByLabel(/Nhập chính xác/);
+    await expect(confirmation).toBeVisible();
+    const phrase = await page.locator(".notice strong").nth(1).innerText();
+    await confirmation.fill(phrase);
+    await page.getByRole("button", { name: "Xác nhận hoàn tác" }).click();
+    await expect(page.getByRole("status")).toContainText("Đã hoàn tác");
+  });
+
+  await test.step("dữ liệu trở về rỗng", async () => {
+    await page.goto(`/orders/${SCOPE}`);
+    await expect(page.getByRole("heading", { level: 2 })).toContainText("0 đơn trong bộ lọc");
+    await expect(page.getByText("Không có đơn phù hợp", { exact: false })).toBeVisible();
+  });
+});

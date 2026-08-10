@@ -157,9 +157,21 @@ winget install --id JRSoftware.InnoSetup --exact
 .\.venv\Scripts\python.exe -m compileall -q tiktok_affiliate_report scripts tests desktop_launcher.py
 .\.venv\Scripts\python.exe -m pip check
 pnpm --dir web lint
+pnpm --dir web test:unit
+pnpm --dir web exec tsc --noEmit
 pnpm --dir web build
 git diff --check
 ```
+
+Kịch bản end-to-end chạy thật qua trình duyệt (tạo tài khoản → nhập file mẫu → đọc số liệu → hoàn tác). Cần build `web/out` trước và tải Chromium một lần:
+
+```powershell
+pnpm --dir web build
+pnpm --dir web exec playwright install chromium
+pnpm --dir web test:e2e
+```
+
+Kịch bản này cố ý không nằm trong CI: mỗi lần chạy phải tải trình duyệt vài trăm MB, trong khi nó kiểm đúng luồng mà người dùng cũng sẽ tự chạy trên máy trước khi phát hành.
 
 ## Tài liệu
 
