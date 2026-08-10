@@ -66,7 +66,7 @@ def test_sqlite_hard_delete_removes_history_after_verified_backup(tmp_path):
     engine, db_path = file_engine(tmp_path)
     create_account(engine, "TESTACC")
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="TESTACC", month=date(2026, 3, 1), target_commission=123))
+        conn.execute(monthly_targets.insert().values(account="TESTACC", month=date(2026, 3, 1), daily_target_commission=123))
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="TESTACC", rows=[raw_row(account="TESTACC")])
 
     preview = delete_account_preview(engine, "TESTACC")

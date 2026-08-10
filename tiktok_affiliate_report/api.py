@@ -24,10 +24,11 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 
 from .accounts import (
     can_hard_delete_accounts,
@@ -40,8 +41,18 @@ from .accounts import (
 from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .db import accounts as account_registry
 from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
+from .imports import order_line_history, undo_import, undo_preview
 from .parser import read_xlsx
-from .reports import analytics, daily_report, monthly_kpi, orders, overview, sheets_output
+from .reports import (
+    ORDER_EXPORT_COLUMNS,
+    analytics,
+    count_orders,
+    daily_report,
+    monthly_kpi,
+    orders,
+    overview,
+    sheets_output,
+)
 from .reset_data import (
     RESET_CONFIRMATION_PHRASE,
     RESTORE_CONFIRMATION_PHRASE,
@@ -73,7 +84,12 @@ class UserUpdate(BaseModel):
 
 
 class TargetUpdate(BaseModel):
-    target_commission: int = Field(ge=0, le=1_000_000_000_000)
+    # Nhận cả tên cũ vì tab đang mở lúc app cập nhật vẫn chạy bản JS trước đó vài phút.
+    daily_target_commission: int = Field(
+        ge=0,
+        le=1_000_000_000_000,
+        validation_alias=AliasChoices("daily_target_commission", "target_commission"),
+    )
 
 
 class ResetDataRequest(BaseModel):
@@ -102,6 +118,10 @@ class AccountUpdate(BaseModel):
 
 
 class AccountDeleteRequest(BaseModel):
+    confirmation: str
+
+
+class UndoImportRequest(BaseModel):
     confirmation: str
 
 
@@ -547,7 +567,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             {
                 "account": row["account"],
                 "month": row["month"].strftime("%Y-%m"),
-                "target_commission": int(row["target_commission"]),
+                "daily_target_commission": int(row["daily_target_commission"]),
             }
             for row in rows
         ]
@@ -570,7 +590,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         values = {
             "account": account,
             "month": month_date,
-            "target_commission": changes.target_commission,
+            "daily_target_commission": changes.daily_target_commission,
         }
         with _engine(app).begin() as conn:
             if conn.dialect.name == "postgresql":
@@ -579,10 +599,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
                 from sqlalchemy.dialects.sqlite import insert
             stmt = insert(monthly_targets).values(**values).on_conflict_do_update(
                 index_elements=["account", "month"],
-                set_={"target_commission": changes.target_commission},
+                set_={"daily_target_commission": changes.daily_target_commission},
             )
             conn.execute(stmt)
-        return {"account": account, "month": month, "target_commission": changes.target_commission}
+        return {"account": account, "month": month, "daily_target_commission": changes.daily_target_commission}
 
     @app.get("/api/v1/orders")
     def orders_endpoint(
@@ -593,12 +613,18 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         search: str | None = None,
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
+        sort: str | None = Query(None),
+        direction: Literal["asc", "desc"] = "desc",
         current: Principal = Depends(principal),
     ) -> dict[str, Any]:
         accounts = permitted_accounts(current, _list(account))
-        df = orders(_engine(app), accounts, start, end, _list(status), search)
-        total = len(df)
-        page = df.iloc[offset : offset + limit]
+        statuses = _list(status)
+        engine = _engine(app)
+        total = count_orders(engine, accounts, start, end, statuses, search)
+        try:
+            page = orders(engine, accounts, start, end, statuses, search, limit=limit, offset=offset, sort=sort, direction=direction)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         items = _items(page)
         return {"items": items, "count": len(items), "total": total, "limit": limit, "offset": offset}
 
@@ -613,7 +639,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> StreamingResponse:
         accounts = permitted_accounts(current, _list(account))
         df = orders(_engine(app), accounts, start, end, _list(status), search)
-        return _xlsx_response(df, "tiktok-affiliate-orders.xlsx", "Orders")
+        return _xlsx_response(df[ORDER_EXPORT_COLUMNS], "tiktok-affiliate-orders.xlsx", "Orders")
 
     @app.get("/api/v1/reports/daily.xlsx")
     def daily_export_endpoint(
@@ -645,18 +671,23 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         if not (file.filename or "").lower().endswith(".xlsx"):
             raise HTTPException(status_code=415, detail="only .xlsx files are supported")
         data = await _read_upload(file)
-        try:
-            rows = read_xlsx(BytesIO(data), account)
-            result = import_rows(
+
+        # Parse + ghi DB là công việc đồng bộ nặng; chạy trong threadpool để event loop
+        # vẫn phục vụ được /health, tray và các tab khác suốt lần nhập.
+        def ingest() -> dict[str, Any]:
+            return import_rows(
                 _engine(app),
                 filename=file.filename or "upload.xlsx",
                 file_bytes=data,
                 account=account,
-                rows=rows,
+                rows=read_xlsx(BytesIO(data), account),
                 uploaded_by_label=current.display_name or current.email,
                 auth_method=current.auth_method,
                 auth_subject=current.auth_subject,
             )
+
+        try:
+            result = await run_in_threadpool(ingest)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
@@ -696,6 +727,43 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             rows = conn.execute(stmt).mappings().all()
         items = [{key: _clean(value) for key, value in row.items()} for row in rows]
         return {"items": items, "count": len(items), "limit": limit}
+
+    def writable_batch(current: Principal, batch_id: int) -> dict[str, Any]:
+        if current.role not in {"owner", "operator"}:
+            raise HTTPException(status_code=403, detail="Hoàn tác lần nhập cần quyền vận hành hoặc chủ sở hữu")
+        try:
+            preview = undo_preview(_engine(app), batch_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        permitted_accounts(current, [str(preview["account"])])
+        return preview
+
+    @app.get("/api/v1/imports/{batch_id}/undo-preview")
+    def undo_preview_endpoint(batch_id: int, current: Principal = Depends(principal)) -> dict[str, Any]:
+        return _clean_nested(writable_batch(current, batch_id))
+
+    @app.delete("/api/v1/imports/{batch_id}")
+    def undo_import_endpoint(
+        batch_id: int,
+        request: UndoImportRequest,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        writable_batch(current, batch_id)
+        try:
+            return _clean_nested(undo_import(_engine(app), batch_id, request.confirmation))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/v1/orders/{business_key}/versions")
+    def order_versions_endpoint(business_key: str, current: Principal = Depends(principal)) -> dict[str, Any]:
+        items = order_line_history(_engine(app), business_key)
+        if not items:
+            raise HTTPException(status_code=404, detail="Không tìm thấy dòng đơn.")
+        permitted_accounts(current, [str(items[0]["account"])])
+        return {"items": [_clean_nested(item) for item in items], "count": len(items)}
 
     @app.post("/api/v1/admin/reset-data")
     def reset_data_endpoint(

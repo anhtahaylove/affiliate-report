@@ -75,6 +75,27 @@ export function lastDayOfMonth(month: string) {
   return `${month}-${String(lastDay).padStart(2, "0")}`;
 }
 
+function isoDay(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+export function previousMonth() {
+  const now = new Date();
+  const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Khoảng nhanh: n ngày gần nhất tính cả hôm nay. Tháng KPI bám theo ngày cuối khoảng. */
+export function lastDays(days: number) {
+  const end = new Date();
+  const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (days - 1));
+  return { start: isoDay(start), end: isoDay(end), month: currentMonth() };
+}
+
+export function wholeMonth(month: string) {
+  return { start: firstDayOfMonth(month), end: lastDayOfMonth(month), month };
+}
+
 export function countsText(counts: Record<string, number> | undefined) {
   const entries = Object.entries(counts ?? {});
   return entries.length ? entries.map(([name, count]) => `${name}: ${integer.format(Number(count))}`).join(" · ") : "Không có bảng";

@@ -8,6 +8,7 @@ __pycache__/
 *.py[cod]
 *.log
 *.xlsx
+!tests/fixtures/*.xlsx
 *.xls
 *.db
 *.sqlite*

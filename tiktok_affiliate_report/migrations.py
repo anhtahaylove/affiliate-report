@@ -153,12 +153,22 @@ def _migration_0005_account_registry_and_analytics_columns(conn: Connection) -> 
         conn.execute(text("CREATE INDEX ix_order_line_versions_content_id ON order_line_versions (content_id)"))
 
 
+def _migration_0006_rename_target_commission(conn: Connection) -> None:
+    # Cột tên là target_commission nhưng giá trị luôn là KPI mỗi ngày; đổi tên để đọc code
+    # không còn phải nhớ ngoại lệ. Database mới đã tạo sẵn tên đúng nên bước này bỏ qua.
+    columns = _columns(conn, "monthly_targets")
+    if "daily_target_commission" in columns or "target_commission" not in columns:
+        return
+    conn.execute(text("ALTER TABLE monthly_targets RENAME COLUMN target_commission TO daily_target_commission"))
+
+
 MIGRATIONS = [
     Migration(1, "baseline_create_or_adopt", _migration_0001_baseline),
     Migration(2, "import_audit_columns_and_indexes", _migration_0002_import_audit_columns_and_indexes),
     Migration(3, "ensure_baseline_tables", _migration_0003_ensure_baseline_tables),
     Migration(4, "auth_rbac_tables", _migration_0004_auth_rbac_tables),
     Migration(5, "account_registry_and_analytics_columns", _migration_0005_account_registry_and_analytics_columns),
+    Migration(6, "rename_target_commission_to_daily", _migration_0006_rename_target_commission),
 ]
 
 

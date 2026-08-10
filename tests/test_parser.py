@@ -65,6 +65,43 @@ def test_read_xlsx_requires_exact_47_headers():
         read_xlsx(bad, "EMLINHNOIY")
 
 
+def test_read_xlsx_rejects_bad_rows_without_losing_the_file():
+    buf = BytesIO()
+    pd.DataFrame([
+        raw_row(),
+        raw_row(**{"Ngày đặt hàng": "32/13/2026 99:99:99"}),
+        raw_row(**{"ID SKU": "/"}),
+    ]).to_excel(buf, index=False)
+    buf.seek(0)
+
+    rows = read_xlsx(buf, "CHIISTORE")
+
+    good = [row for row in rows if not row.get("_rejected")]
+    bad = [row["_rejected"] for row in rows if row.get("_rejected")]
+    assert len(good) == 1
+    assert good[0]["_row_number"] == 2
+    assert [item["row_number"] for item in bad] == [3, 4]
+    assert "Ngày đặt hàng" in bad[0]["reason"]
+    assert "ID SKU" in bad[1]["reason"]
+
+
+def test_read_xlsx_accepts_reordered_and_extra_columns():
+    source = raw_row()
+    shuffled = {header: source[header] for header in reversed(EXPECTED_HEADERS)}
+    shuffled["Cột TikTok mới thêm"] = "x"
+    buf = BytesIO()
+    pd.DataFrame([shuffled]).to_excel(buf, index=False)
+    buf.seek(0)
+
+    with pytest.warns(UserWarning, match="cột lạ"):
+        rows = read_xlsx(buf, "CHIISTORE")
+
+    assert len(rows) == 1
+    assert rows[0]["ID SKU"] == "9876543210987654321"
+    assert rows[0]["estimated_commission"] == 15000
+    assert rows[0]["_raw"]["Cột TikTok mới thêm"] == "x"
+
+
 def test_tiktok_pending_status_variants():
     assert normalize_status("AwaitingPayment") == "pending"
     assert normalize_status("Chờ xử lý") == "pending"

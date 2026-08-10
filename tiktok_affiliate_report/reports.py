@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from statistics import median
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.engine import Engine
 
 from .db import accounts as account_registry
@@ -33,29 +33,57 @@ def _active_account_codes(engine: Engine) -> list[str]:
         return [str(code) for code in conn.execute(stmt).scalars()]
 
 
-def _current_rows(engine: Engine) -> pd.DataFrame:
-    stmt = select(order_line_versions).where(order_line_versions.c.is_current.is_(True))
-    return pd.read_sql(stmt, engine)
+# Report/analytics không bao giờ đọc raw_json (blob JSON gốc 47 cột mỗi dòng) hay các cột
+# hạ tầng; giữ chúng ngoài truy vấn để một lần mở dashboard không kéo cả bảng về pandas.
+NON_REPORT_COLUMNS = {"business_key", "normalized_hash", "raw_json", "is_current", "batch_id"}
+REPORT_COLUMNS = [column for column in order_line_versions.c if column.name not in NON_REPORT_COLUMNS]
+SEARCH_COLUMNS = (
+    order_line_versions.c.order_id,
+    order_line_versions.c.sku_id,
+    order_line_versions.c.product_name,
+    order_line_versions.c.shop_name,
+)
 
 
-def _apply_filters(df: pd.DataFrame, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
-    if df.empty:
-        return df
-    df = df.copy()
-    df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+def _like_needle(search: str) -> str:
+    """Tìm kiếm là so khớp chuỗi nguyên văn, nên %, _ và \\ phải được thoát trước khi vào LIKE."""
+    escaped = str(search).strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _current_filters(accounts=None, start=None, end=None, statuses=None, search=None) -> list:
+    clauses = [order_line_versions.c.is_current.is_(True)]
     if accounts is not None:
-        df = df[df["account"].isin(accounts)]
+        clauses.append(order_line_versions.c.account.in_(accounts))
     if statuses:
-        df = df[df["status"].isin(statuses)]
+        clauses.append(order_line_versions.c.status.in_(statuses))
     if start:
-        df = df[df["order_date"].dt.date >= start]
+        clauses.append(order_line_versions.c.order_date >= datetime.combine(start, time.min))
     if end:
-        df = df[df["order_date"].dt.date <= end]
+        clauses.append(order_line_versions.c.order_date < datetime.combine(end, time.min) + timedelta(days=1))
+    if search:
+        needle = _like_needle(search)
+        clauses.append(or_(*(column.ilike(needle, escape="\\") for column in SEARCH_COLUMNS)))
+    return clauses
+
+
+def _current_rows(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
+    stmt = select(*REPORT_COLUMNS).where(*_current_filters(accounts, start, end, statuses))
+    df = pd.read_sql(stmt, engine)
+    if not df.empty:
+        df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
     return df
 
 
+def _days_between(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+    if df.empty:
+        return df
+    days = df["order_date"].dt.date
+    return df[(days >= start) & (days <= end)]
+
+
 def overview(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
-    df = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
+    df = _current_rows(engine, accounts, start, end, statuses)
     if df.empty:
         return pd.DataFrame(columns=["account", "orders", "order_lines", "gmv", "units_sold", "units_refunded", "initial_commission", "cancelled_gmv", "cancelled_commission", "actual_gmv", "actual_commission", "final_received"])
     df["initial_commission"] = df["estimated_commission"]
@@ -85,7 +113,7 @@ def overview(engine: Engine, accounts=None, start=None, end=None, statuses=None)
 
 
 def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
-    df = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
+    df = _current_rows(engine, accounts, start, end, statuses)
     if df.empty:
         return pd.DataFrame(columns=["day", "account", "orders", "order_lines", "gross_gmv", "units_sold", "units_refunded", "initial_commission", "cancelled_rows", "cancelled_gmv", "cancelled_commission", "actual_gmv", "actual_commission", "final_received", "daily_target", "target_achievement"])
     df = df[df["order_date"].notna()].copy()
@@ -119,9 +147,11 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
     targets = pd.read_sql(select(monthly_targets), engine)
     target_map = {
         (account, pd.Timestamp(month).strftime("%Y-%m")): int(target)
-        for account, month, target in zip(targets["account"], targets["month"], targets["target_commission"])
+        for account, month, target in zip(targets["account"], targets["month"], targets["daily_target_commission"])
     }
-    selected_accounts = _active_account_codes(engine) if accounts is None else accounts
+    active_accounts = _active_account_codes(engine)
+    selected_accounts = active_accounts if accounts is None else accounts
+    full_scope = set(selected_accounts) == set(active_accounts)
 
     def daily_target(row) -> int | pd.NA:
         if statuses:
@@ -129,7 +159,7 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
         month_key = row["day"][:7]
         if row["account"] != "ALL":
             return target_map.get((row["account"], month_key), pd.NA)
-        if set(selected_accounts) == set(_active_account_codes(engine)):
+        if full_scope:
             return target_map.get(("ALL", month_key), pd.NA)
         account_targets = [target_map.get((account, month_key)) for account in selected_accounts]
         return sum(account_targets) if all(target is not None for target in account_targets) else pd.NA
@@ -140,24 +170,66 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
     return result.sort_values(["day", "account"], ascending=[False, True])
 
 
-def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None) -> pd.DataFrame:
-    df = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
-    cols = [
-        "account", "order_id", "sku_id", "product_id", "product_name", "shop_id", "shop_name",
-        "content_type", "content_id", "order_type", "commission_type", "currency", "status",
-        "order_date", "settlement_date", "gmv", "actual_gmv", "units_sold", "units_refunded",
-        "estimated_commission", "actual_commission", "final_received", "version", "created_at",
-    ]
+# Bảng đơn hàng cần thêm business_key để mở được lịch sử phiên bản của đúng dòng đó; các báo
+# cáo tổng hợp thì không, nên khoá này chỉ nằm trong truy vấn danh sách đơn.
+ORDER_ROW_COLUMNS = [*REPORT_COLUMNS, order_line_versions.c.business_key]
+ORDER_COLUMNS = [
+    "account", "order_id", "sku_id", "product_id", "product_name", "shop_id", "shop_name",
+    "content_type", "content_id", "order_type", "commission_type", "currency", "status",
+    "order_date", "settlement_date", "gmv", "actual_gmv", "units_sold", "units_refunded",
+    "estimated_commission", "actual_commission", "final_received", "version", "created_at",
+    "business_key",
+]
+# File Excel xuất ra là để người dùng đọc, không cần khoá nội bộ.
+ORDER_EXPORT_COLUMNS = [column for column in ORDER_COLUMNS if column != "business_key"]
+
+
+ORDER_SORT_COLUMNS = {
+    name: order_line_versions.c[name]
+    for name in (
+        "account", "order_id", "sku_id", "product_name", "shop_name", "status",
+        "order_date", "units_sold", "units_refunded", "gmv", "estimated_commission", "final_received",
+    )
+}
+
+
+def _order_by(sort: str | None, direction: str):
+    default = (
+        order_line_versions.c.order_date.desc().nulls_last(),
+        order_line_versions.c.order_id.asc().nulls_last(),
+        order_line_versions.c.sku_id.asc().nulls_last(),
+    )
+    if not sort:
+        return default
+    if sort not in ORDER_SORT_COLUMNS:
+        raise ValueError(f"sort phải là một trong: {', '.join(sorted(ORDER_SORT_COLUMNS))}")
+    column = ORDER_SORT_COLUMNS[sort]
+    ordered = column.desc() if direction == "desc" else column.asc()
+    # Chốt thêm khoá phụ để phân trang không đổi thứ tự giữa các trang khi giá trị bằng nhau.
+    return (ordered.nulls_last(), order_line_versions.c.id.asc())
+
+
+def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None, limit=None, offset=0, sort=None, direction="desc") -> pd.DataFrame:
+    stmt = (
+        select(*ORDER_ROW_COLUMNS)
+        .where(*_current_filters(accounts, start, end, statuses, search))
+        .order_by(*_order_by(sort, direction))
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit).offset(offset)
+    df = pd.read_sql(stmt, engine)
     if df.empty:
-        return pd.DataFrame(columns=cols)
-    if search:
-        needle = str(search).strip()
-        matches = pd.Series(False, index=df.index)
-        for column in ("order_id", "sku_id", "product_name", "shop_name"):
-            matches |= df[column].fillna("").astype(str).str.contains(needle, case=False, regex=False)
-        df = df[matches]
-    df = _with_actuals(df)
-    return df.sort_values(["order_date", "order_id", "sku_id"], ascending=[False, True, True])[cols]
+        return pd.DataFrame(columns=ORDER_COLUMNS)
+    df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+    return _with_actuals(df)[ORDER_COLUMNS]
+
+
+def count_orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None) -> int:
+    stmt = select(func.count()).select_from(order_line_versions).where(
+        *_current_filters(accounts, start, end, statuses, search)
+    )
+    with engine.connect() as conn:
+        return int(conn.execute(stmt).scalar_one())
 
 
 def import_history(engine: Engine) -> pd.DataFrame:
@@ -175,8 +247,8 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
         .where(monthly_targets.c.account.in_(target_accounts))
         .order_by(monthly_targets.c.month, monthly_targets.c.account),
         engine,
-    )[["month", "account", "target_commission"]].rename(columns={"target_commission": "daily_target"})
-    df = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
+    )[["month", "account", "daily_target_commission"]].rename(columns={"daily_target_commission": "daily_target"})
+    df = _current_rows(engine, accounts, start, end, statuses)
     if df.empty:
         actual = pd.DataFrame(columns=["month", "account", "actual_commission", "combined_commission", "order_lines"])
     else:
@@ -288,7 +360,7 @@ def sheets_output(engine: Engine, accounts=None, start=None, end=None, statuses=
     targets = pd.read_sql(select(monthly_targets).where(monthly_targets.c.account == "ALL"), engine)
     target_map = {
         pd.Timestamp(month).strftime("%Y-%m"): int(target)
-        for month, target in zip(targets["month"], targets["target_commission"])
+        for month, target in zip(targets["month"], targets["daily_target_commission"])
     }
     if set(account_order) == set(active_accounts) and not statuses:
         output["KPI/ngày"] = output["Ngày"].str[:7].map(target_map).astype("Int64")
@@ -590,17 +662,20 @@ def analytics(
     if not 1 <= top <= 100:
         raise ValueError("top must be between 1 and 100")
     today = today or datetime.now(ZoneInfo("Asia/Bangkok")).date()
-    current = _apply_filters(_current_rows(engine), accounts, start, end, statuses)
-    summary = _summary(current)
     previous_summary = None
     previous_range = None
     if start and end:
         duration = (end - start).days + 1
         previous_end = start - timedelta(days=1)
         previous_start = previous_end - timedelta(days=duration - 1)
-        previous = _apply_filters(_current_rows(engine), accounts, previous_start, previous_end, statuses)
-        previous_summary = _summary(previous)
+        # Một truy vấn phủ cả kỳ này lẫn kỳ trước, rồi cắt trong bộ nhớ.
+        scope = _current_rows(engine, accounts, previous_start, end, statuses)
+        current = _days_between(scope, start, end)
+        previous_summary = _summary(_days_between(scope, previous_start, previous_end))
         previous_range = {"start": previous_start.isoformat(), "end": previous_end.isoformat()}
+    else:
+        current = _current_rows(engine, accounts, start, end, statuses)
+    summary = _summary(current)
     return {
         "filters": {
             "accounts": list(accounts or []),

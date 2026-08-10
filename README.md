@@ -16,7 +16,7 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.2.3.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v1.3.0.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -33,7 +33,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\TikTokAffiliateReportSetup-v1.2.3.exe -Algorithm SHA256
+   Get-FileHash .\TikTokAffiliateReportSetup-v1.3.0.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -139,7 +139,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v1.2.3.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v1.3.0.exe`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
 - `artifacts\installer\stable.json.sig`
@@ -157,9 +157,21 @@ winget install --id JRSoftware.InnoSetup --exact
 .\.venv\Scripts\python.exe -m compileall -q tiktok_affiliate_report scripts tests desktop_launcher.py
 .\.venv\Scripts\python.exe -m pip check
 pnpm --dir web lint
+pnpm --dir web test:unit
+pnpm --dir web exec tsc --noEmit
 pnpm --dir web build
 git diff --check
 ```
+
+Kịch bản end-to-end chạy thật qua trình duyệt (tạo tài khoản → nhập file mẫu → đọc số liệu → hoàn tác). Cần build `web/out` trước và tải Chromium một lần:
+
+```powershell
+pnpm --dir web build
+pnpm --dir web exec playwright install chromium
+pnpm --dir web test:e2e
+```
+
+Kịch bản này cố ý không nằm trong CI: mỗi lần chạy phải tải trình duyệt vài trăm MB, trong khi nó kiểm đúng luồng mà người dùng cũng sẽ tự chạy trên máy trước khi phát hành.
 
 ## Tài liệu
 
@@ -174,5 +186,6 @@ git diff --check
 - Không dedupe chỉ bằng `ID đơn hàng`: một order có thể có nhiều SKU.
 - `Tổng số tiền nhận được cuối cùng` là KPI TikTok riêng, không phải `Hoa hồng thực tế` theo workbook.
 - Một dòng không xuất hiện trong file sau không bị xem là đã xoá.
-- `target_commission` trong database/API là **KPI hoa hồng mỗi ngày**, không phải tổng target tháng.
+- Một dòng hỏng chỉ làm mất đúng dòng đó; phần còn lại của file vẫn được nhập và dòng bị loại được báo kèm số dòng.
+- Nhập nhầm file thì dùng **Hoàn tác lần nhập này** trong Nhập dữ liệu, không cần reset toàn bộ.
 - `REPORT AFF.xlsx` là nguồn thiết kế output legacy; app không cần link Google Sheets để chạy.

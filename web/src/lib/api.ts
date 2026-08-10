@@ -23,7 +23,7 @@ export type DailyRow = {
 export type TargetRow = {
   account: string;
   month: string;
-  target_commission: number;
+  daily_target_commission: number;
   updated_at?: string | null;
   updated_by?: string | null;
 };
@@ -48,6 +48,7 @@ export type MonthlyKpiRow = {
 };
 
 export type OrderRow = {
+  business_key: string;
   account: string;
   order_id: string | null;
   sku_id: string | null;
@@ -84,6 +85,53 @@ export type ImportHistoryRow = {
   unchanged: number;
   rejected: number;
   created_at: string;
+};
+
+export type UndoImportPreview = {
+  batch_id: number;
+  account: string;
+  filename: string;
+  created_at: string | null;
+  uploaded_by_label: string | null;
+  is_latest: boolean;
+  newer_batches: number;
+  removed_versions: number;
+  removed_raw_rows: number;
+  removed_lines: number;
+  restored_lines: number;
+  confirmation: string;
+  warning: string | null;
+};
+
+export type UndoImportResult = {
+  batch_id: number;
+  account: string;
+  filename: string;
+  removed_versions: number;
+  removed_raw_rows: number;
+  removed_lines: number;
+  restored_lines: number;
+  backup_path: string | null;
+};
+
+export type OrderVersionRow = {
+  version: number;
+  is_current: boolean;
+  account: string;
+  order_id: string | null;
+  sku_id: string | null;
+  status: string | null;
+  gmv: number | null;
+  units_sold: number | null;
+  units_refunded: number | null;
+  estimated_commission: number | null;
+  final_received: number | null;
+  order_date: string | null;
+  settlement_date: string | null;
+  recorded_at: string | null;
+  batch_id: number | null;
+  filename: string | null;
+  uploaded_by_label: string | null;
 };
 
 export type UploadResponse = {
@@ -405,7 +453,7 @@ export type ReportFilters = {
   month?: string;
 };
 
-function reportQuery(filters: ReportFilters & { search?: string; limit?: number; offset?: number } = {}) {
+function reportQuery(filters: ReportFilters & { search?: string; limit?: number; offset?: number; sort?: string; direction?: string } = {}) {
   return queryString({
     account: filters.accounts,
     status: filters.statuses,
@@ -415,6 +463,8 @@ function reportQuery(filters: ReportFilters & { search?: string; limit?: number;
     search: filters.search,
     limit: filters.limit,
     offset: filters.offset,
+    sort: filters.sort,
+    direction: filters.direction,
   });
 }
 
@@ -479,7 +529,7 @@ export async function loadAnalytics(filters: ReportFilters) {
   return request<AnalyticsResponse>(`/api/v1/analytics${reportQuery(filters)}`);
 }
 
-export async function loadOrders(filters: ReportFilters & { search?: string; limit?: number; offset?: number }) {
+export async function loadOrders(filters: ReportFilters & { search?: string; limit?: number; offset?: number; sort?: string; direction?: "asc" | "desc" }) {
   return request<PageResponse<OrderRow>>(`/api/v1/orders${reportQuery(filters)}`);
 }
 
@@ -511,12 +561,27 @@ export async function loadTargets(month: string, accounts?: string[]) {
 export async function saveTarget(account: string, month: string, targetCommission: number) {
   return request<TargetRow>(`/api/v1/targets/${encodeURIComponent(account)}/${month}`, {
     method: "PUT",
-    body: JSON.stringify({ target_commission: targetCommission }),
+    body: JSON.stringify({ daily_target_commission: targetCommission }),
   });
 }
 
 export async function loadImportHistory(limit = 10, accounts?: string[]) {
   return request<ListResponse<ImportHistoryRow> & { limit: number }>(`/api/v1/imports${queryString({ limit, account: accounts })}`);
+}
+
+export async function previewUndoImport(batchId: number) {
+  return request<UndoImportPreview>(`/api/v1/imports/${batchId}/undo-preview`);
+}
+
+export async function undoImport(batchId: number, confirmation: string) {
+  return request<UndoImportResult>(`/api/v1/imports/${batchId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirmation }),
+  });
+}
+
+export async function loadOrderVersions(businessKey: string) {
+  return request<ListResponse<OrderVersionRow>>(`/api/v1/orders/${encodeURIComponent(businessKey)}/versions`);
 }
 
 export async function resetData(confirmation: string) {

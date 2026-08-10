@@ -9,7 +9,7 @@ from sqlalchemy import select
 from tiktok_affiliate_report.accounts import create_account
 from tiktok_affiliate_report.db import get_engine, import_rows, init_db, monthly_targets, order_line_versions
 from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
-from tiktok_affiliate_report.reports import analytics, daily_report, monthly_kpi, orders, overview, sheets_output
+from tiktok_affiliate_report.reports import analytics, count_orders, daily_report, monthly_kpi, orders, overview, sheets_output
 
 
 def raw_row(
@@ -65,6 +65,22 @@ def engine():
 def test_database_rejects_unknown_url_scheme():
     with pytest.raises(ValueError, match="sqlite:/// hoặc postgresql"):
         get_engine("not-a-sqlite-url")
+
+
+def test_parser_rejected_rows_are_counted_but_do_not_block_the_import():
+    e = engine()
+    rows = [
+        raw_row(order="O1") | {"_row_number": 2},
+        {"_row_number": 3, "_rejected": {"row_number": 3, "reason": "Ngày đặt hàng: ngày '32/13/2026' không đúng định dạng"}},
+        raw_row(order="O2") | {"_row_number": 4},
+    ]
+
+    result = import_rows(e, filename="mix.xlsx", file_bytes=b"mix", account="CHIISTORE", rows=rows)
+
+    assert result["inserted"] == 2
+    assert result["rejected"] == 1
+    assert [item["row_number"] for item in result["rejected_rows"]] == [3]
+    assert len(orders(e).index) == 2
 
 
 def test_duplicate_file_sha_is_noop():
@@ -203,7 +219,7 @@ def test_monthly_kpi_combined_layer_includes_ineligible_without_touching_actual(
     # được dùng làm số chính thức quyết định đã đạt mục tiêu hay chưa.
     e = engine()
     with e.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=1000))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=1000))
     import_rows(
         e,
         filename="a.xlsx",
@@ -260,6 +276,70 @@ def test_google_sheets_output_fills_calendar_gaps_and_missing_kpi_is_blank():
     assert pd.isna(future["target_achievement"])
 
 
+def test_five_thousand_rows_aggregate_exactly_like_source_math():
+    """Ghi theo lô và lọc/phân trang ở SQL phải cho ra đúng con số như tính tay từ dữ liệu nguồn,
+    kể cả khi vượt qua ranh giới lô 1.000 dòng và ranh giới tra cứu 500 khoá."""
+    e = engine()
+    size = 5000
+
+    def gmv_of(index):
+        return (100 + index) * 1000
+
+    def commission_of(index):
+        # raw_row cộng thêm 1.000 + 2.000 + 3.000 + 4.000 vào hoa hồng ước tính.
+        return (10 + index % 7) * 1000 + 10000
+
+    def ineligible(index):
+        return index % 5 == 0
+
+    rows = [
+        raw_row(
+            order=f"O{index}",
+            sku=f"S{index}",
+            gmv=f"{100 + index}.000",
+            commission=f"{10 + index % 7}.000",
+            status="Không đủ điều kiện" if ineligible(index) else "Đã quyết toán",
+            order_date=f"{(index % 28) + 1:02d}/03/2026 08:00:00",
+        )
+        for index in range(size)
+    ]
+
+    result = import_rows(e, filename="big.xlsx", file_bytes=b"big", account="CHIISTORE", rows=rows)
+    assert (result["inserted"], result["updated"], result["unchanged"], result["rejected"]) == (size, 0, 0, 0)
+
+    total = overview(e).query("account == 'ALL'").iloc[0]
+    assert total["orders"] == size
+    assert total["gmv"] == sum(gmv_of(index) for index in range(size))
+    assert total["actual_gmv"] == sum(gmv_of(index) for index in range(size) if not ineligible(index))
+    assert total["actual_commission"] == sum(commission_of(index) for index in range(size) if not ineligible(index))
+    assert total["cancelled_commission"] == sum(commission_of(index) for index in range(size) if ineligible(index))
+
+    assert count_orders(e) == size
+    assert count_orders(e, statuses=["ineligible"]) == len([index for index in range(size) if ineligible(index)])
+    assert len(orders(e, limit=100, offset=0).index) == 100
+    assert len(orders(e, limit=100, offset=size - 50).index) == 50
+    assert len(orders(e, search="O4999").index) == 1
+
+    # Nhập lại: 1.200 dòng đổi giá trị (vượt ranh giới lô), phần còn lại giữ nguyên.
+    changed = [
+        raw_row(
+            order=f"O{index}",
+            sku=f"S{index}",
+            gmv=f"{500 + index}.000" if index < 1200 else f"{100 + index}.000",
+            commission=f"{10 + index % 7}.000",
+            status="Không đủ điều kiện" if ineligible(index) else "Đã quyết toán",
+            order_date=f"{(index % 28) + 1:02d}/03/2026 08:00:00",
+        )
+        for index in range(size)
+    ]
+    again = import_rows(e, filename="big2.xlsx", file_bytes=b"big2", account="CHIISTORE", rows=changed)
+
+    assert (again["inserted"], again["updated"], again["unchanged"], again["rejected"]) == (0, 1200, 3800, 0)
+    assert count_orders(e) == size
+    after = overview(e).query("account == 'ALL'").iloc[0]
+    assert after["gmv"] == sum((500 + index) * 1000 if index < 1200 else gmv_of(index) for index in range(size))
+
+
 def test_orders_returns_every_match_for_full_csv_export():
     e = engine()
     rows = [raw_row(order=f"O{index}", sku=f"S{index}") for index in range(1001)]
@@ -309,7 +389,7 @@ def test_analytics_returns_finance_dimensions_settlement_quality_and_forecast():
     create_account(e, "CHIISTORE", display_name="Chii Store")
     create_account(e, "EMLINHNOIY", display_name="Em Linh")
     with e.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=1000))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=1000))
     import_rows(
         e,
         filename="march.xlsx",

@@ -55,6 +55,19 @@ def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
     }
 
 
+def backup_sqlite_before_change(engine: Engine, label: str) -> str | None:
+    """Sao lưu đã kiểm tra trước một thao tác phá huỷ. Trả None khi không phải SQLite cục bộ
+    (PostgreSQL dùng chung tự lo sao lưu ở tầng hạ tầng)."""
+    try:
+        db_path = sqlite_file_path(engine)
+    except ValueError:
+        return None
+    backup_path = _backup_path(db_path, label)
+    _backup_sqlite(db_path, backup_path)
+    _check_backup(backup_path)
+    return str(backup_path)
+
+
 def list_sqlite_backups(engine: Engine) -> list[dict[str, object]]:
     db_path = sqlite_file_path(engine)
     backup_dir = _backup_dir(db_path)

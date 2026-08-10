@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import date
 from io import BytesIO
+from urllib.parse import quote
 
 import pandas as pd
 from fastapi.testclient import TestClient
@@ -220,7 +221,7 @@ def test_monthly_kpi_uses_account_targets_and_clear_subset_total(tmp_path):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=100))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=100))
 
     monthly = client.get("/api/v1/monthly-kpi", params={"account": "CHIISTORE", "month": "2026-03"}).json()
     by_account = {item["account"]: item for item in monthly["items"]}
@@ -252,6 +253,71 @@ def test_orders_paginates_with_total(tmp_path):
     assert payload["limit"] == 2
     assert payload["offset"] == 1
     assert len(payload["items"]) == 2
+
+
+def test_orders_sort_is_applied_in_sql_and_rejects_unknown_columns(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(
+        engine,
+        filename="sortable.xlsx",
+        file_bytes=b"sortable",
+        account="CHIISTORE",
+        rows=[
+            normalized(**{"ID đơn hàng": "O1", "ID SKU": "S1", "GMV": "300.000"}),
+            normalized(**{"ID đơn hàng": "O2", "ID SKU": "S2", "GMV": "100.000"}),
+            normalized(**{"ID đơn hàng": "O3", "ID SKU": "S3", "GMV": "200.000"}),
+        ],
+    )
+
+    ascending = client.get("/api/v1/orders", params={"sort": "gmv", "direction": "asc"}).json()
+    descending = client.get("/api/v1/orders", params={"sort": "gmv", "direction": "desc"}).json()
+    first_page = client.get("/api/v1/orders", params={"sort": "gmv", "direction": "asc", "limit": 2}).json()
+
+    assert [row["gmv"] for row in ascending["items"]] == [100000, 200000, 300000]
+    assert [row["gmv"] for row in descending["items"]] == [300000, 200000, 100000]
+    assert [row["gmv"] for row in first_page["items"]] == [100000, 200000]
+    assert client.get("/api/v1/orders", params={"sort": "raw_json"}).status_code == 422
+
+
+def test_undo_import_endpoint_previews_then_removes_the_batch(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    second = import_rows(
+        engine,
+        filename="b.xlsx",
+        file_bytes=b"b",
+        account="CHIISTORE",
+        rows=[normalized(**{"GMV": "900.000"}), normalized(**{"ID đơn hàng": "O9", "ID SKU": "S9"})],
+    )
+    batch_id = second["batch_id"]
+
+    preview = client.get(f"/api/v1/imports/{batch_id}/undo-preview").json()
+    assert preview["confirmation"] == f"HOAN TAC {batch_id}"
+    assert (preview["removed_lines"], preview["restored_lines"]) == (1, 1)
+
+    assert client.request("DELETE", f"/api/v1/imports/{batch_id}", json={"confirmation": "sai"}).status_code == 422
+
+    removed = client.request("DELETE", f"/api/v1/imports/{batch_id}", json={"confirmation": preview["confirmation"]})
+    assert removed.status_code == 200
+    assert removed.json()["removed_versions"] == 2
+
+    assert client.get(f"/api/v1/imports/{batch_id}/undo-preview").status_code == 404
+    assert client.get("/api/v1/orders").json()["total"] == 1
+    assert client.get("/api/v1/imports").json()["count"] == 1
+
+
+def test_order_versions_endpoint_lists_history_newest_first(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    import_rows(engine, filename="b.xlsx", file_bytes=b"b", account="CHIISTORE", rows=[normalized(**{"GMV": "900.000"})])
+
+    business_key = client.get("/api/v1/orders").json()["items"][0]["business_key"]
+    payload = client.get(f"/api/v1/orders/{quote(business_key, safe='')}/versions").json()
+
+    assert payload["count"] == 2
+    assert [item["version"] for item in payload["items"]] == [2, 1]
+    assert [item["filename"] for item in payload["items"]] == ["b.xlsx", "a.xlsx"]
+    assert client.get("/api/v1/orders/KHONG|CO|GI/versions").status_code == 404
 
 
 def test_import_requires_account_and_imports_xlsx(tmp_path):
@@ -321,7 +387,7 @@ def test_owner_reset_data_creates_backup_deletes_imports_and_preserves_targets(t
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=100))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=100))
 
     wrong = client.post("/api/v1/admin/reset-data", json={"confirmation": "RESET DATA"})
     response = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"})
@@ -335,7 +401,7 @@ def test_owner_reset_data_creates_backup_deletes_imports_and_preserves_targets(t
     with engine.connect() as conn:
         assert conn.execute(select(import_batches)).all() == []
         assert conn.execute(select(order_line_versions)).all() == []
-        assert conn.execute(select(monthly_targets.c.account, monthly_targets.c.target_commission)).all() == [("CHIISTORE", 100)]
+        assert conn.execute(select(monthly_targets.c.account, monthly_targets.c.daily_target_commission)).all() == [("CHIISTORE", 100)]
         assert conn.execute(select(accounts.c.code).where(accounts.c.code == "CHIISTORE")).scalar_one() == "CHIISTORE"
 
 

@@ -27,6 +27,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={appFont.variable}>
+      <head>
+        {/* Áp chế độ đã lưu trước khi vẽ, nếu không màn hình sẽ loé sáng rồi mới chuyển tối. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("tiktok-affiliate-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}`,
+          }}
+        />
+      </head>
       <body>
         {children}
         <ServiceWorkerRegistration />

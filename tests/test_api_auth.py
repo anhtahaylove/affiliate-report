@@ -105,6 +105,38 @@ def test_viewer_only_sees_assigned_accounts_and_cannot_import(tmp_path):
     assert denied.status_code == 403
 
 
+def test_undo_import_is_role_and_account_scoped(tmp_path):
+    client, engine, auth = oidc_api(tmp_path)
+    mine = import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    other = import_rows(engine, filename="b.xlsx", file_bytes=b"b", account="EMLINHNOIY", rows=[normalized("EMLINHNOIY")])
+    viewer, tokens = login(client, auth, "viewer@example.test", "viewer")
+    auth.update_user(viewer.user_id or 0, accounts=["CHIISTORE"])
+
+    assert client.get(f"/api/v1/imports/{mine['batch_id']}/undo-preview").status_code == 403
+
+    auth.update_user(viewer.user_id or 0, role="operator", accounts=["CHIISTORE"])
+
+    assert client.get(f"/api/v1/imports/{mine['batch_id']}/undo-preview").status_code == 200
+    assert client.get(f"/api/v1/imports/{other['batch_id']}/undo-preview").status_code == 403
+    assert client.request(
+        "DELETE",
+        f"/api/v1/imports/{other['batch_id']}",
+        json={"confirmation": f"HOAN TAC {other['batch_id']}"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
+    assert client.request(
+        "DELETE",
+        f"/api/v1/imports/{mine['batch_id']}",
+        json={"confirmation": f"HOAN TAC {mine['batch_id']}"},
+    ).status_code == 403  # thiếu CSRF token
+    assert client.request(
+        "DELETE",
+        f"/api/v1/imports/{mine['batch_id']}",
+        json={"confirmation": f"HOAN TAC {mine['batch_id']}"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 200
+
+
 def test_import_history_is_account_scoped_and_secret_safe(tmp_path):
     client, engine, auth = oidc_api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
@@ -159,34 +191,34 @@ def test_targets_are_editable_by_role_and_account_scope(tmp_path):
     operator, tokens = login(client, auth, "viewer@example.test", "operator")
     auth.update_user(operator.user_id or 0, role="operator", accounts=["CHIISTORE"])
 
-    missing_csrf = client.put("/api/v1/targets/CHIISTORE/2026-03", json={"target_commission": 111})
+    missing_csrf = client.put("/api/v1/targets/CHIISTORE/2026-03", json={"daily_target_commission": 111})
     updated = client.put(
         "/api/v1/targets/CHIISTORE/2026-03",
-        json={"target_commission": 111},
+        json={"daily_target_commission": 111},
         headers={"X-CSRF-Token": tokens.csrf_token},
     )
     denied_account = client.put(
         "/api/v1/targets/THAOBRA/2026-03",
-        json={"target_commission": 222},
+        json={"daily_target_commission": 222},
         headers={"X-CSRF-Token": tokens.csrf_token},
     )
     denied_all = client.put(
         "/api/v1/targets/ALL/2026-03",
-        json={"target_commission": 333},
+        json={"daily_target_commission": 333},
         headers={"X-CSRF-Token": tokens.csrf_token},
     )
 
     assert missing_csrf.status_code == 403
     assert updated.status_code == 200
-    assert updated.json() == {"account": "CHIISTORE", "month": "2026-03", "target_commission": 111}
+    assert updated.json() == {"account": "CHIISTORE", "month": "2026-03", "daily_target_commission": 111}
     assert denied_account.status_code == 403
     assert denied_all.status_code == 403
     visible = client.get("/api/v1/targets", params={"month": "2026-03"}).json()["items"]
-    assert visible == [{"account": "CHIISTORE", "month": "2026-03", "target_commission": 111}]
+    assert visible == [{"account": "CHIISTORE", "month": "2026-03", "daily_target_commission": 111}]
 
     with engine.connect() as conn:
         target = conn.execute(
-            select(monthly_targets.c.target_commission).where(monthly_targets.c.account == "CHIISTORE")
+            select(monthly_targets.c.daily_target_commission).where(monthly_targets.c.account == "CHIISTORE")
         ).scalar_one()
     assert target == 111
 
@@ -196,20 +228,20 @@ def test_owner_can_edit_all_target_and_validation_rejects_bad_values(tmp_path):
     _, tokens = login(client, auth, "owner@example.test", "owner")
     headers = {"X-CSRF-Token": tokens.csrf_token}
 
-    assert client.put("/api/v1/targets/ALL/not-a-month", json={"target_commission": 1}, headers=headers).status_code == 422
-    assert client.put("/api/v1/targets/ALL/2026-03", json={"target_commission": -1}, headers=headers).status_code == 422
+    assert client.put("/api/v1/targets/ALL/not-a-month", json={"daily_target_commission": 1}, headers=headers).status_code == 422
+    assert client.put("/api/v1/targets/ALL/2026-03", json={"daily_target_commission": -1}, headers=headers).status_code == 422
     assert client.put(
         "/api/v1/targets/ALL/2026-03",
-        json={"target_commission": 1_000_000_000_001},
+        json={"daily_target_commission": 1_000_000_000_001},
         headers=headers,
     ).status_code == 422
-    updated = client.put("/api/v1/targets/ALL/2026-03", json={"target_commission": 999}, headers=headers)
-    replaced = client.put("/api/v1/targets/ALL/2026-03", json={"target_commission": 1000}, headers=headers)
+    updated = client.put("/api/v1/targets/ALL/2026-03", json={"daily_target_commission": 999}, headers=headers)
+    replaced = client.put("/api/v1/targets/ALL/2026-03", json={"daily_target_commission": 1000}, headers=headers)
 
     assert updated.status_code == 200
     assert replaced.status_code == 200
     targets = client.get("/api/v1/targets", params={"account": "ALL", "month": "2026-03"}).json()["items"]
-    assert targets == [{"account": "ALL", "month": "2026-03", "target_commission": 1000}]
+    assert targets == [{"account": "ALL", "month": "2026-03", "daily_target_commission": 1000}]
 
 
 def test_owner_can_manage_users_but_cannot_remove_own_owner_access(tmp_path):
@@ -262,7 +294,7 @@ def test_owner_reset_data_requires_csrf_confirmation_and_preserves_auth(tmp_path
     client, engine, auth = oidc_api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=123))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=123))
     owner, tokens = login(client, auth, "owner@example.test", "owner")
     headers = {"X-CSRF-Token": tokens.csrf_token}
 
