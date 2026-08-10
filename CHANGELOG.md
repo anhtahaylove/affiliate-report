@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.3.1 - 2026-08-11
+
+Không có thay đổi tính năng so với v1.3.0 — toàn bộ nội dung bên dưới vẫn là của bản này. Bản v1.3.0 không phát hành được: bước kiểm tra bảo mật phụ thuộc khi dựng bản cài báo một lỗ hổng trong `nanoid`, một thư viện đi kèm công cụ dựng giao diện. Đã ghim lên bản đã vá rồi dựng lại; lỗ hổng đó nằm ở khâu dựng ứng dụng, không nằm trong bản chạy trên máy bạn.
+
 ## v1.3.0 - 2026-08-11
 
 **Nhập dữ liệu không còn mất trắng vì một dòng hỏng.** Trước đây chỉ cần một dòng có ngày sai định dạng hoặc thiếu ID SKU là cả file bị từ chối, dù 5.000 dòng còn lại hoàn toàn bình thường. Giờ app chỉ loại đúng dòng đọc không được, báo rõ dòng số mấy và sai ở đâu, phần còn lại vẫn vào bình thường. Cùng lý do đó, file chỉ cần có đủ 47 cột TikTok là nhập được — thứ tự cột không còn quan trọng và cột lạ TikTok thêm về sau chỉ bị bỏ qua chứ không làm hỏng cả lần nhập.
