@@ -266,6 +266,8 @@ def import_rows(
     account = _normalize_account_code(account)
     hashes_by_key: dict[str, set[str]] = {}
     for row in rows:
+        if row.get("_rejected"):
+            continue
         hashes_by_key.setdefault(row["business_key"], set()).add(row["normalized_hash"])
     collisions = [key for key, hashes in hashes_by_key.items() if len(hashes) > 1]
     if collisions:
@@ -307,6 +309,13 @@ def import_rows(
             "rejected_rows": [],
         }
         for idx, row in enumerate(rows, start=2):
+            # read_xlsx gắn số dòng thật trong file Excel; caller dựng rows thủ công thì dùng vị trí.
+            row_number = int(row.get("_row_number") or idx)
+            rejected = row.get("_rejected")
+            if rejected:
+                summary["rejected"] += 1
+                summary["rejected_rows"].append(rejected)
+                continue
             try:
                 outcome = None
                 with conn.begin_nested():
@@ -318,7 +327,7 @@ def import_rows(
                     ))
                     conn.execute(raw_import_rows.insert().values(
                         batch_id=batch_id,
-                        row_number=idx,
+                        row_number=row_number,
                         business_key=row["business_key"],
                         raw_json=raw,
                     ))
@@ -367,7 +376,7 @@ def import_rows(
             except IntegrityError:
                 summary["rejected"] += 1
                 summary["rejected_rows"].append({
-                    "row_number": idx,
+                    "row_number": row_number,
                     "reason": "Ràng buộc dữ liệu bị vi phạm",
                 })
         conn.execute(update(import_batches).where(import_batches.c.id == batch_id).values(**{k: summary[k] for k in ("inserted", "updated", "unchanged", "rejected")}))

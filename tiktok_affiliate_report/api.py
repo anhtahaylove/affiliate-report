@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
@@ -645,18 +646,23 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         if not (file.filename or "").lower().endswith(".xlsx"):
             raise HTTPException(status_code=415, detail="only .xlsx files are supported")
         data = await _read_upload(file)
-        try:
-            rows = read_xlsx(BytesIO(data), account)
-            result = import_rows(
+
+        # Parse + ghi DB là công việc đồng bộ nặng; chạy trong threadpool để event loop
+        # vẫn phục vụ được /health, tray và các tab khác suốt lần nhập.
+        def ingest() -> dict[str, Any]:
+            return import_rows(
                 _engine(app),
                 filename=file.filename or "upload.xlsx",
                 file_bytes=data,
                 account=account,
-                rows=rows,
+                rows=read_xlsx(BytesIO(data), account),
                 uploaded_by_label=current.display_name or current.email,
                 auth_method=current.auth_method,
                 auth_subject=current.auth_subject,
             )
+
+        try:
+            result = await run_in_threadpool(ingest)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {

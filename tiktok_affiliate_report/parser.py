@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import warnings
 from datetime import datetime
 from typing import Any
 
@@ -85,12 +86,17 @@ def parse_int(value: Any) -> int | None:
     return sign * int(digits) if digits else None
 
 
-def parse_date(value: Any) -> datetime | None:
+def parse_date(value: Any, field: str | None = None) -> datetime | None:
     if nullish(value):
         return None
     if isinstance(value, datetime):
         return value.replace(microsecond=0)
-    return datetime.strptime(str(value).strip(), "%d/%m/%Y %H:%M:%S")
+    text = str(value).strip()
+    try:
+        return datetime.strptime(text, "%d/%m/%Y %H:%M:%S")
+    except ValueError as exc:
+        label = f"{field}: " if field else ""
+        raise ValueError(f"{label}ngày {text!r} không đúng định dạng dd/mm/yyyy hh:mm:ss") from exc
 
 
 def normalize_status(value: Any) -> str:
@@ -112,7 +118,7 @@ def normalize_row(row: dict[str, Any], account: str) -> dict[str, Any]:
         elif header in INT_FIELDS:
             out[header] = parse_int(value)
         elif header in DATE_FIELDS:
-            out[header] = parse_date(value)
+            out[header] = parse_date(value, header)
         else:
             out[header] = None if nullish(value) else str(value).strip()
     out["status"] = normalize_status(out["Trạng thái quyết toán đơn hàng"])
@@ -139,17 +145,27 @@ def normalize_row(row: dict[str, Any], account: str) -> dict[str, Any]:
 
 
 def read_xlsx(path_or_buffer: Any, account: str) -> list[dict[str, Any]]:
+    """Đọc file export TikTok. Dòng hỏng trả về dưới dạng `{"_rejected": {...}}` để phần còn
+    lại của file vẫn được nhập; chỉ file thiếu cột hoặc quá dài mới bị từ chối toàn bộ."""
     df = pd.read_excel(path_or_buffer, dtype=str, keep_default_na=False)
     if len(df) > MAX_IMPORT_ROWS:
         raise ValueError(f"File có {len(df):,} dòng, vượt giới hạn {MAX_IMPORT_ROWS:,} dòng")
     headers = list(df.columns)
-    if headers != EXPECTED_HEADERS:
-        missing = [h for h in EXPECTED_HEADERS if h not in headers]
-        extra = [h for h in headers if h not in EXPECTED_HEADERS]
-        raise ValueError(f"Export phải có đúng 47 cột TikTok. Thiếu={missing}; Dư={extra}")
+    missing = [h for h in EXPECTED_HEADERS if h not in headers]
+    if missing:
+        raise ValueError(f"Export phải có đủ 47 cột TikTok. Thiếu={missing}")
+    unknown = [h for h in headers if h not in EXPECTED_HEADERS]
+    if unknown:
+        warnings.warn(f"Bỏ qua {len(unknown)} cột lạ ngoài 47 cột TikTok: {unknown}", stacklevel=2)
     rows = []
-    for row in df.to_dict(orient="records"):
-        normalized = normalize_row(row, account)
+    for offset, row in enumerate(df.to_dict(orient="records")):
+        row_number = offset + 2  # dòng 1 của file Excel là header
+        try:
+            normalized = normalize_row(row, account)
+        except ValueError as exc:
+            rows.append({"_row_number": row_number, "_rejected": {"row_number": row_number, "reason": str(exc)}})
+            continue
         normalized["_raw"] = row
+        normalized["_row_number"] = row_number
         rows.append(normalized)
     return rows

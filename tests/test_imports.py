@@ -67,6 +67,22 @@ def test_database_rejects_unknown_url_scheme():
         get_engine("not-a-sqlite-url")
 
 
+def test_parser_rejected_rows_are_counted_but_do_not_block_the_import():
+    e = engine()
+    rows = [
+        raw_row(order="O1") | {"_row_number": 2},
+        {"_row_number": 3, "_rejected": {"row_number": 3, "reason": "Ngày đặt hàng: ngày '32/13/2026' không đúng định dạng"}},
+        raw_row(order="O2") | {"_row_number": 4},
+    ]
+
+    result = import_rows(e, filename="mix.xlsx", file_bytes=b"mix", account="CHIISTORE", rows=rows)
+
+    assert result["inserted"] == 2
+    assert result["rejected"] == 1
+    assert [item["row_number"] for item in result["rejected_rows"]] == [3]
+    assert len(orders(e).index) == 2
+
+
 def test_duplicate_file_sha_is_noop():
     e = engine()
     rows = [raw_row()]
