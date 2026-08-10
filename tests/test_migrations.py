@@ -230,14 +230,23 @@ def test_migration_renames_target_commission_on_postgres_too():
         """))
         conn.execute(text("insert into monthly_targets (account, month, target_commission) values ('CHIISTORE', '2026-03-01', 250000)"))
 
-    init_db(e)
+    try:
+        init_db(e)
 
-    columns = {column["name"] for column in inspect(e).get_columns("monthly_targets")}
-    assert "daily_target_commission" in columns
-    assert "target_commission" not in columns
-    with e.connect() as conn:
-        assert conn.execute(select(monthly_targets.c.daily_target_commission)).scalar_one() == 250000
-    e.dispose()
+        columns = {column["name"] for column in inspect(e).get_columns("monthly_targets")}
+        assert "daily_target_commission" in columns
+        assert "target_commission" not in columns
+        with e.connect() as conn:
+            assert conn.execute(select(monthly_targets.c.daily_target_commission)).scalar_one() == 250000
+    finally:
+        # Postgres trong CI dùng chung cho mọi test; migration 0005 seed accounts từ
+        # monthly_targets, nên không dọn là test migrate chạy sau sẽ thấy target không rỗng.
+        with e.begin() as conn:
+            conn.execute(text(
+                "TRUNCATE TABLE auth_sessions, oidc_login_states, user_account_access, monthly_targets, "
+                "order_line_versions, raw_import_rows, import_batches, app_users, accounts RESTART IDENTITY CASCADE"
+            ))
+        e.dispose()
 
 
 def test_migrations_repair_import_batches_only_partial_schema():
