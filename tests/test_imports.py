@@ -219,7 +219,7 @@ def test_monthly_kpi_combined_layer_includes_ineligible_without_touching_actual(
     # được dùng làm số chính thức quyết định đã đạt mục tiêu hay chưa.
     e = engine()
     with e.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=1000))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=1000))
     import_rows(
         e,
         filename="a.xlsx",
@@ -389,7 +389,7 @@ def test_analytics_returns_finance_dimensions_settlement_quality_and_forecast():
     create_account(e, "CHIISTORE", display_name="Chii Store")
     create_account(e, "EMLINHNOIY", display_name="Em Linh")
     with e.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=1000))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=1000))
     import_rows(
         e,
         filename="march.xlsx",

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+
+import pytest
 from sqlalchemy import inspect, select, text
 
 from tiktok_affiliate_report.db import accounts, get_engine, import_batches, import_rows, init_db, monthly_targets, order_line_versions
@@ -23,7 +26,7 @@ def test_init_db_runs_versioned_migrations_and_seeds_targets():
     assert {i["name"] for i in inspector.get_indexes("raw_import_rows")} >= {"ix_raw_import_rows_batch_id"}
     assert {i["name"] for i in inspector.get_indexes("import_batches")} >= {"ix_import_batches_account_created_at"}
     with e.connect() as conn:
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6]
         assert conn.execute(select(monthly_targets.c.id)).first() is None
         assert conn.execute(select(accounts)).first() is None
     assert {"app_users", "user_account_access", "auth_sessions", "oidc_login_states"} <= set(inspector.get_table_names())
@@ -71,7 +74,7 @@ def test_migrations_adopt_existing_sqlite_and_preserve_data():
     with e.connect() as conn:
         old = conn.execute(text("select file_sha, filename, account, inserted from import_batches where id = 1")).mappings().one()
         assert dict(old) == {"file_sha": "abc", "filename": "old.xlsx", "account": "CHIISTORE", "inserted": 3}
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6]
         assert conn.execute(select(accounts.c.code)).scalar_one() == "CHIISTORE"
 
 
@@ -186,6 +189,55 @@ def test_migration_backfills_analytics_columns_from_raw_json():
     assert version["order_type"] == "Affiliate"
     assert version["commission_type"] == "Standard"
     assert version["currency"] == "VND"
+
+
+def test_migration_renames_target_commission_and_keeps_existing_values():
+    e = engine()
+    with e.begin() as conn:
+        conn.execute(text("""
+            create table monthly_targets (
+                id integer primary key,
+                account varchar(64) not null,
+                month date not null,
+                target_commission bigint not null
+            )
+        """))
+        conn.execute(text("insert into monthly_targets (id, account, month, target_commission) values (1, 'CHIISTORE', '2026-03-01', 250000)"))
+
+    init_db(e)
+    init_db(e)  # chạy lại phải không đổi gì thêm
+
+    columns = {column["name"] for column in inspect(e).get_columns("monthly_targets")}
+    assert "daily_target_commission" in columns
+    assert "target_commission" not in columns
+    with e.connect() as conn:
+        kept = conn.execute(select(monthly_targets.c.account, monthly_targets.c.daily_target_commission)).all()
+    assert kept == [("CHIISTORE", 250000)]
+
+
+@pytest.mark.skipif(not os.getenv("POSTGRES_TEST_URL"), reason="POSTGRES_TEST_URL not set")
+def test_migration_renames_target_commission_on_postgres_too():
+    e = get_engine(os.environ["POSTGRES_TEST_URL"])
+    with e.begin() as conn:
+        conn.execute(text("drop schema public cascade; create schema public"))
+        conn.execute(text("""
+            create table monthly_targets (
+                id serial primary key,
+                account varchar(64) not null,
+                month date not null,
+                target_commission bigint not null
+            )
+        """))
+        conn.execute(text("insert into monthly_targets (account, month, target_commission) values ('CHIISTORE', '2026-03-01', 250000)"))
+
+    init_db(e)
+
+    columns = {column["name"] for column in inspect(e).get_columns("monthly_targets")}
+    assert "daily_target_commission" in columns
+    assert "target_commission" not in columns
+    with e.connect() as conn:
+        assert conn.execute(select(monthly_targets.c.daily_target_commission)).scalar_one() == 250000
+    e.dispose()
 
 
 def test_migrations_repair_import_batches_only_partial_schema():

@@ -147,7 +147,7 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
     targets = pd.read_sql(select(monthly_targets), engine)
     target_map = {
         (account, pd.Timestamp(month).strftime("%Y-%m")): int(target)
-        for account, month, target in zip(targets["account"], targets["month"], targets["target_commission"])
+        for account, month, target in zip(targets["account"], targets["month"], targets["daily_target_commission"])
     }
     active_accounts = _active_account_codes(engine)
     selected_accounts = active_accounts if accounts is None else accounts
@@ -226,7 +226,7 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
         .where(monthly_targets.c.account.in_(target_accounts))
         .order_by(monthly_targets.c.month, monthly_targets.c.account),
         engine,
-    )[["month", "account", "target_commission"]].rename(columns={"target_commission": "daily_target"})
+    )[["month", "account", "daily_target_commission"]].rename(columns={"daily_target_commission": "daily_target"})
     df = _current_rows(engine, accounts, start, end, statuses)
     if df.empty:
         actual = pd.DataFrame(columns=["month", "account", "actual_commission", "combined_commission", "order_lines"])
@@ -339,7 +339,7 @@ def sheets_output(engine: Engine, accounts=None, start=None, end=None, statuses=
     targets = pd.read_sql(select(monthly_targets).where(monthly_targets.c.account == "ALL"), engine)
     target_map = {
         pd.Timestamp(month).strftime("%Y-%m"): int(target)
-        for month, target in zip(targets["month"], targets["target_commission"])
+        for month, target in zip(targets["month"], targets["daily_target_commission"])
     }
     if set(account_order) == set(active_accounts) and not statuses:
         output["KPI/ngày"] = output["Ngày"].str[:7].map(target_map).astype("Int64")

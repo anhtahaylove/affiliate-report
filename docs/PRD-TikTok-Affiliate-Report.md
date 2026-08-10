@@ -168,6 +168,9 @@ actual_commission = initial_commission - cancelled_commission
 - Cùng business key + row hash khác: version hiện tại thành `is_current = false`, tạo version mới.
 - Một dòng biến mất khỏi file mới không có nghĩa là bị xoá.
 - ID phải lưu dạng `TEXT`; không đổi sang số vì có thể mất chữ số.
+- Dòng không đọc được (thiếu ID đơn/SKU, ngày sai định dạng) chỉ bị loại riêng dòng đó, kèm số dòng thật trong file Excel và lý do; phần còn lại của file vẫn được nhập.
+- File chỉ cần có đủ 47 cột TikTok; thứ tự cột không quan trọng và cột lạ được bỏ qua kèm cảnh báo, không chặn cả file.
+- Một lần nhập hoàn tác được: gỡ các version thuộc batch đó rồi trả `is_current` về version còn lại mới nhất, trừ khi một lần nhập mới hơn đã đè lên cùng business key.
 
 ### 7.5 Kiến trúc
 

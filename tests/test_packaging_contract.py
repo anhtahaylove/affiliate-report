@@ -27,9 +27,18 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    assert APP_VERSION == "1.2.13"
-    assert "[string]$AppVersion = '1.2.13'" in build
-    assert '#define MyAppVersion "1.2.13"' in installer
+    # Phiên bản chỉ được khai ở version.py; mọi nơi khác phải bám theo nó, kể cả README —
+    # người dùng đối chiếu tên file setup trong README với file tải về.
+    assert f"[string]$AppVersion = '{APP_VERSION}'" in build
+    assert f'#define MyAppVersion "{APP_VERSION}"' in installer
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert f"TikTokAffiliateReportSetup-v{APP_VERSION}.exe" in readme
+    stale = {
+        line.strip()
+        for line in readme.splitlines()
+        if "TikTokAffiliateReportSetup-v" in line and f"v{APP_VERSION}.exe" not in line
+    }
+    assert not stale, f"README còn nhắc phiên bản cũ: {stale}"
     assert "actions/checkout@v7" in workflow
     assert "actions/setup-python@v7" in workflow
     assert "pnpm/action-setup@v6" in workflow

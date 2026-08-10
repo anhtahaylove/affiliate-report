@@ -81,9 +81,12 @@ Base path: `/api/v1`. Date dùng `YYYY-MM-DD`; tiền là integer VND; null đư
 | GET | `/api/v1/monthly-kpi` | KPI tháng |
 | GET | `/api/v1/targets` | Target KPI/ngày theo account/tháng |
 | PUT | `/api/v1/targets/{account}/{month}` | Sửa target; operator theo account, `ALL` chỉ owner |
-| GET | `/api/v1/orders` | Order explorer có limit/offset |
+| GET | `/api/v1/orders` | Order explorer, limit/offset và tìm kiếm chạy ở SQL |
+| GET | `/api/v1/orders/{business_key}/versions` | Lịch sử phiên bản của một dòng đơn kèm file nhập |
 | GET | `/api/v1/imports` | Lịch sử import mới nhất theo account scope |
 | POST | `/api/v1/imports` | Multipart `.xlsx` + account bắt buộc |
+| GET | `/api/v1/imports/{id}/undo-preview` | Ảnh hưởng khi hoàn tác một lần nhập |
+| DELETE | `/api/v1/imports/{id}` | Hoàn tác một lần nhập; cần cụm xác nhận `HOAN TAC <id>` |
 | GET | `/auth/login`, `/auth/callback`, `/auth/me` | OIDC/session lifecycle |
 | POST | `/auth/logout` | Revoke session; yêu cầu CSRF trong OIDC mode |
 | GET/PATCH | `/api/v1/admin/users` | Owner quản lý role/account access |
@@ -151,7 +154,7 @@ OIDC là provider-neutral và cấu hình bằng issuer/metadata, client credent
 - Overlap chỉ tạo version mới khi normalized content thay đổi.
 - Upload luôn yêu cầu account rõ ràng.
 - Report/KPI API khớp Python core.
-- Target là KPI hoa hồng mỗi ngày; target tháng do Python core tính theo số ngày trong scope.
+- Target là KPI hoa hồng mỗi ngày — cột `monthly_targets.daily_target_commission`; target tháng do Python core tính theo số ngày trong scope.
 - Missing import không bị đổi thành số 0.
 - Mọi endpoint ngoài health được auth trước khi public.
 - Web, desktop và mobile dùng cùng API contract và cùng PWA surface.

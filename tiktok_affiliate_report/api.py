@@ -24,11 +24,11 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import select
-from starlette.concurrency import run_in_threadpool
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 
 from .accounts import (
     can_hard_delete_accounts,
@@ -84,7 +84,12 @@ class UserUpdate(BaseModel):
 
 
 class TargetUpdate(BaseModel):
-    target_commission: int = Field(ge=0, le=1_000_000_000_000)
+    # Nhận cả tên cũ vì tab đang mở lúc app cập nhật vẫn chạy bản JS trước đó vài phút.
+    daily_target_commission: int = Field(
+        ge=0,
+        le=1_000_000_000_000,
+        validation_alias=AliasChoices("daily_target_commission", "target_commission"),
+    )
 
 
 class ResetDataRequest(BaseModel):
@@ -562,7 +567,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             {
                 "account": row["account"],
                 "month": row["month"].strftime("%Y-%m"),
-                "target_commission": int(row["target_commission"]),
+                "daily_target_commission": int(row["daily_target_commission"]),
             }
             for row in rows
         ]
@@ -585,7 +590,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         values = {
             "account": account,
             "month": month_date,
-            "target_commission": changes.target_commission,
+            "daily_target_commission": changes.daily_target_commission,
         }
         with _engine(app).begin() as conn:
             if conn.dialect.name == "postgresql":
@@ -594,10 +599,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
                 from sqlalchemy.dialects.sqlite import insert
             stmt = insert(monthly_targets).values(**values).on_conflict_do_update(
                 index_elements=["account", "month"],
-                set_={"target_commission": changes.target_commission},
+                set_={"daily_target_commission": changes.daily_target_commission},
             )
             conn.execute(stmt)
-        return {"account": account, "month": month, "target_commission": changes.target_commission}
+        return {"account": account, "month": month, "daily_target_commission": changes.daily_target_commission}
 
     @app.get("/api/v1/orders")
     def orders_endpoint(

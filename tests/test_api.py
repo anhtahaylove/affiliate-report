@@ -221,7 +221,7 @@ def test_monthly_kpi_uses_account_targets_and_clear_subset_total(tmp_path):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=100))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=100))
 
     monthly = client.get("/api/v1/monthly-kpi", params={"account": "CHIISTORE", "month": "2026-03"}).json()
     by_account = {item["account"]: item for item in monthly["items"]}
@@ -363,7 +363,7 @@ def test_owner_reset_data_creates_backup_deletes_imports_and_preserves_targets(t
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=100))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=100))
 
     wrong = client.post("/api/v1/admin/reset-data", json={"confirmation": "RESET DATA"})
     response = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"})
@@ -377,7 +377,7 @@ def test_owner_reset_data_creates_backup_deletes_imports_and_preserves_targets(t
     with engine.connect() as conn:
         assert conn.execute(select(import_batches)).all() == []
         assert conn.execute(select(order_line_versions)).all() == []
-        assert conn.execute(select(monthly_targets.c.account, monthly_targets.c.target_commission)).all() == [("CHIISTORE", 100)]
+        assert conn.execute(select(monthly_targets.c.account, monthly_targets.c.daily_target_commission)).all() == [("CHIISTORE", 100)]
         assert conn.execute(select(accounts.c.code).where(accounts.c.code == "CHIISTORE")).scalar_one() == "CHIISTORE"
 
 

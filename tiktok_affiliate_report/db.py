@@ -150,7 +150,7 @@ monthly_targets = Table(
     Column("id", Integer, primary_key=True),
     Column("account", String(64), nullable=False),
     Column("month", Date, nullable=False),
-    Column("target_commission", BigInteger, nullable=False),
+    Column("daily_target_commission", BigInteger, nullable=False),
     UniqueConstraint("account", "month", name="uq_target_account_month"),
 )
 

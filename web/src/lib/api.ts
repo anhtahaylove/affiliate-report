@@ -23,7 +23,7 @@ export type DailyRow = {
 export type TargetRow = {
   account: string;
   month: string;
-  target_commission: number;
+  daily_target_commission: number;
   updated_at?: string | null;
   updated_by?: string | null;
 };
@@ -559,7 +559,7 @@ export async function loadTargets(month: string, accounts?: string[]) {
 export async function saveTarget(account: string, month: string, targetCommission: number) {
   return request<TargetRow>(`/api/v1/targets/${encodeURIComponent(account)}/${month}`, {
     method: "PUT",
-    body: JSON.stringify({ target_commission: targetCommission }),
+    body: JSON.stringify({ daily_target_commission: targetCommission }),
   });
 }
 

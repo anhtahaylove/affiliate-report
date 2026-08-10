@@ -83,6 +83,8 @@ Các ô huỷ trong workbook thường thấp hơn trạng thái hiện tại c�
 
 `Typed` nghĩa là có cột riêng để filter/tính KPI trong MVP. `Raw JSON` nghĩa là vẫn được giữ đầy đủ để audit và có thể nâng thành typed field sau này.
 
+File chỉ cần có **đủ** 47 header dưới đây; cột được ánh xạ theo tên nên thứ tự không quan trọng, và cột lạ TikTok thêm về sau được bỏ qua kèm cảnh báo thay vì làm hỏng cả lần nhập. Dòng không đọc được bị loại riêng từng dòng kèm số dòng thật trong file Excel và lý do.
+
 | # | Header TikTok | Normalized field | Kiểu | MVP use |
 |---:|---|---|---|---|
 | 1 | ID đơn hàng | `order_id` | text | Typed, business key/search |

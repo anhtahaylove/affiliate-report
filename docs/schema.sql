@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS monthly_targets (
     account TEXT NOT NULL,
     month DATE NOT NULL,
     -- KPI hoa hồng mỗi ngày; monthly target = value * days_in_scope.
-    target_commission INTEGER NOT NULL,
+    daily_target_commission INTEGER NOT NULL,
     UNIQUE (account, month)
 );
 
@@ -176,7 +176,7 @@ FROM v_order_line_current
 WHERE order_date IS NOT NULL
 GROUP BY account, date(order_date);
 
-INSERT OR IGNORE INTO monthly_targets (account, month, target_commission)
+INSERT OR IGNORE INTO monthly_targets (account, month, daily_target_commission)
 VALUES
     ('ALL', '2026-03-01', 350000),
     ('ALL', '2026-04-01', 400000),

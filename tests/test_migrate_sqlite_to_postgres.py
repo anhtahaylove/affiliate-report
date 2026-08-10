@@ -29,7 +29,7 @@ def build_source(path: Path):
     init_db(engine)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[raw_row()])
     with engine.begin() as conn:
-        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), target_commission=123))
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=123))
         user_id = conn.execute(app_users.insert().values(
             issuer="issuer", subject="subject", email="owner@example.test", display_name="Owner", role="owner", active=True,
         )).inserted_primary_key[0]
