@@ -16,8 +16,10 @@ import {
   ImportHistoryRow,
   MonthlyKpiRow,
   OrderRow,
+  OrderVersionRow,
   OverviewRow,
   TargetRow,
+  UndoImportPreview,
   UpdateProgress,
   UpdateStatus,
   checkUpdate,
@@ -33,16 +35,19 @@ import {
   loadImportHistory,
   loadMeta,
   loadMonthlyKpi,
+  loadOrderVersions,
   loadOrders,
   loadTargets,
   loadUpdateProgress,
   loadUsers,
   ordersExportUrl,
   previewDeleteAccount,
+  previewUndoImport,
   queryString,
   resetData,
   restoreBackup,
   saveTarget,
+  undoImport,
   updateUser,
   updateAccount,
   uploadExport,
@@ -440,7 +445,7 @@ function OrdersPage({ filters }: { filters: UrlFilters }) {
   return (
     <section className="section panel wide">
       <div className="section-heading"><div><p className="section-label">Danh sách đơn hàng</p><h2>{integer.format(total)} đơn trong bộ lọc</h2></div><div className="row-actions"><a className="button-link" download="tiktok-affiliate-orders.xlsx" href={ordersExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end, search: filters.search })}>Xuất toàn bộ ra Excel</a><button type="button" onClick={() => downloadCsv(`orders-${filters.start}-${filters.end}.csv`, orders)} disabled={!orders.length}>Xuất CSV trang này</button></div></div>
-      <div className="table-wrap orders-table" role="region" aria-label="Danh sách đơn hàng, có thể cuộn ngang" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Mã đơn</th><th>SKU</th><th>Sản phẩm</th><th>Trạng thái</th><th>Ngày</th><th>SL bán</th><th>GMV</th><th>Hoa hồng ước tính</th><th>Chi tiết</th></tr></thead><tbody>{orders.map((row, index) => <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}><td>{row.account}</td><td>{row.order_id ?? "—"}</td><td>{row.sku_id ?? "—"}</td><td className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</td><td><StatusBadge status={row.status} /></td><td>{row.order_date ?? "—"}</td><td>{row.units_sold == null ? "—" : integer.format(row.units_sold)}</td><td>{formatMoney(row.gmv)}</td><td title="Hoa hồng ước tính theo file gốc, chưa trừ đơn Không đủ điều kiện">{formatMoney(row.estimated_commission)}</td><td><details className="order-detail"><summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary><span>ID sản phẩm: {row.product_id ?? "—"}</span><span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span><span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span><span>Loại đơn: {row.order_type ?? "—"}</span><span>Loại hoa hồng: {row.commission_type ?? "—"}</span><span>Ngày quyết toán: {row.settlement_date ?? "—"}</span><span>Hoa hồng thực tế (sau khi trừ không đủ điều kiện): {formatMoney(row.actual_commission)}</span><span>Đã nhận: {formatMoney(row.final_received)}</span></details></td></tr>)}</tbody></table>{!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}</div>
+      <div className="table-wrap orders-table" role="region" aria-label="Danh sách đơn hàng, có thể cuộn ngang" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Mã đơn</th><th>SKU</th><th>Sản phẩm</th><th>Trạng thái</th><th>Ngày</th><th>SL bán</th><th>GMV</th><th>Hoa hồng ước tính</th><th>Chi tiết</th></tr></thead><tbody>{orders.map((row, index) => <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}><td>{row.account}</td><td>{row.order_id ?? "—"}</td><td>{row.sku_id ?? "—"}</td><td className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</td><td><StatusBadge status={row.status} /></td><td>{row.order_date ?? "—"}</td><td>{row.units_sold == null ? "—" : integer.format(row.units_sold)}</td><td>{formatMoney(row.gmv)}</td><td title="Hoa hồng ước tính theo file gốc, chưa trừ đơn Không đủ điều kiện">{formatMoney(row.estimated_commission)}</td><td><details className="order-detail"><summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary><span>ID sản phẩm: {row.product_id ?? "—"}</span><span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span><span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span><span>Loại đơn: {row.order_type ?? "—"}</span><span>Loại hoa hồng: {row.commission_type ?? "—"}</span><span>Ngày quyết toán: {row.settlement_date ?? "—"}</span><span>Hoa hồng thực tế (sau khi trừ không đủ điều kiện): {formatMoney(row.actual_commission)}</span><span>Đã nhận: {formatMoney(row.final_received)}</span><OrderVersions businessKey={row.business_key} /></details></td></tr>)}</tbody></table>{!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}</div>
       <nav className="pagination" aria-label="Phân trang đơn hàng"><button type="button" onClick={() => goToPage(filters.page - 1)} disabled={filters.page <= 1}>Trang trước</button><span>Trang {integer.format(filters.page)} / {integer.format(totalPages)}</span><button type="button" onClick={() => goToPage(filters.page + 1)} disabled={filters.page >= totalPages}>Trang sau</button></nav>
     </section>
   );
@@ -453,6 +458,8 @@ function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser; accou
   const [message, setMessage] = useState("");
   const [rejectedRows, setRejectedRows] = useState<Array<{ file: string; total: number; rows: ReturnType<typeof visibleRejectedRows> }>>([]);
   const [busy, setBusy] = useState(false);
+  const [undo, setUndo] = useState<UndoImportPreview | null>(null);
+  const [undoPhrase, setUndoPhrase] = useState("");
   const refreshHistory = useCallback(async () => {
     const data = await loadImportHistory(20);
     setHistory(data.items);
@@ -489,7 +496,32 @@ function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser; accou
       setBusy(false);
     }
   }
-  return <div className="content-grid"><section className="section panel"><div className="section-heading"><div><p className="section-label">Nhập tuần tự</p><h2>Chọn nhiều file TikTok</h2><p>Tối đa {integer.format(maxUploadMb)} MB mỗi file; chỉ hỗ trợ định dạng .xlsx.</p></div></div><div className="upload-form"><div className="field"><label htmlFor="import-account">Tài khoản TikTok</label><select id="import-account" value={account} onChange={(event) => setAccount(event.target.value)}>{accounts.map((item) => <option key={item}>{item}</option>)}</select></div><div className="field dropzone"><label htmlFor="import-files">File Excel đã xuất từ TikTok</label><input id="import-files" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} /><span>Có thể chọn nhiều file; hệ thống sẽ nhập lần lượt và tự chống trùng.</span></div><button className="primary" type="button" onClick={() => void submit()} disabled={busy}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>{message ? <p className="upload-result" role="status">{message}</p> : null}{rejectedRows.map((group, index) => <section className="import-item" key={`${group.file}-${index}`} aria-label={`Dòng bị từ chối trong ${group.file}`}><strong>{group.file}: {group.total > group.rows.length ? `hiển thị ${integer.format(group.rows.length)} / ${integer.format(group.total)} dòng bị từ chối` : `${integer.format(group.total)} dòng bị từ chối`}</strong><ul>{group.rows.map((row) => <li key={`${group.file}-${row.row_number}`}>Dòng {integer.format(row.row_number)}: {row.reason}</li>)}</ul></section>)}</div></section><RecentImports rows={history} /></div>;
+  async function startUndo(row: ImportHistoryRow) {
+    setMessage("");
+    try {
+      setUndo(await previewUndoImport(row.id));
+      setUndoPhrase("");
+    } catch (reason) {
+      setUndo(null);
+      setMessage(errorMessage(reason, "Không xem trước được ảnh hưởng khi hoàn tác."));
+    }
+  }
+  async function confirmUndo() {
+    if (!undo || undoPhrase.trim() !== undo.confirmation) return;
+    setBusy(true);
+    try {
+      const result = await undoImport(undo.batch_id, undo.confirmation);
+      setMessage(`Đã hoàn tác ${result.filename}: gỡ hẳn ${integer.format(result.removed_lines)} dòng đơn, trả ${integer.format(result.restored_lines)} dòng về phiên bản trước.${result.backup_path ? ` Bản sao lưu: ${result.backup_path}.` : ""}`);
+      setUndo(null);
+      setUndoPhrase("");
+      await refreshHistory();
+    } catch (reason) {
+      setMessage(errorMessage(reason, "Hoàn tác thất bại."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <div className="content-grid"><section className="section panel"><div className="section-heading"><div><p className="section-label">Nhập tuần tự</p><h2>Chọn nhiều file TikTok</h2><p>Tối đa {integer.format(maxUploadMb)} MB mỗi file; chỉ hỗ trợ định dạng .xlsx.</p></div></div><div className="upload-form"><div className="field"><label htmlFor="import-account">Tài khoản TikTok</label><select id="import-account" value={account} onChange={(event) => setAccount(event.target.value)}>{accounts.map((item) => <option key={item}>{item}</option>)}</select></div><div className="field dropzone"><label htmlFor="import-files">File Excel đã xuất từ TikTok</label><input id="import-files" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} /><span>Có thể chọn nhiều file; hệ thống sẽ nhập lần lượt và tự chống trùng.</span></div><button className="primary" type="button" onClick={() => void submit()} disabled={busy}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>{message ? <p className="upload-result" role="status">{message}</p> : null}{rejectedRows.map((group, index) => <section className="import-item" key={`${group.file}-${index}`} aria-label={`Dòng bị từ chối trong ${group.file}`}><strong>{group.file}: {group.total > group.rows.length ? `hiển thị ${integer.format(group.rows.length)} / ${integer.format(group.total)} dòng bị từ chối` : `${integer.format(group.total)} dòng bị từ chối`}</strong><ul>{group.rows.map((row) => <li key={`${group.file}-${row.row_number}`}>Dòng {integer.format(row.row_number)}: {row.reason}</li>)}</ul></section>)}{undo ? <div className="notice" role="alert"><strong>Xem trước khi hoàn tác: {undo.filename} ({undo.account})</strong><p>Gỡ hẳn {integer.format(undo.removed_lines)} dòng đơn · trả {integer.format(undo.restored_lines)} dòng về phiên bản trước · xoá {integer.format(undo.removed_versions)} bản ghi phiên bản.</p>{undo.warning ? <p className="hint">{undo.warning}</p> : null}<div className="field"><label htmlFor="undo-import-confirm">Nhập chính xác <strong>{undo.confirmation}</strong></label><input id="undo-import-confirm" value={undoPhrase} onChange={(event) => setUndoPhrase(event.target.value)} /></div><div className="row-actions"><button type="button" className="danger-button" onClick={() => void confirmUndo()} disabled={busy || undoPhrase.trim() !== undo.confirmation}>Xác nhận hoàn tác</button><button type="button" onClick={() => { setUndo(null); setUndoPhrase(""); }} disabled={busy}>Huỷ</button></div></div> : null}</div></section><RecentImports rows={history} onUndo={(row) => void startUndo(row)} /></div>;
 }
 
 function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: UrlFilters; accounts: string[] }) {
@@ -949,8 +981,30 @@ function UsersSettingsPage({ currentUser, accounts }: { currentUser: CurrentUser
   return <section className="section panel wide"><div className="section-heading"><div><p className="section-label">Phân quyền truy cập</p><h2>Người dùng và phạm vi tài khoản</h2><p>Chủ sở hữu không thể tự hạ quyền hoặc tự ngừng kích hoạt tài khoản của mình.</p></div></div><div className="target-list">{users.map((user) => <article className="user-card" key={user.id}><div className="record-title"><div><strong>{user.display_name || user.email}</strong><span>{user.email}</span></div><span className="status-badge" data-status={user.active ? "active" : "archived"}>{user.active ? "Đang hoạt động" : "Đã lưu trữ"}</span></div><div className="row-actions"><label className="sr-only" htmlFor={`role-${user.id}`}>Vai trò của {user.email}</label><select id={`role-${user.id}`} value={user.role} onChange={(event) => void patch(user, { role: event.target.value as AdminUser["role"] })} disabled={saving === user.id || user.email === currentUser.email}><option value="owner">{roleLabel("owner")}</option><option value="operator">{roleLabel("operator")}</option><option value="viewer">{roleLabel("viewer")}</option></select><button type="button" onClick={() => void patch(user, { active: !user.active })} disabled={saving === user.id || user.email === currentUser.email}>{user.active ? "Lưu trữ" : "Kích hoạt lại"}</button></div>{user.role !== "owner" ? <fieldset className="filter-stack"><legend className="field-label">Tài khoản được truy cập</legend><div className="account-options">{accounts.map((account) => <label className="account-option" key={account}><input type="checkbox" checked={user.accounts.includes(account)} onChange={() => toggleAccount(user, account)} disabled={saving === user.id} />{account}</label>)}</div></fieldset> : <p className="hint">Chủ sở hữu có quyền truy cập tất cả tài khoản.</p>}</article>)}{!users.length ? <p className="empty">Chưa có người dùng nào.</p> : null}</div>{message ? <p className="upload-result" role="status">{message}</p> : null}</section>;
 }
 
-function RecentImports({ rows }: { rows: ImportHistoryRow[] }) {
-  return <section className="section panel" id="recent-imports"><div className="section-heading"><div><p className="section-label">Lịch sử nhập dữ liệu</p><h2>Các lần nhập gần đây</h2></div></div><div className="import-list">{rows.length ? rows.map((item) => <article className="import-item" key={item.id}><strong>{item.filename}</strong><span>{item.account} · thêm {integer.format(item.inserted)} · cập nhật {integer.format(item.updated)} · trùng {integer.format(item.unchanged)} · lỗi {integer.format(item.rejected)}</span><time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time></article>) : <p className="empty">Chưa có lịch sử. Hãy nhập file TikTok đầu tiên để bắt đầu.</p>}</div></section>;
+function RecentImports({ rows, onUndo }: { rows: ImportHistoryRow[]; onUndo?: (row: ImportHistoryRow) => void }) {
+  return <section className="section panel" id="recent-imports"><div className="section-heading"><div><p className="section-label">Lịch sử nhập dữ liệu</p><h2>Các lần nhập gần đây</h2></div></div><div className="import-list">{rows.length ? rows.map((item) => <article className="import-item" key={item.id}><strong>{item.filename}</strong><span>{item.account} · thêm {integer.format(item.inserted)} · cập nhật {integer.format(item.updated)} · trùng {integer.format(item.unchanged)} · lỗi {integer.format(item.rejected)}</span><time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time>{onUndo ? <div className="row-actions"><button type="button" className="danger-button" onClick={() => onUndo(item)}>Hoàn tác lần nhập này</button></div> : null}</article>) : <p className="empty">Chưa có lịch sử. Hãy nhập file TikTok đầu tiên để bắt đầu.</p>}</div></section>;
+}
+
+function OrderVersions({ businessKey }: { businessKey: string }) {
+  const [rows, setRows] = useState<OrderVersionRow[] | null>(null);
+  const [error, setError] = useState("");
+  async function load() {
+    if (rows || error) return;
+    try {
+      setRows((await loadOrderVersions(businessKey)).items);
+    } catch (reason) {
+      setError(errorMessage(reason, "Không tải được lịch sử phiên bản."));
+    }
+  }
+  return (
+    <details className="order-history" onToggle={(event) => { if (event.currentTarget.open) void load(); }}>
+      <summary>Lịch sử phiên bản</summary>
+      {error ? <span role="alert">{error}</span> : null}
+      {!rows && !error ? <span>Đang tải…</span> : null}
+      {rows?.map((row) => <span key={row.version}>Bản {integer.format(row.version)}{row.is_current ? " (đang dùng)" : ""} · {statusLabel(row.status)} · GMV {formatMoney(row.gmv)} · HH {formatMoney(row.estimated_commission)} · từ {row.filename ?? "—"} lúc {formatDateTime(row.recorded_at)}</span>)}
+      {rows?.length === 0 ? <span>Chưa có lịch sử phiên bản.</span> : null}
+    </details>
+  );
 }
 
 function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpiRow[] }) {

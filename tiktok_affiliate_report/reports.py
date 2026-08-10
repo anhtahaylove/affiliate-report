@@ -170,17 +170,23 @@ def daily_report(engine: Engine, accounts=None, start=None, end=None, statuses=N
     return result.sort_values(["day", "account"], ascending=[False, True])
 
 
+# Bảng đơn hàng cần thêm business_key để mở được lịch sử phiên bản của đúng dòng đó; các báo
+# cáo tổng hợp thì không, nên khoá này chỉ nằm trong truy vấn danh sách đơn.
+ORDER_ROW_COLUMNS = [*REPORT_COLUMNS, order_line_versions.c.business_key]
 ORDER_COLUMNS = [
     "account", "order_id", "sku_id", "product_id", "product_name", "shop_id", "shop_name",
     "content_type", "content_id", "order_type", "commission_type", "currency", "status",
     "order_date", "settlement_date", "gmv", "actual_gmv", "units_sold", "units_refunded",
     "estimated_commission", "actual_commission", "final_received", "version", "created_at",
+    "business_key",
 ]
+# File Excel xuất ra là để người dùng đọc, không cần khoá nội bộ.
+ORDER_EXPORT_COLUMNS = [column for column in ORDER_COLUMNS if column != "business_key"]
 
 
 def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None, limit=None, offset=0) -> pd.DataFrame:
     stmt = (
-        select(*REPORT_COLUMNS)
+        select(*ORDER_ROW_COLUMNS)
         .where(*_current_filters(accounts, start, end, statuses, search))
         .order_by(
             order_line_versions.c.order_date.desc().nulls_last(),

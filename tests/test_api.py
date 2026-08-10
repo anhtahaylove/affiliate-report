@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import date
 from io import BytesIO
+from urllib.parse import quote
 
 import pandas as pd
 from fastapi.testclient import TestClient
@@ -252,6 +253,47 @@ def test_orders_paginates_with_total(tmp_path):
     assert payload["limit"] == 2
     assert payload["offset"] == 1
     assert len(payload["items"]) == 2
+
+
+def test_undo_import_endpoint_previews_then_removes_the_batch(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    second = import_rows(
+        engine,
+        filename="b.xlsx",
+        file_bytes=b"b",
+        account="CHIISTORE",
+        rows=[normalized(**{"GMV": "900.000"}), normalized(**{"ID đơn hàng": "O9", "ID SKU": "S9"})],
+    )
+    batch_id = second["batch_id"]
+
+    preview = client.get(f"/api/v1/imports/{batch_id}/undo-preview").json()
+    assert preview["confirmation"] == f"HOAN TAC {batch_id}"
+    assert (preview["removed_lines"], preview["restored_lines"]) == (1, 1)
+
+    assert client.request("DELETE", f"/api/v1/imports/{batch_id}", json={"confirmation": "sai"}).status_code == 422
+
+    removed = client.request("DELETE", f"/api/v1/imports/{batch_id}", json={"confirmation": preview["confirmation"]})
+    assert removed.status_code == 200
+    assert removed.json()["removed_versions"] == 2
+
+    assert client.get(f"/api/v1/imports/{batch_id}/undo-preview").status_code == 404
+    assert client.get("/api/v1/orders").json()["total"] == 1
+    assert client.get("/api/v1/imports").json()["count"] == 1
+
+
+def test_order_versions_endpoint_lists_history_newest_first(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    import_rows(engine, filename="b.xlsx", file_bytes=b"b", account="CHIISTORE", rows=[normalized(**{"GMV": "900.000"})])
+
+    business_key = client.get("/api/v1/orders").json()["items"][0]["business_key"]
+    payload = client.get(f"/api/v1/orders/{quote(business_key, safe='')}/versions").json()
+
+    assert payload["count"] == 2
+    assert [item["version"] for item in payload["items"]] == [2, 1]
+    assert [item["filename"] for item in payload["items"]] == ["b.xlsx", "a.xlsx"]
+    assert client.get("/api/v1/orders/KHONG|CO|GI/versions").status_code == 404
 
 
 def test_import_requires_account_and_imports_xlsx(tmp_path):

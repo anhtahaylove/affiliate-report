@@ -861,6 +861,14 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .order-detail summary { cursor: pointer; font-weight: 700; }
 .order-detail span { display: block; margin-top: 6px; color: var(--ink-soft); }
 
+.order-history {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.order-history summary { cursor: pointer; font-weight: 600; color: var(--teal); }
+
 .analytics-svg {
   width: 100%;
   height: 220px;

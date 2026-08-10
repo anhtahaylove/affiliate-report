@@ -41,8 +41,18 @@ from .accounts import (
 from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .db import accounts as account_registry
 from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
+from .imports import order_line_history, undo_import, undo_preview
 from .parser import read_xlsx
-from .reports import analytics, count_orders, daily_report, monthly_kpi, orders, overview, sheets_output
+from .reports import (
+    ORDER_EXPORT_COLUMNS,
+    analytics,
+    count_orders,
+    daily_report,
+    monthly_kpi,
+    orders,
+    overview,
+    sheets_output,
+)
 from .reset_data import (
     RESET_CONFIRMATION_PHRASE,
     RESTORE_CONFIRMATION_PHRASE,
@@ -103,6 +113,10 @@ class AccountUpdate(BaseModel):
 
 
 class AccountDeleteRequest(BaseModel):
+    confirmation: str
+
+
+class UndoImportRequest(BaseModel):
     confirmation: str
 
 
@@ -615,7 +629,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> StreamingResponse:
         accounts = permitted_accounts(current, _list(account))
         df = orders(_engine(app), accounts, start, end, _list(status), search)
-        return _xlsx_response(df, "tiktok-affiliate-orders.xlsx", "Orders")
+        return _xlsx_response(df[ORDER_EXPORT_COLUMNS], "tiktok-affiliate-orders.xlsx", "Orders")
 
     @app.get("/api/v1/reports/daily.xlsx")
     def daily_export_endpoint(
@@ -703,6 +717,43 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             rows = conn.execute(stmt).mappings().all()
         items = [{key: _clean(value) for key, value in row.items()} for row in rows]
         return {"items": items, "count": len(items), "limit": limit}
+
+    def writable_batch(current: Principal, batch_id: int) -> dict[str, Any]:
+        if current.role not in {"owner", "operator"}:
+            raise HTTPException(status_code=403, detail="Hoàn tác lần nhập cần quyền vận hành hoặc chủ sở hữu")
+        try:
+            preview = undo_preview(_engine(app), batch_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        permitted_accounts(current, [str(preview["account"])])
+        return preview
+
+    @app.get("/api/v1/imports/{batch_id}/undo-preview")
+    def undo_preview_endpoint(batch_id: int, current: Principal = Depends(principal)) -> dict[str, Any]:
+        return _clean_nested(writable_batch(current, batch_id))
+
+    @app.delete("/api/v1/imports/{batch_id}")
+    def undo_import_endpoint(
+        batch_id: int,
+        request: UndoImportRequest,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        writable_batch(current, batch_id)
+        try:
+            return _clean_nested(undo_import(_engine(app), batch_id, request.confirmation))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/v1/orders/{business_key}/versions")
+    def order_versions_endpoint(business_key: str, current: Principal = Depends(principal)) -> dict[str, Any]:
+        items = order_line_history(_engine(app), business_key)
+        if not items:
+            raise HTTPException(status_code=404, detail="Không tìm thấy dòng đơn.")
+        permitted_accounts(current, [str(items[0]["account"])])
+        return {"items": [_clean_nested(item) for item in items], "count": len(items)}
 
     @app.post("/api/v1/admin/reset-data")
     def reset_data_endpoint(

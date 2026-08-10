@@ -105,6 +105,38 @@ def test_viewer_only_sees_assigned_accounts_and_cannot_import(tmp_path):
     assert denied.status_code == 403
 
 
+def test_undo_import_is_role_and_account_scoped(tmp_path):
+    client, engine, auth = oidc_api(tmp_path)
+    mine = import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    other = import_rows(engine, filename="b.xlsx", file_bytes=b"b", account="EMLINHNOIY", rows=[normalized("EMLINHNOIY")])
+    viewer, tokens = login(client, auth, "viewer@example.test", "viewer")
+    auth.update_user(viewer.user_id or 0, accounts=["CHIISTORE"])
+
+    assert client.get(f"/api/v1/imports/{mine['batch_id']}/undo-preview").status_code == 403
+
+    auth.update_user(viewer.user_id or 0, role="operator", accounts=["CHIISTORE"])
+
+    assert client.get(f"/api/v1/imports/{mine['batch_id']}/undo-preview").status_code == 200
+    assert client.get(f"/api/v1/imports/{other['batch_id']}/undo-preview").status_code == 403
+    assert client.request(
+        "DELETE",
+        f"/api/v1/imports/{other['batch_id']}",
+        json={"confirmation": f"HOAN TAC {other['batch_id']}"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
+    assert client.request(
+        "DELETE",
+        f"/api/v1/imports/{mine['batch_id']}",
+        json={"confirmation": f"HOAN TAC {mine['batch_id']}"},
+    ).status_code == 403  # thiếu CSRF token
+    assert client.request(
+        "DELETE",
+        f"/api/v1/imports/{mine['batch_id']}",
+        json={"confirmation": f"HOAN TAC {mine['batch_id']}"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 200
+
+
 def test_import_history_is_account_scoped_and_secret_safe(tmp_path):
     client, engine, auth = oidc_api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
