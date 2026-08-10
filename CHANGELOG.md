@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.3.0 - 2026-08-11
+
+**Nhập dữ liệu không còn mất trắng vì một dòng hỏng.** Trước đây chỉ cần một dòng có ngày sai định dạng hoặc thiếu ID SKU là cả file bị từ chối, dù 5.000 dòng còn lại hoàn toàn bình thường. Giờ app chỉ loại đúng dòng đọc không được, báo rõ dòng số mấy và sai ở đâu, phần còn lại vẫn vào bình thường. Cùng lý do đó, file chỉ cần có đủ 47 cột TikTok là nhập được — thứ tự cột không còn quan trọng và cột lạ TikTok thêm về sau chỉ bị bỏ qua chứ không làm hỏng cả lần nhập.
+
+**Hoàn tác được một lần nhập.** Nhập nhầm file vào sai tài khoản là chuyện sẽ xảy ra, mà trước đây cách duy nhất để sửa là xoá sạch dữ liệu báo cáo hoặc xoá cả tài khoản. Giờ trong **Nhập dữ liệu** mỗi lần nhập có nút **Hoàn tác lần nhập này**: app cho xem trước sẽ gỡ bao nhiêu dòng, bao nhiêu dòng quay về phiên bản trước, bắt gõ cụm xác nhận rồi mới làm, và tự sao lưu trước khi động vào dữ liệu. Nếu lần nhập đó không phải lần mới nhất, app nói rõ điều này thay vì lặng lẽ làm sai số liệu hiện tại.
+
+**Xem được lịch sử của từng dòng đơn.** App vẫn luôn lưu mọi phiên bản của mỗi dòng đơn qua các lần nhập, nhưng chưa có chỗ nào xem. Giờ mở **Chi tiết** một đơn trong bảng Đơn hàng sẽ thấy dòng đó đã đổi gì, ở lần nhập nào và lúc nào.
+
+**App không còn đứng hình trong lúc nhập file lớn.** Trước đây suốt thời gian nhập, mọi thứ khác đều phải chờ — tab khác không tải được, biểu tượng tray không phản hồi. Giờ việc nhập chạy nền, phần còn lại của app vẫn dùng được. Nhập nhanh hơn khoảng 7 lần (5.000 dòng: 4,1 giây xuống 0,5 giây) và mở dashboard nhanh hơn khoảng 3 lần (1,4 giây xuống 0,5 giây), do app không còn kéo toàn bộ dữ liệu thô lên mỗi lần xem báo cáo.
+
+**Chế độ tối.** Có nút chuyển ở góc trên bên phải với ba lựa chọn: theo hệ thống, sáng, tối. Lựa chọn được nhớ cho lần mở sau.
+
+**Giao diện gọn lại và làm được nhiều việc hơn:**
+
+- Dashboard giữ 4 chỉ số chính ở trên, các chỉ số phụ dồn xuống một dải nhỏ bên dưới thay vì bảy thẻ ngang hàng nhau.
+- Máy mới cài, chưa nhập gì thì Dashboard chỉ ba bước cần làm thay vì hiện một dàn thẻ 0 đồng.
+- Bảng Đơn hàng sắp xếp được bằng cách bấm tên cột và chọn được 50/100/200 dòng mỗi trang; lựa chọn nằm trong địa chỉ trang nên copy link gửi đi vẫn giữ nguyên.
+- Bộ lọc thêm nút bấm nhanh: 7 ngày qua, 30 ngày qua, tháng này, tháng trước.
+- Nhập nhiều file cùng lúc giờ hiện kết quả riêng từng file kèm trạng thái, thay vì nối tất cả thành một dòng chữ dài.
+- Các thao tác nguy hiểm (xoá dữ liệu, khôi phục, xoá tài khoản, hoàn tác, thoát app, cài cập nhật) dùng chung một hộp xác nhận trong app, gộp phần xem trước ảnh hưởng và ô gõ cụm xác nhận vào một chỗ.
+- Biểu đồ xu hướng không còn méo khi đổi kích thước cửa sổ, có thêm trục giá trị và lưới mờ để ước lượng.
+- Tìm kiếm đơn hàng giờ tìm đúng cả khi gõ không dấu hoa-thường tiếng Việt (gõ "áo thun" ra "Áo Thun").
+
+**Bên trong:** cột `target_commission` trong database được đổi tên thành `daily_target_commission` cho đúng nghĩa (nó luôn là KPI mỗi ngày, không phải tổng tháng) — database cũ tự động chuyển khi mở app, không cần làm gì. Test giao diện giờ chạy trong CI (trước đây có viết nhưng chưa bao giờ được chạy), và có thêm một kịch bản chạy thật qua trình duyệt cho luồng tạo tài khoản → nhập file → đọc số liệu → hoàn tác.
+
 ## v1.2.13 - 2026-08-05
 
 - Tăng thời gian chờ app tự mở lại sau khi cài cập nhật (v1.2.12) từ 12 giây lên 60 giây trước khi thử mở lại lần nữa. Lý do: bản .exe vừa cài là file hoàn toàn mới trên đĩa — lần chạy đầu tiên phải giải nén lại runtime bên trong (chưa có cache), có thể chậm hơn hẳn các lần chạy sau tuỳ tải hệ thống lúc đó. Mở lại quá sớm khi lần đầu chỉ đang chậm (chứ không phải bị treo) sẽ tạo thêm 1 lần giải nén thứ hai chạy song song, tranh chấp đĩa và làm chậm thêm — nên ưu tiên chờ đủ lâu cho lần đầu trước khi thử lại.
