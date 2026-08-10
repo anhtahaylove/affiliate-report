@@ -1,14 +1,16 @@
-const CACHE = "tiktok-affiliate-report-shell-v4";
+const CACHE = "tiktok-affiliate-report-shell-v5";
+// Next export chạy trailingSlash: true, nên route thật có dấu gạch chéo cuối. Thiếu nó thì
+// cache phụ thuộc redirect và chỉ một URL hỏng là cả lần cài service worker thất bại.
 const APP_SHELL = [
   "/",
-  "/analytics",
-  "/orders",
-  "/imports",
-  "/targets",
-  "/accounts",
-  "/settings/data",
-  "/settings/update",
-  "/settings/users",
+  "/analytics/",
+  "/orders/",
+  "/imports/",
+  "/targets/",
+  "/accounts/",
+  "/settings/data/",
+  "/settings/update/",
+  "/settings/users/",
   "/icon-192.png",
   "/icon-512.png",
   "/manifest.webmanifest",
@@ -21,7 +23,12 @@ function shouldBypass(request) {
 }
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)));
+  // Cache từng URL riêng: một URL hỏng chỉ mất đúng URL đó, không kéo đổ cả lần cài.
+  event.waitUntil(
+    caches.open(CACHE).then((cache) =>
+      Promise.all(APP_SHELL.map((url) => cache.add(url).catch(() => undefined))),
+    ),
+  );
   self.skipWaiting();
 });
 

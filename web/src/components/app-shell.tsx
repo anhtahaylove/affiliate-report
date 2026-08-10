@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { apiUrl, CurrentUser, exitApplication, logout } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { roleLabel } from "@/lib/format";
 
 type NavItem = { href: string; label: string; roles?: Array<CurrentUser["role"]> };
@@ -24,6 +26,7 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
   const [open, setOpen] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [exitError, setExitError] = useState("");
+  const [askExit, setAskExit] = useState(false);
   const apiBaseLabel = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "Nội bộ ứng dụng";
   const visibleItems = navItems.filter((item) => !item.roles || item.roles.includes(user.role));
 
@@ -46,7 +49,7 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
 
   async function handleExit() {
     if (!user.desktop_control_token) return;
-    if (!window.confirm("Thoát hoàn toàn TikTok Affiliate Report? Bạn có thể mở lại từ Desktop hoặc Start Menu.")) return;
+    setAskExit(false);
     setExiting(true);
     setExitError("");
     try {
@@ -90,15 +93,26 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
             {open ? "Đóng menu" : "Menu"}
           </button>
           <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
+            <ThemeToggle />
             <span className="user-email" title={user.email}>{user.email}</span>
             <strong>{roleLabel(user.role)}</strong>
             <button type="button" onClick={handleLogout}>Đăng xuất</button>
-            {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => void handleExit()} disabled={exiting}>{exiting ? "Đang thoát…" : "Thoát ứng dụng"}</button> : null}
+            {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => setAskExit(true)} disabled={exiting}>{exiting ? "Đang thoát…" : "Thoát ứng dụng"}</button> : null}
             {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
           </div>
         </header>
         {children}
       </section>
+      <ConfirmDialog
+        open={askExit}
+        title="Thoát hoàn toàn TikTok Affiliate Report?"
+        confirmLabel="Thoát ứng dụng"
+        busy={exiting}
+        onCancel={() => setAskExit(false)}
+        onConfirm={() => void handleExit()}
+      >
+        <p>Backend sẽ dừng hẳn. Bạn có thể mở lại từ Desktop hoặc Start Menu bất cứ lúc nào.</p>
+      </ConfirmDialog>
     </main>
   );
 }

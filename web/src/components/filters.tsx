@@ -2,8 +2,10 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
-import { firstDayOfMonth, lastDayOfMonth, currentMonth, statusLabel } from "@/lib/format";
+import { firstDayOfMonth, lastDayOfMonth, currentMonth, lastDays, previousMonth, statusLabel, wholeMonth } from "@/lib/format";
 import { buildFilterHref } from "@/lib/filter-query";
+
+export const ORDER_PAGE_SIZES = [50, 100, 200];
 
 export type UrlFilters = {
   month: string;
@@ -13,6 +15,9 @@ export type UrlFilters = {
   statuses: string[];
   search: string;
   page: number;
+  size: number;
+  sort: string;
+  direction: "asc" | "desc";
 };
 
 export function useUrlFilters() {
@@ -26,6 +31,9 @@ export function useUrlFilters() {
     statuses: params.getAll("status"),
     search: params.get("search") || "",
     page: Math.max(1, Number(params.get("page") || "1") || 1),
+    size: ORDER_PAGE_SIZES.includes(Number(params.get("size"))) ? Number(params.get("size")) : 100,
+    sort: params.get("sort") || "",
+    direction: params.get("direction") === "asc" ? "asc" : "desc",
   }), [month, params]);
 }
 
@@ -56,6 +64,22 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     statuses.length ? (allStatusesSelected ? "Tất cả trạng thái" : `${draft.statuses.length}/${statuses.length} trạng thái`) : null,
   ].filter(Boolean).join(" · ");
 
+  // Khoảng hay dùng nhất, để không phải bấm tay ba ô ngày mỗi lần.
+  const quickRanges: Array<{ label: string; resolve: () => { start: string; end: string; month: string } }> = [
+    { label: "7 ngày qua", resolve: () => lastDays(7) },
+    { label: "30 ngày qua", resolve: () => lastDays(30) },
+    { label: "Tháng này", resolve: () => wholeMonth(currentMonth()) },
+    { label: "Tháng trước", resolve: () => wholeMonth(previousMonth()) },
+  ];
+
+  function applyQuickRange(range: { start: string; end: string; month: string }) {
+    setError("");
+    const nextDraft = { ...draft, ...range, page: 1 };
+    setDraft(nextDraft);
+    setMobileOpen(false);
+    router.push(buildFilterHref(pathname, nextDraft, accounts, statuses));
+  }
+
   function toggle(list: "accounts" | "statuses", value: string) {
     setError("");
     setDraft((current) => ({ ...current, [list]: current[list].includes(value) ? current[list].filter((item) => item !== value) : [...current[list], value] }));
@@ -68,7 +92,7 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
 
   function reset() {
     const month = currentMonth();
-    const nextDraft = { month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1 };
+    const nextDraft: UrlFilters = { month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1, size: 100, sort: "", direction: "desc" };
     setError("");
     setDraft(nextDraft);
     setMobileOpen(false);
@@ -151,6 +175,11 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
             </div>
           </fieldset>
         ) : null}
+        <div className="quick-ranges" role="group" aria-label="Khoảng thời gian nhanh">
+          {quickRanges.map((range) => (
+            <button key={range.label} type="button" className="chip" onClick={() => applyQuickRange(range.resolve())}>{range.label}</button>
+          ))}
+        </div>
         <div className="filter-actions">
           <button className="primary" type="submit">Áp dụng bộ lọc</button>
           <button type="button" onClick={reset}>Đặt lại</button>

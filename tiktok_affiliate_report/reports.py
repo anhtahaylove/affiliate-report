@@ -184,15 +184,36 @@ ORDER_COLUMNS = [
 ORDER_EXPORT_COLUMNS = [column for column in ORDER_COLUMNS if column != "business_key"]
 
 
-def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None, limit=None, offset=0) -> pd.DataFrame:
+ORDER_SORT_COLUMNS = {
+    name: order_line_versions.c[name]
+    for name in (
+        "account", "order_id", "sku_id", "product_name", "shop_name", "status",
+        "order_date", "units_sold", "units_refunded", "gmv", "estimated_commission", "final_received",
+    )
+}
+
+
+def _order_by(sort: str | None, direction: str):
+    default = (
+        order_line_versions.c.order_date.desc().nulls_last(),
+        order_line_versions.c.order_id.asc().nulls_last(),
+        order_line_versions.c.sku_id.asc().nulls_last(),
+    )
+    if not sort:
+        return default
+    if sort not in ORDER_SORT_COLUMNS:
+        raise ValueError(f"sort phải là một trong: {', '.join(sorted(ORDER_SORT_COLUMNS))}")
+    column = ORDER_SORT_COLUMNS[sort]
+    ordered = column.desc() if direction == "desc" else column.asc()
+    # Chốt thêm khoá phụ để phân trang không đổi thứ tự giữa các trang khi giá trị bằng nhau.
+    return (ordered.nulls_last(), order_line_versions.c.id.asc())
+
+
+def orders(engine: Engine, accounts=None, start=None, end=None, statuses=None, search=None, limit=None, offset=0, sort=None, direction="desc") -> pd.DataFrame:
     stmt = (
         select(*ORDER_ROW_COLUMNS)
         .where(*_current_filters(accounts, start, end, statuses, search))
-        .order_by(
-            order_line_versions.c.order_date.desc().nulls_last(),
-            order_line_versions.c.order_id.asc().nulls_last(),
-            order_line_versions.c.sku_id.asc().nulls_last(),
-        )
+        .order_by(*_order_by(sort, direction))
     )
     if limit is not None:
         stmt = stmt.limit(limit).offset(offset)

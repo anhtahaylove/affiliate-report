@@ -613,13 +613,18 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         search: str | None = None,
         limit: int = Query(100, ge=1, le=1000),
         offset: int = Query(0, ge=0),
+        sort: str | None = Query(None),
+        direction: Literal["asc", "desc"] = "desc",
         current: Principal = Depends(principal),
     ) -> dict[str, Any]:
         accounts = permitted_accounts(current, _list(account))
         statuses = _list(status)
         engine = _engine(app)
         total = count_orders(engine, accounts, start, end, statuses, search)
-        page = orders(engine, accounts, start, end, statuses, search, limit=limit, offset=offset)
+        try:
+            page = orders(engine, accounts, start, end, statuses, search, limit=limit, offset=offset, sort=sort, direction=direction)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         items = _items(page)
         return {"items": items, "count": len(items), "total": total, "limit": limit, "offset": offset}
 

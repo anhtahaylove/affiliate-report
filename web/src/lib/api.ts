@@ -453,7 +453,7 @@ export type ReportFilters = {
   month?: string;
 };
 
-function reportQuery(filters: ReportFilters & { search?: string; limit?: number; offset?: number } = {}) {
+function reportQuery(filters: ReportFilters & { search?: string; limit?: number; offset?: number; sort?: string; direction?: string } = {}) {
   return queryString({
     account: filters.accounts,
     status: filters.statuses,
@@ -463,6 +463,8 @@ function reportQuery(filters: ReportFilters & { search?: string; limit?: number;
     search: filters.search,
     limit: filters.limit,
     offset: filters.offset,
+    sort: filters.sort,
+    direction: filters.direction,
   });
 }
 
@@ -527,7 +529,7 @@ export async function loadAnalytics(filters: ReportFilters) {
   return request<AnalyticsResponse>(`/api/v1/analytics${reportQuery(filters)}`);
 }
 
-export async function loadOrders(filters: ReportFilters & { search?: string; limit?: number; offset?: number }) {
+export async function loadOrders(filters: ReportFilters & { search?: string; limit?: number; offset?: number; sort?: string; direction?: "asc" | "desc" }) {
   return request<PageResponse<OrderRow>>(`/api/v1/orders${reportQuery(filters)}`);
 }
 

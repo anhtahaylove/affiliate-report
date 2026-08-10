@@ -255,6 +255,30 @@ def test_orders_paginates_with_total(tmp_path):
     assert len(payload["items"]) == 2
 
 
+def test_orders_sort_is_applied_in_sql_and_rejects_unknown_columns(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(
+        engine,
+        filename="sortable.xlsx",
+        file_bytes=b"sortable",
+        account="CHIISTORE",
+        rows=[
+            normalized(**{"ID đơn hàng": "O1", "ID SKU": "S1", "GMV": "300.000"}),
+            normalized(**{"ID đơn hàng": "O2", "ID SKU": "S2", "GMV": "100.000"}),
+            normalized(**{"ID đơn hàng": "O3", "ID SKU": "S3", "GMV": "200.000"}),
+        ],
+    )
+
+    ascending = client.get("/api/v1/orders", params={"sort": "gmv", "direction": "asc"}).json()
+    descending = client.get("/api/v1/orders", params={"sort": "gmv", "direction": "desc"}).json()
+    first_page = client.get("/api/v1/orders", params={"sort": "gmv", "direction": "asc", "limit": 2}).json()
+
+    assert [row["gmv"] for row in ascending["items"]] == [100000, 200000, 300000]
+    assert [row["gmv"] for row in descending["items"]] == [300000, 200000, 100000]
+    assert [row["gmv"] for row in first_page["items"]] == [100000, 200000]
+    assert client.get("/api/v1/orders", params={"sort": "raw_json"}).status_code == 422
+
+
 def test_undo_import_endpoint_previews_then_removes_the_batch(tmp_path):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])

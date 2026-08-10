@@ -20,7 +20,10 @@ test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async
     await page.getByLabel("Tài khoản TikTok").selectOption(ACCOUNT);
     await page.getByLabel("File Excel đã xuất từ TikTok").setInputFiles(SAMPLE);
     await page.getByRole("button", { name: "Nhập dữ liệu" }).click();
-    await expect(page.getByRole("status")).toContainText("2 dòng, 0 dòng bị từ chối");
+    const result = page.locator(".import-result");
+    await expect(result).toHaveCount(1);
+    await expect(result).toHaveAttribute("data-outcome", "imported");
+    await expect(result).toContainText("2 dòng mới");
   });
 
   await test.step("dashboard hiện đúng tổng hoa hồng", async () => {
@@ -34,14 +37,14 @@ test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async
     await expect(page.getByRole("heading", { level: 2 })).toContainText("2 đơn trong bộ lọc");
   });
 
-  await test.step("hoàn tác lần nhập", async () => {
+  await test.step("hoàn tác lần nhập qua hộp xác nhận", async () => {
     await page.goto("/imports/");
     await page.getByRole("button", { name: "Hoàn tác lần nhập này" }).first().click();
-    const confirmation = page.getByLabel(/Nhập chính xác/);
-    await expect(confirmation).toBeVisible();
-    const phrase = await page.locator(".notice strong").nth(1).innerText();
-    await confirmation.fill(phrase);
-    await page.getByRole("button", { name: "Xác nhận hoàn tác" }).click();
+    const dialog = page.locator("dialog.confirm-dialog[open]");
+    await expect(dialog).toBeVisible();
+    const phrase = await dialog.locator("label strong").innerText();
+    await dialog.getByLabel(/Nhập chính xác/).fill(phrase);
+    await dialog.getByRole("button", { name: "Hoàn tác lần nhập" }).click();
     await expect(page.getByRole("status")).toContainText("Đã hoàn tác");
   });
 
