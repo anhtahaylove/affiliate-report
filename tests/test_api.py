@@ -236,6 +236,57 @@ def test_monthly_kpi_uses_account_targets_and_clear_subset_total(tmp_path):
     assert all(item["daily_target"] is None for item in filtered["items"])
 
 
+def test_monthly_kpi_spanning_two_months_sums_targets_instead_of_reporting_one(tmp_path):
+    """Bộ lọc "30 ngày qua" hay bắc qua ranh giới tháng, mà KPI đặt riêng cho từng tháng.
+
+    Trước đây phạm vi này trả về hai dòng cho cùng một tài khoản; giao diện chỉ đọc được một
+    dòng nên tiến độ mục tiêu đo một khoảng khác hẳn hoa hồng hiển thị ngay cạnh nó.
+    """
+    client, engine = api(tmp_path)
+    rows = [
+        normalized(**{"ID đơn hàng": f"O{index}", "Ngày đặt hàng": f"{day} 10:00:00"})
+        for index, day in enumerate(["20/07/2026", "25/07/2026", "05/08/2026"])
+    ]
+    import_rows(engine, filename="two-months.xlsx", file_bytes=b"two", account="CHIISTORE", rows=rows)
+    with engine.begin() as conn:
+        for month in (date(2026, 7, 1), date(2026, 8, 1)):
+            conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=month, daily_target_commission=1000))
+
+    scope = {"account": "CHIISTORE", "start": "2026-07-13", "end": "2026-08-11"}
+    items = client.get("/api/v1/monthly-kpi", params=scope).json()["items"]
+    overview = client.get("/api/v1/overview", params=scope).json()["items"]
+
+    kpi = [item for item in items if item["account"] == "CHIISTORE"]
+    total = next(item for item in overview if item["account"] == "ALL")
+    assert len(kpi) == 1, "mỗi tài khoản chỉ được một dòng cho cả phạm vi"
+    # 19 ngày của tháng 7 (13-31) cộng 11 ngày của tháng 8 (1-11).
+    assert kpi[0]["days_in_scope"] == 30
+    assert kpi[0]["monthly_target"] == 30_000
+    # Tiến độ phải đo đúng khoảng mà hoa hồng trên cùng màn hình đang đo.
+    assert kpi[0]["actual_commission"] == total["actual_commission"]
+
+
+def test_monthly_kpi_without_target_for_every_month_in_scope_reports_no_target(tmp_path):
+    """Thiếu KPI một tháng thì tổng mục tiêu là chưa xác định, không phải tổng mấy tháng có đặt."""
+    client, engine = api(tmp_path)
+    rows = [
+        normalized(**{"ID đơn hàng": f"O{index}", "Ngày đặt hàng": f"{day} 10:00:00"})
+        for index, day in enumerate(["20/07/2026", "05/08/2026"])
+    ]
+    import_rows(engine, filename="gap.xlsx", file_bytes=b"gap", account="CHIISTORE", rows=rows)
+    with engine.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 8, 1), daily_target_commission=1000))
+
+    items = client.get(
+        "/api/v1/monthly-kpi",
+        params={"account": "CHIISTORE", "start": "2026-07-13", "end": "2026-08-11"},
+    ).json()["items"]
+
+    kpi = next(item for item in items if item["account"] == "CHIISTORE")
+    assert kpi["monthly_target"] is None
+    assert kpi["target_achievement"] is None
+
+
 def test_orders_paginates_with_total(tmp_path):
     client, engine = api(tmp_path)
     import_rows(

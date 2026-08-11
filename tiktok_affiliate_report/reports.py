@@ -323,6 +323,54 @@ def monthly_kpi(engine: Engine, accounts=None, start=None, end=None, statuses=No
     return out[MONTHLY_KPI_COLUMNS].sort_values(["month", "account"])
 
 
+def _sum_or_na(values: pd.Series):
+    """Tổng bỏ qua ô trống, nhưng trống hết thì vẫn là trống chứ không phải 0."""
+    return pd.NA if values.isna().all() else int(values.fillna(0).sum())
+
+
+def collapse_kpi_to_scope(df: pd.DataFrame) -> pd.DataFrame:
+    """Gộp các dòng theo tháng thành một dòng cho mỗi tài khoản, phủ đúng phạm vi đang xem.
+
+    KPI đặt riêng cho từng tháng, nên "30 ngày qua" bắc qua ranh giới tháng sẽ ra hai dòng cho
+    cùng một tài khoản. Giao diện chỉ đọc được một dòng, nên tiến độ mục tiêu lại đo một khoảng
+    khác hẳn mọi con số còn lại trên cùng màn hình: hoa hồng tính đủ 30 ngày còn tiến độ chỉ
+    tính phần thuộc tháng hiện tại. Mục tiêu của cả phạm vi là tổng KPI/ngày nhân số ngày của
+    từng tháng, đúng theo cách days_in_scope đã làm trong phạm vi một tháng.
+    """
+    if df.empty:
+        return df
+
+    rows = []
+    for account, group in df.groupby("account", sort=True):
+        targets = group["monthly_target"]
+        # Thiếu KPI của bất kỳ tháng nào trong phạm vi thì tổng mục tiêu là chưa xác định, chứ
+        # không phải tổng của mấy tháng có đặt — nếu không sẽ báo vượt mục tiêu một cách giả tạo.
+        monthly_target = pd.NA if targets.isna().any() else int(targets.sum())
+        daily_values = group["daily_target"].dropna().unique()
+        actual = _sum_or_na(group["actual_commission"])
+        combined = _sum_or_na(group["combined_commission"])
+        has_target = monthly_target is not pd.NA and monthly_target > 0
+        ineligible = pd.NA if (actual is pd.NA or combined is pd.NA) else combined - actual
+        rows.append({
+            "month": min(group["month"]),
+            "account": account,
+            # KPI/ngày chỉ có nghĩa khi mọi tháng trong phạm vi đặt cùng một mức.
+            "daily_target": int(daily_values[0]) if len(daily_values) == 1 and len(group) == len(group["daily_target"].dropna()) else pd.NA,
+            "days_in_scope": int(group["days_in_scope"].sum()),
+            "monthly_target": monthly_target,
+            "actual_commission": actual,
+            "gap": pd.NA if (actual is pd.NA or monthly_target is pd.NA) else actual - monthly_target,
+            "target_achievement": actual / monthly_target if has_target and actual is not pd.NA else pd.NA,
+            "combined_commission": combined,
+            "combined_gap": pd.NA if (combined is pd.NA or monthly_target is pd.NA) else combined - monthly_target,
+            "combined_target_achievement": combined / monthly_target if has_target and combined is not pd.NA else pd.NA,
+            "ineligible_commission": ineligible,
+            "ineligible_rate": ineligible / combined if (ineligible is not pd.NA and combined) else pd.NA,
+            "order_lines": int(group["order_lines"].fillna(0).sum()),
+        })
+    return pd.DataFrame(rows, columns=MONTHLY_KPI_COLUMNS)
+
+
 def sheets_output(engine: Engine, accounts=None, start=None, end=None, statuses=None) -> pd.DataFrame:
     active_accounts = _active_account_codes(engine)
     account_order = list(active_accounts if accounts is None else accounts)
