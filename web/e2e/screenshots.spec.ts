@@ -63,4 +63,27 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
   await page.goto(`/orders/${SCOPE}`);
   await expect(page.locator(".order-card").first()).toBeVisible();
   await page.screenshot({ path: "e2e/shots/orders-mobile-390.png", fullPage: true });
+
+  const auditRoutes = [
+    ["analytics", `/analytics/${SCOPE}`, ".recharts-wrapper"],
+    ["imports", "/imports/", ".imports-workflow-page"],
+    ["targets", `/targets/${SCOPE}`, ".target-card"],
+    ["accounts", "/accounts/", ".account-card"],
+    ["preferences", "/settings/preferences/", ".theme-preference-grid"],
+    ["data", "/settings/data/", ".settings-overview"],
+    ["update", "/settings/update/", ".update-panel"],
+    ["users", "/settings/users/", ".settings-summary-row"],
+  ] as const;
+
+  for (const viewport of [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "mobile", width: 390, height: 844 },
+  ] as const) {
+    await page.setViewportSize(viewport);
+    for (const [name, route, readySelector] of auditRoutes) {
+      await page.goto(route);
+      await expect(page.locator(readySelector).first()).toBeVisible();
+      await page.screenshot({ path: `e2e/shots/audit-${name}-${viewport.name}.png`, fullPage: true });
+    }
+  }
 });

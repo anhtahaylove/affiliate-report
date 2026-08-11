@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AdminUser, CurrentUser, loadUsers, updateUser } from "@/lib/api";
+import { AdminUser, CurrentUser, IdentityPolicy, loadUsers, updateUser } from "@/lib/api";
 import { errorMessage, integer, roleLabel } from "@/lib/format";
+import { KeyRound, ShieldCheck } from "lucide-react";
 
-export function UsersSettingsPage({ currentUser, accounts }: { currentUser: CurrentUser; accounts: string[] }) {
+export function UsersSettingsPage({ currentUser, accounts, identityPolicy }: { currentUser: CurrentUser; accounts: string[]; identityPolicy: IdentityPolicy }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
@@ -47,10 +48,20 @@ export function UsersSettingsPage({ currentUser, accounts }: { currentUser: Curr
         </div>
       </div>
       <div className="settings-summary-row" aria-label="Tổng quan phân quyền">
-        <span><strong>{integer.format(activeUsers.length)}</strong> active</span>
-        <span><strong>{integer.format(archivedUsers.length)}</strong> archived</span>
+        <span><strong>{integer.format(activeUsers.length)}</strong> đang hoạt động</span>
+        <span><strong>{integer.format(archivedUsers.length)}</strong> đã lưu trữ</span>
         <span><strong>{integer.format(accounts.length)}</strong> tài khoản có thể gán</span>
       </div>
+      {identityPolicy.oidc_allowlist_enforced ? (
+        <aside className="identity-policy" aria-labelledby="identity-policy-title">
+          <KeyRound size={20} aria-hidden="true" />
+          <div>
+            <h3 id="identity-policy-title">OIDC allowlist được kiểm tra liên tục</h3>
+            <p>Email phải là <code>AUTH_BOOTSTRAP_OWNER_EMAIL</code> hoặc nằm trong <code>AUTH_ALLOWED_EMAILS</code>. Quy tắc áp dụng cho lần đăng nhập mới, người dùng hiện hữu và phiên đang hoạt động.</p>
+            <p className="hint"><ShieldCheck size={15} aria-hidden="true" /> Trạng thái “Đang hoạt động” là điều kiện cần, nhưng không vượt qua allowlist. Sau khi đổi cấu hình và khởi động lại service, phiên không còn hợp lệ sẽ bị thu hồi ở request tiếp theo.</p>
+          </div>
+        </aside>
+      ) : null}
       <div className="target-list user-management-list">
         {users.map((user) => {
           const lockedSelf = user.email === currentUser.email;

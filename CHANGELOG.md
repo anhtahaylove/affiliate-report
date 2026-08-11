@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.1 - 2026-08-11
+
+**Làm rõ quyền truy cập và ranh giới vận hành của bản dùng chung.** OIDC allowlist giờ áp dụng nhất quán cho user mới, user hiện hữu và session đang hoạt động; email bị loại khỏi cấu hình sẽ mất quyền ở request tiếp theo thay vì tiếp tục dùng session cũ. Trang **Người dùng** giải thích rõ `active` không thể vượt qua `AUTH_ALLOWED_EMAILS`.
+
+API meta công bố capability theo runtime/database. Trên PostgreSQL hoặc OIDC dùng chung, trang **Dữ liệu** và **Cập nhật** chuyển sang trạng thái do hạ tầng quản lý, không gọi endpoint Reset/Restore hoặc trình cài Windows local-only. Bản local SQLite/Windows giữ nguyên đầy đủ backup, restore và auto-update hiện có.
+
 ## v2.0.0 - 2026-08-11
 
 **Momentum Canvas thay toàn bộ lớp trải nghiệm, giữ nguyên lõi dữ liệu đã đối soát.** App có hệ thống thiết kế mới cho vận hành và tăng trưởng: Today Pulse, tiến độ mục tiêu, cảnh báo hành động, biểu đồ xu hướng, đóng góp theo tài khoản, đối soát và sức khỏe dữ liệu. Navigation desktop hỗ trợ thu gọn và tìm nhanh `Ctrl/Cmd + K`; mobile có bottom navigation, action sheet và filter bottom sheet thay vì nhồi toàn bộ điều khiển lên đầu trang.

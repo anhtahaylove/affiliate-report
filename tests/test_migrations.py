@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 
 import pytest
+from fastapi import FastAPI
 from sqlalchemy import inspect, select, text
 
+from tiktok_affiliate_report.api import _runtime_capabilities
+from tiktok_affiliate_report.auth import AuthService, AuthSettings
 from tiktok_affiliate_report.db import (
     accounts,
     get_engine,
@@ -261,6 +264,39 @@ def test_migration_renames_target_commission_on_postgres_too():
                 "TRUNCATE TABLE auth_sessions, oidc_login_states, user_account_access, monthly_targets, "
                 "order_line_versions, raw_import_rows, import_batches, app_users, accounts RESTART IDENTITY CASCADE"
             ))
+        e.dispose()
+
+
+@pytest.mark.skipif(not os.getenv("POSTGRES_TEST_URL"), reason="POSTGRES_TEST_URL not set")
+def test_postgres_runtime_capabilities_disable_local_settings():
+    e = get_engine(os.environ["POSTGRES_TEST_URL"])
+    try:
+        with e.begin() as conn:
+            conn.execute(text("drop schema public cascade; create schema public"))
+        init_db(e)
+        auth = AuthService(
+            e,
+            AuthSettings(
+                mode="oidc",
+                oidc_client_id="client",
+                oidc_issuer="https://idp.example.test",
+                oidc_redirect_uri="https://app.example.test/auth/callback",
+                bootstrap_owner_email="owner@example.test",
+                allowed_emails=("owner@example.test",),
+            ),
+        )
+        app = FastAPI()
+        app.state.engine = e
+        app.state.auth = auth
+
+        capabilities = _runtime_capabilities(app)
+
+        assert capabilities["database_backend"] == "postgresql"
+        assert capabilities["data_admin"]["available"] is False
+        assert "PostgreSQL" in capabilities["data_admin"]["reason"]
+        assert capabilities["update_check"]["available"] is False
+        assert capabilities["update_install"]["available"] is False
+    finally:
         e.dispose()
 
 

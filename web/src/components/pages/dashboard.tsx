@@ -305,7 +305,7 @@ function TrendFallback({ rows }: { rows: AnalyticsResponse["trend"] }) {
 function FirstRun() {
   const steps = [
     { href: "/accounts", title: "Tạo tài khoản TikTok", copy: "Tạo phạm vi báo cáo cho từng tài khoản affiliate." },
-    { href: "/imports", title: "Nhập file Excel đầu tiên", copy: "Chọn account, kiểm tra hàng đợi rồi nhập file TikTok." },
+    { href: "/imports", title: "Nhập tệp Excel đầu tiên", copy: "Chọn tài khoản, kiểm tra hàng đợi rồi nhập tệp TikTok." },
     { href: "/targets", title: "Đặt mục tiêu tháng", copy: "Mở planner để hệ thống tính pace và dự báo." },
   ];
   return <section className="canvas-panel first-run"><div className="panel-heading"><div><p className="section-label">Khởi động</p><h2>Thiết lập workspace đầu tiên</h2><p>Hoàn tất ba bước để mở toàn bộ Commerce Intelligence.</p></div></div><ol className="first-run-steps">{steps.map((step, index) => <li key={step.href}><span className="step-index" aria-hidden="true">{index + 1}</span><div><Link href={step.href}><strong>{step.title}</strong></Link><p>{step.copy}</p></div></li>)}</ol></section>;
@@ -315,7 +315,7 @@ function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpi
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
   return (
     <section className="canvas-panel account-comparison" id="accounts">
-      <div className="panel-heading"><div><p className="section-label">Hiệu suất tài khoản</p><h2>Hiệu suất chi tiết</h2></div><Link className="text-action" href="/accounts">Quản lý account</Link></div>
+      <div className="panel-heading"><div><p className="section-label">Hiệu suất tài khoản</p><h2>Hiệu suất chi tiết</h2></div><Link className="text-action" href="/accounts">Quản lý tài khoản</Link></div>
       {rows.length ? <>
         <div className="table-wrap desktop-data-table" role="region" aria-label="Bảng hiệu suất tài khoản" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => { const achievement = kpiMap.get(row.account)?.target_achievement; return <tr key={row.account}><td>{accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td><span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></td></tr>; })}</tbody></table></div>
         <div className="mobile-data-list">{rows.map((row) => <article className="mobile-data-card" key={row.account}><div><strong>{accountLabel(row.account)}</strong><span>{integer.format(row.orders)} đơn</span></div><dl><div><dt>GMV thực tế</dt><dd>{formatMoney(row.actual_gmv)}</dd></div><div><dt>Hoa hồng</dt><dd>{formatMoney(row.actual_commission)}</dd></div><div><dt>Đạt mục tiêu</dt><dd>{percent(kpiMap.get(row.account)?.target_achievement)}</dd></div></dl></article>)}</div>

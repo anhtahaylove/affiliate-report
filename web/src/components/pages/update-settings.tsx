@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, UpdateProgress, UpdateStatus, checkUpdate, installUpdate, loadUpdateProgress } from "@/lib/api";
+import { ApiError, CapabilityState, UpdateProgress, UpdateStatus, checkUpdate, installUpdate, loadUpdateProgress } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { errorMessage, formatBytes, formatDateTime } from "@/lib/format";
+import { CloudCog, MonitorUp, ShieldCheck } from "lucide-react";
 
 function updateErrorMessage(reason: unknown) {
   const message = errorMessage(reason, "Không thể kiểm tra cập nhật.");
   if (reason instanceof ApiError && [401, 403, 404, 502].includes(reason.status)) {
-    return `${message} Public signed feed không dùng token; kiểm tra URL feed, chữ ký và kết nối mạng.`;
+    return `${message} Nguồn cập nhật công khai có chữ ký không dùng token; hãy kiểm tra URL, chữ ký và kết nối mạng.`;
   }
   return message;
 }
@@ -48,7 +49,7 @@ function updateStageState(stage: (typeof updateStages)[number], phase: UpdateUiP
   return "pending";
 }
 
-export function UpdateSettingsPage() {
+export function UpdateSettingsPage({ checkCapability, installCapability }: { checkCapability: CapabilityState; installCapability: CapabilityState }) {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [message, setMessage] = useState("");
@@ -66,6 +67,7 @@ export function UpdateSettingsPage() {
   }, []);
 
   const check = useCallback(async () => {
+    if (!checkCapability.available) return;
     setBusy(true);
     setReconnecting(false);
     reconnectStartedRef.current = null;
@@ -86,14 +88,15 @@ export function UpdateSettingsPage() {
     } finally {
       setBusy(false);
     }
-  }, [rememberProgress]);
+  }, [checkCapability.available, rememberProgress]);
 
   useEffect(() => {
+    if (!checkCapability.available) return;
     async function load() {
       await check();
     }
     void load();
-  }, [check]);
+  }, [check, checkCapability.available]);
 
   useEffect(() => {
     if (!installing) return;
@@ -179,23 +182,42 @@ export function UpdateSettingsPage() {
   const phase: UpdateUiPhase = installing && !progress ? "preparing" : progress?.phase ?? "idle";
   const downloadValue = progress?.percent != null ? progress.percent : progress?.bytes_total ? (progress.bytes_downloaded / progress.bytes_total) * 100 : undefined;
   const targetVersion = progress?.target_version ?? status?.latest_version ?? null;
-  const canInstall = Boolean(status?.available && status.installable && status.automatic_install_supported && !installing);
+  const canInstall = Boolean(installCapability.available && status?.available && status.installable && status.automatic_install_supported && !installing);
+
+  if (!checkCapability.available) {
+    return (
+      <section className="section panel wide capability-gate" role="status">
+        <div className="capability-gate-icon"><CloudCog size={22} aria-hidden="true" /></div>
+        <div className="capability-gate-copy">
+          <p className="section-label">Triển khai dùng chung</p>
+          <h2>Phiên bản được cập nhật tại máy chủ</h2>
+          <p>{checkCapability.reason}</p>
+          <dl className="capability-facts">
+            <div><dt><MonitorUp size={16} aria-hidden="true" />Kênh cập nhật</dt><dd>Pipeline triển khai máy chủ</dd></div>
+            <div><dt><ShieldCheck size={16} aria-hidden="true" />Ứng dụng</dt><dd>Không tải hoặc chạy installer Windows</dd></div>
+          </dl>
+          <p className="hint">Khi quản trị viên triển khai phiên bản mới, người dùng chỉ cần tải lại trang. Dữ liệu PostgreSQL không bị thay thế bởi installer cục bộ.</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="section panel wide update-settings-page" aria-busy={busy || installing || reconnecting}>
       <div className="section-heading">
-        <div><p className="section-label">Phiên bản ứng dụng</p><h2>Kiểm tra → Tải → Xác minh → Cài đặt</h2><p className="subtle">Luồng cập nhật giữ nguyên signed feed hiện có, chỉ cài tự động khi app Windows hỗ trợ.</p></div>
+        <div><p className="section-label">Phiên bản ứng dụng</p><h2>Kiểm tra → Tải → Xác minh → Cài đặt</h2><p className="subtle">Luồng cập nhật dùng nguồn phát hành có chữ ký; chỉ cài tự động khi ứng dụng Windows hỗ trợ.</p></div>
         <button type="button" onClick={() => void check()} disabled={busy || installing}>{busy ? "Đang kiểm tra…" : "Kiểm tra cập nhật"}</button>
       </div>
       <div className="update-panel">
         <div className="settings-summary-row update-versions"><span>Đang dùng <strong>{progress?.current_version ?? status?.current_version ?? "—"}</strong></span><span>Mới nhất <strong>{targetVersion ?? "—"}</strong></span><span>Trạng thái <strong>{phaseLabel(phase)}</strong></span></div>
-        <div className="update-safeguards panel-muted"><strong>Safeguards</strong><span>Feed public không dùng token · gói cài được xác minh chữ ký · khi app tạm mất kết nối, trang tự chờ reconnect tối đa 120 giây.</span></div>
+        <div className="update-safeguards panel-muted"><strong>Cơ chế bảo vệ</strong><span>Nguồn cập nhật công khai không dùng token · gói cài được xác minh chữ ký · khi ứng dụng tạm mất kết nối, trang tự chờ kết nối lại tối đa 120 giây.</span></div>
         {status?.release_name ? <p><strong>{status.release_name}</strong></p> : null}
         {status?.published_at ? <p>Ngày phát hành: {formatDateTime(status.published_at)}</p> : null}
         {status?.source_repo ? <p className="source-repo">Nguồn cập nhật: {status.source_repo}</p> : null}
         {status?.notes ? <p className="update-notes" tabIndex={0}>{status.notes}</p> : null}
         {status?.release_url ? <a className="button-link secondary-link" href={status.release_url} target="_blank" rel="noreferrer">Xem trang phát hành</a> : null}
-        {status && !status.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
+        {!installCapability.available ? <p className="hint">{installCapability.reason}</p> : null}
+        {installCapability.available && status && !status.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
 
         <div className="update-progress" aria-live="polite" aria-label="Tiến độ cập nhật">
           <div className="download-progress">

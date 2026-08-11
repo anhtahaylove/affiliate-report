@@ -66,6 +66,23 @@ def test_oidc_mode_requires_session_but_health_stays_public(tmp_path):
     assert client.get("/auth/callback", params={"code": "x", "state": "x"}).status_code == 400
 
 
+def test_oidc_meta_explains_continuous_allowlist_and_runtime_capabilities(tmp_path):
+    client, _, auth = oidc_api(tmp_path)
+    login(client, auth, "owner@example.test", "owner")
+
+    payload = client.get("/api/v1/meta").json()
+
+    assert payload["identity_policy"] == {
+        "mode": "oidc",
+        "oidc_allowlist_enforced": True,
+        "enforcement": "login_and_active_sessions",
+    }
+    assert payload["capabilities"]["database_backend"] == "sqlite"
+    assert payload["capabilities"]["data_admin"]["available"] is True
+    assert payload["capabilities"]["update_check"]["available"] is False
+    assert "máy chủ" in payload["capabilities"]["update_check"]["reason"].lower()
+
+
 def test_local_mode_rejects_non_loopback_requests_even_if_asgi_is_exposed(tmp_path):
     engine = get_engine(f"sqlite:///{(tmp_path / 'local-public.db').as_posix()}")
     client = TestClient(
@@ -381,6 +398,12 @@ def test_reset_data_is_owner_only_and_rejects_shared_sqlite(tmp_path):
 
     assert blocked.status_code == 409
     assert "shared" in blocked.json()["detail"].lower()
+
+    capability = __import__("tiktok_affiliate_report.api", fromlist=["_runtime_capabilities"])._runtime_capabilities(shared_client.app)
+    assert capability["data_admin"]["available"] is False
+    assert "shared sqlite" in capability["data_admin"]["reason"].lower()
+    assert capability["update_check"]["available"] is False
+    assert "database sqlite" in capability["update_check"]["reason"].lower()
 
 
 def test_update_admin_routes_are_owner_only_and_local_only(tmp_path):

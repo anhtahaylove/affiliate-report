@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from tiktok_affiliate_report.accounts import create_account
 from tiktok_affiliate_report.auth import AuthService, AuthSettings, _hash
-from tiktok_affiliate_report.db import auth_sessions, get_engine, init_db, oidc_login_states
+from tiktok_affiliate_report.db import app_users, auth_sessions, get_engine, init_db, oidc_login_states
 
 
 def service(tmp_path, **updates):
@@ -194,6 +194,64 @@ def test_disabled_user_session_is_revoked(tmp_path):
     auth.update_user(principal.user_id, active=False)
 
     assert auth.get_principal(tokens.session_token) is None
+
+
+def test_oidc_allowlist_applies_to_existing_users_and_email_changes(tmp_path):
+    auth, engine = service(tmp_path)
+    principal = auth.provision_user(issuer="idp", subject="viewer", email="viewer@example.com")
+
+    restricted = AuthService(
+        engine,
+        AuthSettings(
+            mode="oidc",
+            oidc_client_id="client",
+            oidc_issuer="http://idp.test",
+            oidc_redirect_uri="http://app.test/auth/callback",
+            bootstrap_owner_email="owner@example.com",
+            allowed_emails=("owner@example.com",),
+        ),
+    )
+
+    with pytest.raises(PermissionError, match="allowlist"):
+        restricted.provision_user(issuer="idp", subject="viewer", email="viewer@example.com")
+    with pytest.raises(PermissionError, match="allowlist"):
+        auth.provision_user(issuer="idp", subject="viewer", email="renamed@example.com")
+
+    with engine.connect() as conn:
+        stored = conn.execute(select(app_users).where(app_users.c.id == principal.user_id)).mappings().one()
+    assert stored["email"] == "viewer@example.com"
+
+
+def test_oidc_allowlist_revokes_existing_sessions_on_next_request(tmp_path):
+    auth, engine = service(tmp_path)
+    principal = auth.provision_user(issuer="idp", subject="viewer", email="viewer@example.com")
+    tokens = auth.create_session(principal)
+    restricted = AuthService(
+        engine,
+        AuthSettings(
+            mode="oidc",
+            oidc_client_id="client",
+            oidc_issuer="http://idp.test",
+            oidc_redirect_uri="http://app.test/auth/callback",
+            bootstrap_owner_email="owner@example.com",
+            allowed_emails=(),
+        ),
+    )
+
+    assert restricted.principal_from_session(tokens.session_token) is None
+    assert restricted.verify_csrf(tokens.session_token, tokens.csrf_token) is False
+    with engine.connect() as conn:
+        assert conn.execute(select(auth_sessions)).first() is None
+
+
+def test_oidc_bootstrap_owner_remains_allowed_without_duplicate_allowlist_entry(tmp_path):
+    auth, _ = service(tmp_path, allowed_emails=())
+
+    principal = auth.provision_user(issuer="idp", subject="owner", email="OWNER@example.com")
+    tokens = auth.create_session(principal)
+
+    assert principal.role == "owner"
+    assert auth.principal_from_session(tokens.session_token).email == "owner@example.com"
 
 
 def test_expired_session_is_removed(tmp_path):

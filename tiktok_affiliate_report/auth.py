@@ -160,6 +160,19 @@ class AuthService:
             auth_subject="local-owner",
         )
 
+    def email_is_allowed(self, email: str) -> bool:
+        """Return whether an OIDC identity may use the application now.
+
+        The allowlist is a continuous access policy, not only a first-login
+        admission check. Local mode has no OIDC email boundary.
+        """
+        if self.settings.mode != "oidc":
+            return True
+        normalized = email.strip().lower()
+        bootstrap_owner = (self.settings.bootstrap_owner_email or "").strip().lower()
+        allowed = {item.strip().lower() for item in self.settings.allowed_emails}
+        return bool(normalized and (normalized == bootstrap_owner or normalized in allowed))
+
     def get_principal(self, session_token: str | None) -> Principal | None:
         return self.principal_from_session(session_token)
 
@@ -427,6 +440,8 @@ class AuthService:
         email = email.strip().lower()
         if not issuer or not subject or not email:
             raise ValueError("OIDC profile thiếu issuer, subject hoặc email.")
+        if not self.email_is_allowed(email):
+            raise PermissionError("Email không nằm trong OIDC allowlist hiện tại.")
         with self.engine.begin() as conn:
             existing = conn.execute(
                 select(app_users).where(app_users.c.issuer == issuer, app_users.c.subject == subject)
@@ -442,10 +457,8 @@ class AuthService:
                 ))
                 return self._principal(conn, existing["id"], email=email, display_name=display_name)
 
-            role = "owner" if email == self.settings.bootstrap_owner_email else self.settings.default_role
-            allowed = email == self.settings.bootstrap_owner_email or email in self.settings.allowed_emails
-            if not allowed:
-                raise PermissionError("Email không nằm trong allowlist.")
+            bootstrap_owner = (self.settings.bootstrap_owner_email or "").strip().lower()
+            role = "owner" if email == bootstrap_owner else self.settings.default_role
             user_id = conn.execute(app_users.insert().values(
                 issuer=issuer,
                 subject=subject,
@@ -466,6 +479,8 @@ class AuthService:
     def create_session(self, principal: Principal) -> SessionTokens:
         if principal.user_id is None:
             raise ValueError("Local principal không cần DB session.")
+        if not principal.active or not self.email_is_allowed(principal.email):
+            raise PermissionError("Tài khoản không còn được phép tạo phiên OIDC.")
         session_token = secrets.token_urlsafe(32)
         csrf_token = secrets.token_urlsafe(32)
         expires_at = _now() + timedelta(seconds=self.settings.session_ttl_seconds)
@@ -486,11 +501,16 @@ class AuthService:
             return None
         with self.engine.begin() as conn:
             row = conn.execute(
-                select(auth_sessions, app_users.c.active)
+                select(auth_sessions, app_users.c.active, app_users.c.email)
                 .join(app_users, app_users.c.id == auth_sessions.c.user_id)
                 .where(auth_sessions.c.token_hash == _hash(session_token))
             ).mappings().first()
-            if not row or _aware(row["expires_at"]) <= _now() or not row["active"]:
+            if (
+                not row
+                or _aware(row["expires_at"]) <= _now()
+                or not row["active"]
+                or not self.email_is_allowed(str(row["email"]))
+            ):
                 if row:
                     conn.execute(delete(auth_sessions).where(auth_sessions.c.token_hash == row["token_hash"]))
                 return None
@@ -501,12 +521,32 @@ class AuthService:
             return True
         if not session_token or not csrf_token:
             return False
-        with self.engine.connect() as conn:
+        with self.engine.begin() as conn:
             row = conn.execute(
-                select(auth_sessions.c.csrf_hash, auth_sessions.c.expires_at)
+                select(
+                    auth_sessions.c.token_hash,
+                    auth_sessions.c.csrf_hash,
+                    auth_sessions.c.expires_at,
+                    app_users.c.active,
+                    app_users.c.email,
+                )
+                .join(app_users, app_users.c.id == auth_sessions.c.user_id)
                 .where(auth_sessions.c.token_hash == _hash(session_token))
             ).mappings().first()
-        return bool(row and _aware(row["expires_at"]) > _now() and secrets.compare_digest(row["csrf_hash"], _hash(csrf_token)))
+            valid = bool(
+                row
+                and _aware(row["expires_at"]) > _now()
+                and row["active"]
+                and self.email_is_allowed(str(row["email"]))
+                and secrets.compare_digest(row["csrf_hash"], _hash(csrf_token))
+            )
+            if row and not valid and (
+                _aware(row["expires_at"]) <= _now()
+                or not row["active"]
+                or not self.email_is_allowed(str(row["email"]))
+            ):
+                conn.execute(delete(auth_sessions).where(auth_sessions.c.token_hash == row["token_hash"]))
+            return valid
 
     def logout(self, session_token: str | None) -> None:
         if session_token:

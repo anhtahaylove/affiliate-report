@@ -90,7 +90,7 @@ export function AccountsPage() {
     return (
       <article className="account-card" key={record.code} data-state={record.active ? "active" : "archived"}>
         <div className="record-title">
-          <div><strong>{record.code}</strong><span>{record.active ? "Sẵn sàng lọc, nhập file và gán người dùng" : "Đã ẩn khỏi luồng vận hành mặc định"}</span></div>
+          <div><strong>{record.code}</strong><span>{record.active ? "Sẵn sàng lọc, nhập tệp và gán người dùng" : "Đã ẩn khỏi luồng vận hành mặc định"}</span></div>
           <span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span>
         </div>
         <dl className="account-meta">
@@ -115,7 +115,7 @@ export function AccountsPage() {
       <div className="section-heading">
         <div>
           <p className="section-label">Danh sách tài khoản</p>
-          <h2>Quản lý active/archive</h2>
+          <h2>Quản lý tài khoản đang dùng và đã lưu trữ</h2>
           <p>{hardDeleteSupported ? "Có thể xóa vĩnh viễn sau khi tạo bản sao lưu." : "Dữ liệu dùng chung chỉ cho phép lưu trữ tài khoản; lịch sử vẫn được giữ lại."}</p>
         </div>
       </div>
@@ -129,17 +129,17 @@ export function AccountsPage() {
       </div>
       <div className="account-sections">
         <section className="account-section" aria-labelledby="active-accounts-title">
-          <div className="section-heading compact"><div><p className="section-label">Active</p><h3 id="active-accounts-title">Tài khoản đang vận hành</h3></div></div>
+          <div className="section-heading compact"><div><p className="section-label">Đang dùng</p><h3 id="active-accounts-title">Tài khoản đang vận hành</h3></div></div>
           {activeRecords.map(accountCard)}
           {!activeRecords.length ? <p className="empty">Chưa có tài khoản đang hoạt động.</p> : null}
         </section>
         <section className="account-section" aria-labelledby="archived-accounts-title">
-          <div className="section-heading compact"><div><p className="section-label">Archive</p><h3 id="archived-accounts-title">Tài khoản đã lưu trữ</h3></div></div>
+          <div className="section-heading compact"><div><p className="section-label">Lưu trữ</p><h3 id="archived-accounts-title">Tài khoản đã lưu trữ</h3></div></div>
           {archivedRecords.map(accountCard)}
           {!archivedRecords.length ? <p className="empty">Chưa có tài khoản lưu trữ.</p> : null}
         </section>
       </div>
-      {deletePreview ? <div className="delete-preview panel-muted" role="status"><strong>Preview {deletePreview.code}</strong><span>{deletePreview.action === "hard_delete" ? "Sẽ xóa vĩnh viễn sau khi sao lưu" : "Sẽ chuyển vào archive"} · {countsText(deletePreview.dependency_counts)}</span></div> : null}
+      {deletePreview ? <div className="delete-preview panel-muted" role="status"><strong>Xem trước {deletePreview.code}</strong><span>{deletePreview.action === "hard_delete" ? "Sẽ xóa vĩnh viễn sau khi sao lưu" : "Sẽ chuyển vào danh sách lưu trữ"} · {countsText(deletePreview.dependency_counts)}</span></div> : null}
       {message ? <p className="upload-result" role="status">{message}</p> : null}
       {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
       <ConfirmDialog

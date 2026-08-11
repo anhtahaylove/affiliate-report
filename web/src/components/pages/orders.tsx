@@ -183,7 +183,7 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
             ))}
           </tbody>
         </table>
-        {!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}
+        {!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm tệp TikTok.</p> : null}
       </div>
 
       <div className="orders-card-list" role="list" aria-label="Danh sách đơn hàng trên màn hình nhỏ">

@@ -83,6 +83,14 @@ def test_health_and_meta(tmp_path):
     assert [item["code"] for item in meta["account_items"]] == meta["accounts"]
     assert meta["statuses"] == ["settled", "ineligible", "pending", "unknown"]
     assert meta["max_upload_mb"] == 20
+    assert meta["capabilities"]["database_backend"] == "sqlite"
+    assert meta["capabilities"]["data_admin"]["available"] is True
+    assert meta["capabilities"]["update_check"]["available"] is True
+    assert meta["identity_policy"] == {
+        "mode": "local",
+        "oidc_allowlist_enforced": False,
+        "enforcement": "local_owner",
+    }
 
 
 def test_fresh_database_has_no_user_specific_accounts_or_targets(tmp_path):

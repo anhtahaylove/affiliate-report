@@ -1,34 +1,55 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BackupItem, loadBackups, resetData, restoreBackup } from "@/lib/api";
+import { BackupItem, CapabilityState, loadBackups, resetData, restoreBackup } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { countsText, errorMessage, formatBytes, formatDateTime, integer } from "@/lib/format";
+import { Database, ServerCog, ShieldCheck } from "lucide-react";
 
 const RESET_PHRASE = "XOA DU LIEU";
 const RESTORE_PHRASE = "KHOI PHUC DU LIEU";
 
-export function DataSettingsPage() {
+export function DataSettingsPage({ capability, backend }: { capability: CapabilityState; backend: string }) {
   const [backups, setBackups] = useState<BackupItem[]>([]);
   const [selected, setSelected] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState<"reset" | "restore" | null>(null);
   const refresh = useCallback(async () => {
+    if (!capability.available) return;
     const data = await loadBackups();
     setBackups(data.items);
     setSelected((current) => current && data.items.some((item) => item.id === current) ? current : data.items[0]?.id ?? "");
-  }, []);
+  }, [capability.available]);
   useEffect(() => {
     async function load() {
+      if (!capability.available) return;
       try { await refresh(); }
       catch (reason) { setMessage(errorMessage(reason, "Không thể tải danh sách sao lưu.")); }
     }
     void load();
-  }, [refresh]);
+  }, [capability.available, refresh]);
   const selectedBackup = backups.find((item) => item.id === selected);
   const validBackups = backups.filter((backup) => backup.valid).length;
+
+  if (!capability.available) {
+    return (
+      <section className="section panel wide capability-gate" role="status">
+        <div className="capability-gate-icon"><ServerCog size={22} aria-hidden="true" /></div>
+        <div className="capability-gate-copy">
+          <p className="section-label">Database dùng chung</p>
+          <h2>Sao lưu và Reset Data được quản lý ngoài ứng dụng</h2>
+          <p>{capability.reason}</p>
+          <dl className="capability-facts">
+            <div><dt><Database size={16} aria-hidden="true" />Backend</dt><dd>{backend}</dd></div>
+            <div><dt><ShieldCheck size={16} aria-hidden="true" />Bảo vệ dữ liệu</dt><dd>Không gửi lệnh xóa hoặc khôi phục cục bộ</dd></div>
+          </dl>
+          <p className="hint">Để sao lưu, khôi phục hoặc làm sạch dữ liệu PostgreSQL, hãy dùng snapshot/backup của nhà cung cấp hoặc quy trình quản trị database đã được kiểm soát.</p>
+        </div>
+      </section>
+    );
+  }
 
   async function doReset() {
     setBusy(true);
@@ -67,8 +88,8 @@ export function DataSettingsPage() {
         <div className="section-heading">
           <div>
             <p className="section-label">Dữ liệu & sao lưu</p>
-            <h2>Safeguards trước khi ghi đè</h2>
-            <p>Reset và restore đều đi qua hộp xác nhận có cụm gõ tay; restore tạo bản sao lưu an toàn trước khi ghi đè.</p>
+            <h2>Bảo vệ dữ liệu trước khi ghi đè</h2>
+            <p>Xóa dữ liệu và khôi phục đều yêu cầu nhập đúng cụm xác nhận; hệ thống tạo bản sao lưu an toàn trước khi ghi đè.</p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={busy}>Tải lại danh sách</button>
         </div>
@@ -88,7 +109,7 @@ export function DataSettingsPage() {
       <section className="section danger-zone panel">
         <div className="section-heading"><div><p className="section-label danger-label">Bước 2 · Thao tác nguy hiểm</p><h2>Xóa lịch sử báo cáo</h2><p>Tài khoản, mục tiêu và cấu hình đăng nhập vẫn được giữ lại.</p></div></div>
         <div className="reset-form">
-          <p className="hint">Chỉ dùng khi cần làm sạch dữ liệu đơn/import. Hệ thống sẽ tạo và kiểm tra bản sao lưu trước khi xóa.</p>
+          <p className="hint">Chỉ dùng khi cần làm sạch dữ liệu đơn hàng và lịch sử nhập. Hệ thống sẽ tạo và kiểm tra bản sao lưu trước khi xóa.</p>
           <button className="danger-button" type="button" onClick={() => setAsking("reset")} disabled={busy}>Xóa dữ liệu báo cáo</button>
           {message ? <p className="reset-result" role="status">{message}</p> : null}
         </div>

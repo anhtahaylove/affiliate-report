@@ -339,6 +339,66 @@ def _desktop_shutdown_supported(app: FastAPI) -> bool:
     )
 
 
+def _capability(available: bool, reason: str | None = None) -> dict[str, Any]:
+    return {"available": available, "reason": None if available else reason}
+
+
+def _runtime_capabilities(app: FastAPI) -> dict[str, Any]:
+    engine = _engine(app)
+    auth_mode = _auth(app).settings.mode
+    try:
+        sqlite_file_path(engine)
+        data_admin = _capability(True)
+    except ValueError as exc:
+        if engine.dialect.name == "postgresql":
+            reason = (
+                "PostgreSQL dùng chung được sao lưu và khôi phục ở tầng hạ tầng; "
+                "Reset Data và backup cục bộ đã tắt để tránh thao tác phá hủy ngoài phạm vi một máy."
+            )
+        else:
+            reason = str(exc)
+        data_admin = _capability(False, reason)
+
+    update_check_available = auth_mode == "local" and data_admin["available"]
+    if auth_mode != "local":
+        update_reason = (
+            "Bản triển khai OIDC dùng chung được cập nhật tại máy chủ; "
+            "trình cập nhật Windows cục bộ không chạy trong môi trường này."
+        )
+    else:
+        update_reason = (
+            "Trình cập nhật Windows cần database SQLite cục bộ để lưu trạng thái; "
+            "môi trường database dùng chung được cập nhật tại máy chủ."
+        )
+    install_available = update_check_available and _automatic_update_supported(app)
+    install_reason = (
+        update_reason
+        if not update_check_available
+        else "Cài tự động chỉ khả dụng trong bản Windows đã cài đặt."
+    )
+    return {
+        "database_backend": engine.dialect.name,
+        "auth_mode": auth_mode,
+        "data_admin": data_admin,
+        "update_check": _capability(update_check_available, update_reason),
+        "update_install": _capability(install_available, install_reason),
+    }
+
+
+def _identity_policy(app: FastAPI) -> dict[str, Any]:
+    mode = _auth(app).settings.mode
+    return {
+        "mode": mode,
+        "oidc_allowlist_enforced": mode == "oidc",
+        "enforcement": "login_and_active_sessions" if mode == "oidc" else "local_owner",
+    }
+
+
+def _require_capability(capability: dict[str, Any]) -> None:
+    if not capability["available"]:
+        raise HTTPException(status_code=409, detail=capability["reason"])
+
+
 def _start_update_worker(target: Callable[[], None]) -> None:
     threading.Thread(target=target, name="app-updater", daemon=True).start()
 
@@ -559,6 +619,8 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             # Hiện ngay ở thanh bên: trước đây chỉ owner xem được, nằm sâu trong Cài đặt >
             # Cập nhật, nên người báo lỗi thường không biết mình đang chạy bản nào.
             "app_version": APP_VERSION,
+            "capabilities": _runtime_capabilities(app),
+            "identity_policy": _identity_policy(app),
         }
 
     @app.get("/api/v1/accounts")
@@ -966,6 +1028,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         _: None = Depends(csrf),
         __: Principal = Depends(owner),
     ) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["data_admin"])
         if request.confirmation != RESET_CONFIRMATION_PHRASE:
             raise HTTPException(status_code=422, detail=f"confirmation must be {RESET_CONFIRMATION_PHRASE!r}")
         try:
@@ -977,6 +1040,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     @app.get("/api/v1/admin/backups")
     def list_backups_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["data_admin"])
         try:
             items = list_sqlite_backups(_engine(app))
         except ValueError as exc:
@@ -985,6 +1049,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     @app.get("/api/v1/admin/backups/{backup_id:path}/preview")
     def preview_backup_endpoint(backup_id: str, _: Principal = Depends(owner)) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["data_admin"])
         try:
             return preview_sqlite_backup(_engine(app), backup_id)
         except ValueError as exc:
@@ -998,6 +1063,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         _: None = Depends(csrf),
         __: Principal = Depends(owner),
     ) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["data_admin"])
         if request.confirmation != RESTORE_CONFIRMATION_PHRASE:
             raise HTTPException(status_code=422, detail=f"confirmation must be {RESTORE_CONFIRMATION_PHRASE!r}")
         try:
@@ -1009,8 +1075,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     @app.get("/api/v1/admin/update")
     def check_update_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
-        if _auth(app).settings.mode != "local":
-            raise HTTPException(status_code=409, detail="Automatic updates are only available in local mode.")
+        _require_capability(_runtime_capabilities(app)["update_check"])
         try:
             result = check_for_update()
         except UpdateError as exc:
@@ -1020,8 +1085,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     @app.get("/api/v1/admin/update/progress")
     def update_progress_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
-        if _auth(app).settings.mode != "local":
-            raise HTTPException(status_code=409, detail="Automatic updates are only available in local mode.")
+        _require_capability(_runtime_capabilities(app)["update_check"])
         try:
             data_dir = sqlite_file_path(_engine(app)).parent
             result = read_update_status(data_dir / "update-status.json")
@@ -1041,11 +1105,8 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> dict[str, Any]:
         if request.confirmation != INSTALL_CONFIRMATION_PHRASE:
             raise HTTPException(status_code=422, detail=f"confirmation must be {INSTALL_CONFIRMATION_PHRASE!r}")
-        if _auth(app).settings.mode != "local":
-            raise HTTPException(status_code=409, detail="Automatic updates are only available in local mode.")
+        _require_capability(_runtime_capabilities(app)["update_install"])
         shutdown = getattr(app.state, "update_shutdown", None)
-        if not _automatic_update_supported(app):
-            raise HTTPException(status_code=409, detail="Automatic installation requires the installed Windows app.")
         try:
             data_dir = sqlite_file_path(_engine(app)).parent
         except ValueError as exc:
