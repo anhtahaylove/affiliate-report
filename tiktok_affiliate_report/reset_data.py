@@ -48,11 +48,24 @@ def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
         except Exception:
             conn.rollback()
             raise
+    freed = _vacuum(engine, db_path)
     return {
         "backup_path": str(backup_path),
         "deleted_counts": counts,
         "targets_preserved": True,
+        "freed_bytes": freed,
     }
+
+
+def _vacuum(engine: Engine, db_path: Path) -> int:
+    """Xoá dữ liệu chỉ đánh dấu trang là trống, file vẫn giữ nguyên kích thước — một database đã
+    reset có thể còn nằm ì hàng chục MB. VACUUM ngay tại chỗ sinh ra chỗ trống, để người dùng
+    không phải biết tới khái niệm này."""
+    before = db_path.stat().st_size
+    engine.dispose()  # VACUUM không chạy được khi còn transaction/connection đang mở
+    with engine.connect() as conn:
+        conn.exec_driver_sql("VACUUM")
+    return max(before - db_path.stat().st_size, 0)
 
 
 def backup_sqlite_before_change(engine: Engine, label: str) -> str | None:
@@ -118,6 +131,7 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
     return {
         "restored_counts": restored_counts,
         "safety_backup_path": str(safety_backup_path),
+        "freed_bytes": _vacuum(engine, db_path),
     }
 
 

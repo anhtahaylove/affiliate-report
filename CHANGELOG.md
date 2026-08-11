@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.3.2 - 2026-08-11
+
+**Sửa lỗi cập nhật báo "Failed to load Python DLL".** Sau khi cài xong bản mới, app không tự mở lại được và hiện hộp lỗi đỏ về `python312.dll`. Nguyên nhân: mỗi lần chạy, app phải tự bung toàn bộ 59 MB thư viện Python ra thư mục tạm của Windows. Ngay sau khi cài, file vừa ghi xuống đĩa còn đang bị phần mềm diệt virus quét, nên bước bung này hỏng giữa chừng. Tệ hơn, khi chờ quá lâu app lại được mở thêm lần thứ hai, hai lần bung chạy song song tranh nhau ổ đĩa và làm hỏng chắc chắn hơn.
+
+Từ bản này, thư viện Python nằm sẵn cạnh file chạy và được cài một lần lúc cài đặt, app không bung gì nữa khi mở. Đo trên máy: **mở app mất 2,4 giây** thay vì 12–60 giây ở lần đầu sau cập nhật, và không còn để lại rác trong thư mục tạm. App cũng chỉ còn một tiến trình thay vì hai — trước đây tắt app đôi khi chỉ tắt được một nửa, khiến lần cài đè sau đó báo lỗi "Installer exited with code 5".
+
+Nếu app vẫn không tự mở lại được, phần cập nhật giờ nói thẳng "đã cài xong nhưng chưa tự mở lại được, hãy mở từ Desktop" thay vì báo thành công rồi im lặng.
+
+**Xoá dữ liệu xong thì file cũng nhỏ lại.** Trước đây bấm Xoá dữ liệu hay Khôi phục xong, file database vẫn giữ nguyên kích thước cũ vì chỗ trống không được thu hồi — có máy còn 25 MB trong khi bên trong không còn dòng nào. Giờ hệ thống tự thu gọn ngay sau đó và báo đã giải phóng bao nhiêu.
+
 ## v1.3.1 - 2026-08-11
 
 Không có thay đổi tính năng so với v1.3.0 — toàn bộ nội dung bên dưới vẫn là của bản này. Bản v1.3.0 không phát hành được: bước kiểm tra bảo mật phụ thuộc khi dựng bản cài báo một lỗ hổng trong `nanoid`, một thư viện đi kèm công cụ dựng giao diện. Đã ghim lên bản đã vá rồi dựng lại; lỗ hổng đó nằm ở khâu dựng ứng dụng, không nằm trong bản chạy trên máy bạn.

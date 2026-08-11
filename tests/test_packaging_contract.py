@@ -21,6 +21,26 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert "Remove-Item -LiteralPath $staleMetadata" in build
 
 
+def test_app_ships_as_onedir_so_first_launch_never_unpacks_to_temp():
+    """Bản onefile giải nén runtime ra %TEMP% mỗi lần chạy; ngay sau khi cài, antivirus quét đống
+    file vừa rơi xuống và làm hỏng bước nạp python3xx.dll. onedir bỏ hẳn bước giải nén đó."""
+    batch = Path("BUILD_EXE.bat").read_text(encoding="utf-8")
+    installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")
+    updater = Path("tiktok_affiliate_report/updater.py").read_text(encoding="utf-8")
+
+    assert "--onedir" in batch
+    assert "--onefile" not in batch
+    # Installer phải chép cả thư mục, và dọn runtime cũ để không sót .dll lệch phiên bản.
+    assert 'Source: "..\\build\\installer-app\\TikTokAffiliateReport\\*"' in installer
+    assert "recursesubdirs" in installer
+    assert 'Type: filesandordirs; Name: "{app}\\_internal"' in installer
+    # Dữ liệu người dùng không bao giờ nằm trong diện dọn dẹp.
+    assert '{app}\\data' not in installer.split("[InstallDelete]")[1].split("[Files]")[0]
+    # Mở lần hai khi lần đầu chưa phản hồi chính là thứ sinh ra hộp thoại "Failed to load Python
+    # DLL": hai tiến trình cùng giải nén tranh nhau đĩa và antivirus.
+    assert "retrying launch once" not in updater
+
+
 def test_v124_installer_and_release_workflow_support_verified_auto_update():
     batch = Path("BUILD_EXE.bat").read_text(encoding="utf-8")
     installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")

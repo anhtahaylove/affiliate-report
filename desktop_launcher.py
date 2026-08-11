@@ -216,10 +216,8 @@ def main() -> None:
         _clear_instance_state(state_path)
         _release_single_instance(mutex_handle)
         if getattr(sys, "frozen", False):
-            # A normal return lets PyInstaller's onefile bootloader try to delete its _MEI
-            # extraction dir; loaded C-extension DLLs make that fail with a blocking "Failed to
-            # remove temporary directory" dialog, which hangs exit and breaks the updater's
-            # bounded wait for this process to close. Hard-exit skips that cleanup path.
+            # Updater chờ tiến trình này thoát trong một khoảng có hạn rồi mới chạy installer,
+            # nên thoát cứng để không phụ thuộc vào việc mọi thread nền có chịu dừng hay không.
             sys.stdout.flush()
             os._exit(0)
 
