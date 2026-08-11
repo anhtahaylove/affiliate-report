@@ -374,6 +374,9 @@ export type AnalyticsResponse = {
   };
 };
 
+export const NETWORK_ERROR_MESSAGE =
+  "Không kết nối được tới ứng dụng. Nếu bạn vừa chọn Thoát ứng dụng thì hãy mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu, rồi tải lại trang này.";
+
 export class ApiError extends Error {
   public readonly status: number;
 
@@ -421,7 +424,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (token) headers.set("X-CSRF-Token", decodeURIComponent(token));
   }
 
-  const response = await fetch(`${apiUrl()}${path}`, { ...init, credentials: "include", headers });
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}${path}`, { ...init, credentials: "include", headers });
+  } catch {
+    // fetch chỉ ném khi không nối được tới server. Với app desktop này, lý do thường gặp nhất là
+    // người dùng đã Thoát ứng dụng từ tray mà tab trình duyệt vẫn còn mở. "Failed to fetch" của
+    // trình duyệt không nói được điều đó, nên thay bằng câu chỉ đúng việc cần làm.
+    throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
+  }
   if (!response.ok) {
     let message = `API trả về HTTP ${response.status}`;
     try {

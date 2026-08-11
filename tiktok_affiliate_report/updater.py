@@ -653,13 +653,15 @@ try {
     if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
     Write-UpdateStatus 'restarting' $null
     Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-    # Bản onedir không giải nén runtime ra %TEMP% khi chạy, nên lần mở đầu tiên sau khi cài nhanh
-    # ngang các lần sau; 45s là dư dả kể cả khi antivirus còn quét thư mục vừa ghi.
+    # Bản onedir không giải nén runtime ra %TEMP% nữa. Mở ngay sau khi cài thường mất 2-4s vì
+    # installer vừa ghi xong nên file còn trong cache của OS; nhưng mở nguội (file đã rơi khỏi
+    # cache, antivirus quét lại gần 1.800 file) đã đo được tới 35s trên máy thật. Cho 90s để một
+    # lần khởi động chậm không bị báo nhầm là hỏng — chờ lâu giờ chẳng hại gì nữa.
     #
     # KHÔNG mở lần thứ hai khi chờ quá hạn. Bản onefile trước đây làm vậy và chính đó là thứ sinh
     # ra hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và
     # antivirus, một trong hai nạp DLL hỏng giữa chừng. Chờ không thấy thì báo thật cho người dùng.
-    if (-not (Wait-AppHealthy $InstanceStatePath 45000)) {
+    if (-not (Wait-AppHealthy $InstanceStatePath 90000)) {
         Write-UpdateLog 'Warning: install succeeded but the app did not report healthy within 45s; leaving it to the user to open.'
         Write-UpdateStatus 'installed' 'Đã cài xong nhưng ứng dụng chưa tự mở lại được. Hãy mở TikTok Affiliate Report từ Desktop hoặc Start Menu.'
         Write-UpdateLog 'Update installed successfully.'
