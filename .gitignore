@@ -27,3 +27,6 @@ node_modules/
 coverage/
 .DS_Store
 Thumbs.db
+
+# Ảnh chụp tham khảo tải về khi so sánh thiết kế, không thuộc repo này.
+omni*.png
