@@ -186,6 +186,29 @@ def test_operator_requires_csrf_and_cannot_upload_another_account(tmp_path):
     assert audit["uploaded_by_label"] == "viewer@example.test"
 
 
+def test_copy_previous_targets_respects_csrf_role_and_account_scope(tmp_path):
+    """Chép hàng loạt phải chịu đúng ràng buộc như sửa từng KPI một."""
+    client, engine, auth = oidc_api(tmp_path)
+    user, tokens = login(client, auth, "viewer@example.test", "viewer")
+    with engine.begin() as conn:
+        for account in ("CHIISTORE", "THAOBRA"):
+            conn.execute(monthly_targets.insert().values(account=account, month=date(2026, 3, 1), daily_target_commission=100))
+
+    missing_csrf = client.post("/api/v1/targets/2026-04/copy-previous")
+    as_viewer = client.post("/api/v1/targets/2026-04/copy-previous", headers={"X-CSRF-Token": tokens.csrf_token})
+    auth.update_user(user.user_id or 0, role="operator", accounts=["CHIISTORE"])
+    as_operator = client.post("/api/v1/targets/2026-04/copy-previous", headers={"X-CSRF-Token": tokens.csrf_token})
+
+    assert missing_csrf.status_code == 403
+    assert as_viewer.status_code == 403
+    assert as_operator.status_code == 200
+    # Chỉ chép tài khoản operator được cấp; THAOBRA nằm ngoài phạm vi nên không được đụng tới.
+    assert [item["account"] for item in as_operator.json()["copied"]] == ["CHIISTORE"]
+    with engine.connect() as conn:
+        copied = conn.execute(select(monthly_targets).where(monthly_targets.c.month == date(2026, 4, 1))).mappings().all()
+    assert [row["account"] for row in copied] == ["CHIISTORE"]
+
+
 def test_targets_are_editable_by_role_and_account_scope(tmp_path):
     client, engine, auth = oidc_api(tmp_path)
     operator, tokens = login(client, auth, "viewer@example.test", "operator")
