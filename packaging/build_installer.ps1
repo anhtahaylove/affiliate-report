@@ -6,7 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-$appExe = Join-Path $root 'build\installer-app\TikTokAffiliateReport.exe'
+# onedir: staging là một THƯ MỤC (exe + _internal), không còn là một file .exe đơn lẻ.
+$appDir = Join-Path $root 'build\installer-app\TikTokAffiliateReport'
 $outputDir = Join-Path $root 'artifacts\installer'
 $setupExe = Join-Path $root "artifacts\installer\TikTokAffiliateReportSetup-v$AppVersion.exe"
 $checksumFile = Join-Path $root 'artifacts\installer\SHA256SUMS.txt'
@@ -24,8 +25,8 @@ if (!$SkipAppBuild) {
     if ($LASTEXITCODE) { throw "BUILD_EXE.bat failed with exit code $LASTEXITCODE" }
 }
 
-if (!(Test-Path -LiteralPath $appExe)) { throw "Missing staged app EXE: $appExe" }
-& $privacyGate -Path $appExe
+if (!(Test-Path -LiteralPath $appDir)) { throw "Missing staged app folder: $appDir" }
+& $privacyGate -Path $appDir
 if (!(Test-Path -LiteralPath $installerScript)) { throw "Missing Inno Setup script: $installerScript" }
 if (!$iscc) { throw 'Inno Setup 6 is required. Install it with: winget install --id JRSoftware.InnoSetup --exact' }
 

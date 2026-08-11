@@ -34,7 +34,7 @@ if exist "dist\TikTokAffiliateReport.exe" del /q "dist\TikTokAffiliateReport.exe
 if errorlevel 1 goto :error
 
 echo [4/4] Kiem tra khong nhung database nguoi dung...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "packaging\assert_no_embedded_database.ps1" -Path "%APP_STAGE%\TikTokAffiliateReport.exe"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "packaging\assert_no_embedded_database.ps1" -Path "%APP_STAGE%\TikTokAffiliateReport"
 if errorlevel 1 goto :error
 
 echo.

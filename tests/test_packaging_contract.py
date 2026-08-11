@@ -30,6 +30,10 @@ def test_app_ships_as_onedir_so_first_launch_never_unpacks_to_temp():
 
     assert "--onedir" in batch
     assert "--onefile" not in batch
+    # onedir xuất ra một THƯ MỤC. Cổng riêng tư phải trỏ vào thư mục đó, không phải file .exe —
+    # đổi --onedir mà quên dòng này thì build đỏ ngay ở bước cuối, đúng như đã xảy ra ở v1.3.2.
+    assert '-Path "%APP_STAGE%\\TikTokAffiliateReport"' in batch
+    assert '-Path "%APP_STAGE%\\TikTokAffiliateReport.exe"' not in batch
     # Installer phải chép cả thư mục, và dọn runtime cũ để không sót .dll lệch phiên bản.
     assert 'Source: "..\\build\\installer-app\\TikTokAffiliateReport\\*"' in installer
     assert "recursesubdirs" in installer
