@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.4 - 2026-08-11
+
+**Cập nhật xong không còn mở thêm tab trình duyệt trùng.** Trước đây mỗi lần mở app lại chọn một cổng ngẫu nhiên mới, nên tab bạn đang xem tiến độ cập nhật trỏ vào một địa chỉ đã chết và app buộc phải mở tab thứ hai — bạn còn lại hai tab, một cái hỏng. Giờ app dùng lại đúng cổng của lần chạy trước nếu còn trống, nên chính tab đang mở tự kết nối lại và hiện bản mới, không mở thêm gì. Nếu cổng cũ đã bị chương trình khác chiếm thì app vẫn mở tab mới như trước, vì lúc đó tab cũ chắc chắn không dùng được nữa.
+
+**Bản sao lưu chỉ giữ 3 bản gần nhất.** Mỗi lần xoá dữ liệu, khôi phục, xoá tài khoản hay hoàn tác lần nhập, hệ thống đều chép nguyên database ra một bản sao lưu — không dọn thì thư mục phình mãi, với database 25 MB thì vài chục thao tác là hàng trăm MB nằm chết. Giờ hệ thống tự xoá các bản cũ hơn và luôn chừa lại bản bạn đang khôi phục.
+
 ## v1.3.3 - 2026-08-11
 
 **Khi app đã đóng, màn hình không còn hiện "Failed to fetch".** Nếu bạn chọn Thoát ứng dụng từ biểu tượng khay hệ thống mà vẫn còn tab trình duyệt đang mở, tab đó mất kết nối và trước đây hiện đúng dòng chữ tiếng Anh của trình duyệt, không nói được phải làm gì. Giờ nó nói thẳng: hãy mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu rồi tải lại trang.

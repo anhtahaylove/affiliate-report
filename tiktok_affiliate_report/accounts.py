@@ -108,13 +108,14 @@ def delete_account(engine: Engine, code: str, *, hard: bool = False) -> dict[str
             "account": archived,
             "dependency_counts": delete_account_preview(engine, code)["dependency_counts"],
         }
-    db_path = _sqlite_file_path(engine)
-    backup_path = _backup_path(db_path, "delete-account")
+    from .reset_data import backup_sqlite_before_change
+
     with engine.connect() as conn:
         conn.exec_driver_sql("BEGIN IMMEDIATE")
         try:
-            _backup_sqlite(db_path, backup_path)
-            _check_backup(backup_path)
+            # Dùng chung đường sao lưu với reset/restore/hoàn tác: cùng cách kiểm tra và cùng
+            # chính sách chỉ giữ lại vài bản gần nhất.
+            backup_path = backup_sqlite_before_change(engine, "delete-account")
             deps = _dependency_counts(conn, code)
             batch_ids = select(import_batches.c.id).where(import_batches.c.account == code)
             conn.execute(delete(raw_import_rows).where(raw_import_rows.c.batch_id.in_(batch_ids)))
@@ -231,28 +232,3 @@ def _sqlite_file_path(engine: Engine) -> Path:
     if not path.exists():
         raise ValueError("SQLite database file does not exist.")
     return path
-
-
-def _backup_path(db_path: Path, label: str) -> Path:
-    backup_dir = db_path.parent / "backups"
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    return backup_dir / f"{db_path.stem}-{label}-{stamp}.db"
-
-
-def _backup_sqlite(db_path: Path, backup_path: Path) -> None:
-    source = sqlite3.connect(str(db_path))
-    try:
-        target = sqlite3.connect(str(backup_path))
-        try:
-            source.backup(target)
-        finally:
-            target.close()
-    finally:
-        source.close()
-
-
-def _check_backup(backup_path: Path) -> None:
-    with sqlite3.connect(str(backup_path)) as conn:
-        if conn.execute("PRAGMA quick_check").fetchone() != ("ok",):
-            raise RuntimeError("SQLite backup quick_check failed; operation aborted.")
