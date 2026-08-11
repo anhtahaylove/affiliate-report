@@ -82,14 +82,14 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
       <div className="section-heading">
         <div>
           <p className="section-label">KPI mỗi ngày</p>
-          <h2>Planner mục tiêu tháng {monthLabel(filters.month)}</h2>
+          <h2>Lập mục tiêu tháng {monthLabel(filters.month)}</h2>
           <p className="subtle">Tiến độ tính trên phạm vi đang lọc: {filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}.</p>
         </div>
         {canWrite(user) ? <button type="button" onClick={() => void copyPrevious()} disabled={copying}>{copying ? "Đang chép…" : `Chép từ ${monthLabel(previousMonth)}`}</button> : <span className="read-only">Chỉ xem</span>}
       </div>
       <div className="target-context panel-muted">
         <strong>Ngữ cảnh tháng trước</strong>
-        <span>Nếu API copy có dữ liệu tháng {monthLabel(previousMonth)}, nút chép sẽ tạo KPI còn thiếu và giữ nguyên KPI đã nhập cho tháng hiện tại.</span>
+        <span>Nếu tháng {monthLabel(previousMonth)} có dữ liệu, nút chép sẽ tạo KPI còn thiếu và giữ nguyên KPI đã nhập cho tháng hiện tại.</span>
       </div>
       <div className="target-planner-grid">
         {allowedAccounts.map((account) => {

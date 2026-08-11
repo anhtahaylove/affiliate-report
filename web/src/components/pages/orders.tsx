@@ -134,8 +134,8 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
       </div>
 
       <div className="orders-sticky-toolbar" aria-label="Thanh thao tác đơn hàng">
-        <div className="saved-view-strip" aria-label="Chế độ xem hiện tại">
-          <strong>Chế độ xem hiện tại</strong>
+        <div className="saved-view-strip" aria-label="Bộ lọc đang áp dụng">
+          <strong>Bộ lọc đang áp dụng</strong>
           {filterSummary(filters).map((item) => <span className="saved-view-chip" key={item}>{item}</span>)}
         </div>
         <div className="row-actions">
@@ -183,7 +183,7 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
             ))}
           </tbody>
         </table>
-        {!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}
+        {!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm tệp TikTok.</p> : null}
       </div>
 
       <div className="orders-card-list" role="list" aria-label="Danh sách đơn hàng trên màn hình nhỏ">

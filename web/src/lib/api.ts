@@ -246,6 +246,27 @@ export type MetaResponse = {
   statuses: string[];
   max_upload_mb: number;
   app_version?: string;
+  capabilities: RuntimeCapabilities;
+  identity_policy: IdentityPolicy;
+};
+
+export type CapabilityState = {
+  available: boolean;
+  reason: string | null;
+};
+
+export type RuntimeCapabilities = {
+  database_backend: string;
+  auth_mode: "local" | "oidc";
+  data_admin: CapabilityState;
+  update_check: CapabilityState;
+  update_install: CapabilityState;
+};
+
+export type IdentityPolicy = {
+  mode: "local" | "oidc";
+  oidc_allowlist_enforced: boolean;
+  enforcement: "local_owner" | "login_and_active_sessions";
 };
 
 export type UserRole = "viewer" | "operator" | "owner";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { accountLabel, achievementTone, roleLabel, statusLabel } from "./format.ts";
+import { accountLabel, achievementTone, formatDateTime, roleLabel, statusLabel } from "./format.ts";
 
 test("Vietnamese presentation labels keep canonical values out of the UI", () => {
   assert.equal(statusLabel("settled"), "Đã quyết toán");
@@ -23,4 +23,11 @@ test("achievementTone maps target-achievement ratios to a traffic-light tone", (
   assert.equal(achievementTone(0.99), "warning");
   assert.equal(achievementTone(0.49), "critical");
   assert.equal(achievementTone(0), "critical");
+});
+
+test("formatDateTime keeps a four-digit year and unambiguous Vietnamese date", () => {
+  const formatted = formatDateTime(new Date(2026, 2, 10, 8, 5).toISOString());
+  assert.match(formatted, /2026/);
+  assert.match(formatted, /10\/03/);
+  assert.match(formatted, /08:05/);
 });

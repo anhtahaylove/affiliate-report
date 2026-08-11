@@ -1,6 +1,13 @@
 export const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 export const integer = new Intl.NumberFormat("vi-VN");
-export const dateTime = new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" });
+export const dateTime = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 
 const STATUS_LABELS: Record<string, string> = {
   settled: "Đã quyết toán",

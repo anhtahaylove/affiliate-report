@@ -51,7 +51,7 @@ export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
       <Tabs.Root className="analytics-tabs" defaultValue="finance">
         <Tabs.List className="analytics-tab-list" aria-label="Nhóm phân tích">
           <Tabs.Trigger value="finance">Tài chính</Tabs.Trigger>
-          <Tabs.Trigger value="accounts">Account</Tabs.Trigger>
+          <Tabs.Trigger value="accounts">Tài khoản</Tabs.Trigger>
           <Tabs.Trigger value="commerce">Sản phẩm & nội dung</Tabs.Trigger>
           <Tabs.Trigger value="settlement">Đối soát</Tabs.Trigger>
           <Tabs.Trigger value="quality">Chất lượng dữ liệu</Tabs.Trigger>
@@ -65,7 +65,7 @@ export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
           </section>
           <div className="analytics-split">
             <section className="canvas-panel">
-              <div className="panel-heading"><div><p className="section-label">Order funnel</p><h2>Quy mô theo trạng thái</h2></div></div>
+              <div className="panel-heading"><div><p className="section-label">Phễu đơn hàng</p><h2>Quy mô theo trạng thái</h2></div></div>
               {data.status_breakdown.length ? <StatusMixChart rows={data.status_breakdown} /> : <p className="empty">Chưa có dữ liệu trạng thái.</p>}
             </section>
             <BreakdownList rows={data.status_breakdown} mode="status" />
@@ -75,8 +75,8 @@ export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
         <Tabs.Content value="accounts" className="analytics-tab-panel">
           <div className="analytics-split account-analysis">
             <section className="canvas-panel">
-              <div className="panel-heading"><div><p className="section-label">Contribution</p><h2>Tài khoản tạo ra hoa hồng</h2></div><Link className="text-action" href="/accounts">Quản lý account</Link></div>
-              {data.account_breakdown.length ? <AccountContributionChart rows={data.account_breakdown} /> : <p className="empty">Chưa có dữ liệu account.</p>}
+              <div className="panel-heading"><div><p className="section-label">Đóng góp</p><h2>Tài khoản tạo ra hoa hồng</h2></div><Link className="text-action" href="/accounts">Quản lý tài khoản</Link></div>
+              {data.account_breakdown.length ? <AccountContributionChart rows={data.account_breakdown} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
             </section>
             <BreakdownList rows={data.account_breakdown} mode="account" />
           </div>
@@ -108,7 +108,7 @@ function InsightMetric({ label, value, note, tone = "neutral" }: { label: string
 function BreakdownList({ rows, mode }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account" }) {
   return (
     <section className="canvas-panel breakdown-list-panel">
-      <div className="panel-heading"><div><p className="section-label">Phân bổ</p><h2>{mode === "status" ? "Tín hiệu cần chú ý" : "Tỷ trọng account"}</h2></div></div>
+      <div className="panel-heading"><div><p className="section-label">Phân bổ</p><h2>{mode === "status" ? "Tín hiệu cần chú ý" : "Tỷ trọng tài khoản"}</h2></div></div>
       <ol className="rank-list">
         {rows.slice(0, 6).map((row, index) => {
           const label = mode === "status" ? statusLabel(row.status) : accountLabel(row.account);

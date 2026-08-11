@@ -10,33 +10,34 @@ import { apiUrl, CurrentUser, exitApplication, logout } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { BottomSheet } from "@/components/primitives";
 import { roleLabel } from "@/lib/format";
+import { routeIsActive } from "@/lib/navigation";
 
 type NavItem = { href: string; label: string; desc: string; icon: LucideIcon; roles?: Array<CurrentUser["role"]>; mobilePrimary?: boolean };
 
 const navGroups: Array<{ title: string; items: NavItem[] }> = [
   {
-    title: "Momentum",
+    title: "Báo cáo",
     items: [
-      { href: "/", label: "Tổng quan", desc: "Canvas hoa hồng và mục tiêu", icon: Home, mobilePrimary: true },
-      { href: "/analytics", label: "Phân tích", desc: "Xu hướng, sản phẩm, quyết toán", icon: BarChart3 },
+      { href: "/", label: "Tổng quan", desc: "Hoa hồng, mục tiêu, cảnh báo", icon: Home, mobilePrimary: true },
+      { href: "/analytics", label: "Phân tích", desc: "Tài chính và xu hướng", icon: BarChart3 },
       { href: "/orders", label: "Đơn hàng", desc: "Tra cứu và xuất Excel", icon: PackageSearch, mobilePrimary: true },
     ],
   },
   {
     title: "Vận hành",
     items: [
-      { href: "/imports", label: "Nhập dữ liệu", desc: "Tải file TikTok .xlsx", icon: UploadCloud, roles: ["operator", "owner"], mobilePrimary: true },
-      { href: "/targets", label: "Mục tiêu", desc: "KPI mỗi ngày theo tháng", icon: Target },
-      { href: "/accounts", label: "Tài khoản", desc: "Thêm, sửa, lưu trữ tài khoản", icon: CircleDollarSign, roles: ["owner"] },
+      { href: "/imports", label: "Nhập dữ liệu", desc: "Nhập tệp TikTok .xlsx", icon: UploadCloud, roles: ["operator", "owner"], mobilePrimary: true },
+      { href: "/targets", label: "Mục tiêu", desc: "KPI ngày và mục tiêu tháng", icon: Target },
+      { href: "/accounts", label: "Tài khoản", desc: "Thêm, sửa và lưu trữ", icon: CircleDollarSign, roles: ["owner"] },
     ],
   },
   {
     title: "Hệ thống",
     items: [
-      { href: "/settings/preferences", label: "Giao diện", desc: "Theo hệ thống, sáng hoặc tối", icon: Settings },
+      { href: "/settings/preferences", label: "Giao diện", desc: "Sáng, tối hoặc theo hệ thống", icon: Settings },
       { href: "/settings/data", label: "Dữ liệu", desc: "Xóa, sao lưu, khôi phục", icon: Database, roles: ["owner"] },
       { href: "/settings/update", label: "Cập nhật", desc: "Kiểm tra và cài bản mới", icon: FileSpreadsheet, roles: ["owner"] },
-      { href: "/settings/users", label: "Người dùng", desc: "Vai trò và phạm vi account", icon: Users, roles: ["owner"] },
+      { href: "/settings/users", label: "Người dùng", desc: "Vai trò và phạm vi tài khoản", icon: Users, roles: ["owner"] },
     ],
   },
 ];
@@ -45,16 +46,10 @@ function allowedItems(user: CurrentUser) {
   return navGroups.map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || item.roles.includes(user.role)) })).filter((group) => group.items.length);
 }
 
-function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
-  if (href.startsWith("/settings")) return pathname === href;
-  return pathname === href;
-}
-
-function NavLink({ item, active, onClick, compact = false }: { item: NavItem; active: boolean; onClick?: () => void; compact?: boolean }) {
+function NavLink({ item, active, onClick, compact = false, iconOnly = false }: { item: NavItem; active: boolean; onClick?: () => void; compact?: boolean; iconOnly?: boolean }) {
   const Icon = item.icon;
   return (
-    <Link href={item.href} aria-current={active ? "page" : undefined} onClick={onClick} className={compact ? "mobile-nav-link" : undefined}>
+    <Link href={item.href} aria-current={active ? "page" : undefined} aria-label={iconOnly ? item.label : undefined} title={iconOnly ? item.label : undefined} onClick={onClick} className={compact ? "mobile-nav-link" : undefined}>
       <Icon className="nav-icon" size={compact ? 20 : 18} aria-hidden="true" />
       <span><strong>{item.label}</strong>{compact ? null : <small>{item.desc}</small>}</span>
     </Link>
@@ -67,6 +62,7 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
   const allItems = groups.flatMap((group) => group.items);
   const primaryMobile = allItems.filter((item) => item.mobilePrimary).slice(0, 3);
   const moreItems = allItems.filter((item) => !primaryMobile.some((primary) => primary.href === item.href));
+  const moreActive = moreItems.some((item) => routeIsActive(pathname, item.href));
   const [moreOpen, setMoreOpen] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [exitError, setExitError] = useState("");
@@ -125,8 +121,8 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
         <div className="sidebar-brand">
           <Image className="brand-mark" src="/icon-192.png" alt="" width={38} height={38} priority />
           <div>
-            <strong>Momentum Canvas</strong>
-            <span>{appVersion ? `TikTok Affiliate v${appVersion}` : "Commerce intelligence"}</span>
+            <strong>TikTok Affiliate</strong>
+            <span>{appVersion ? `Phiên bản ${appVersion}` : "Báo cáo vận hành"}</span>
           </div>
           <button className="sidebar-collapse" type="button" onClick={() => void toggleSidebar()} disabled={savingSidebar} aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"} title={collapsed ? "Mở rộng" : "Thu gọn"}>
             {collapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
@@ -136,7 +132,7 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
           {groups.map((group) => (
             <div className="nav-group" key={group.title}>
               <p className="nav-group-title">{group.title}</p>
-              {group.items.map((item) => <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} />)}
+              {group.items.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} iconOnly={collapsed} />)}
             </div>
           ))}
         </nav>
@@ -147,8 +143,8 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
           </div>
           {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
           <div className="sidebar-actions">
-            <button type="button" onClick={handleLogout}><LogOut size={16} aria-hidden="true" />Đăng xuất</button>
-            {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => setAskExit(true)} disabled={exiting}><XCircle size={16} aria-hidden="true" />{exiting ? "Đang thoát…" : "Thoát"}</button> : null}
+            <button type="button" onClick={handleLogout} aria-label="Đăng xuất" title={collapsed ? "Đăng xuất" : undefined}><LogOut size={16} aria-hidden="true" /><span>Đăng xuất</span></button>
+            {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => setAskExit(true)} disabled={exiting} aria-label="Thoát ứng dụng" title={collapsed ? "Thoát ứng dụng" : undefined}><XCircle size={16} aria-hidden="true" /><span>{exiting ? "Đang thoát…" : "Thoát"}</span></button> : null}
           </div>
         </div>
       </aside>
@@ -169,8 +165,8 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
       </section>
 
       <nav className="mobile-bottom-nav" aria-label="Điều hướng nhanh mobile">
-        {primaryMobile.map((item) => <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} compact />)}
-        <button className="mobile-nav-link" type="button" aria-haspopup="dialog" aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
+        {primaryMobile.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} compact />)}
+        <button className="mobile-nav-link" type="button" aria-haspopup="dialog" aria-expanded={moreOpen} aria-current={moreActive ? "page" : undefined} onClick={() => setMoreOpen(true)}>
           <MoreHorizontal size={20} aria-hidden="true" />
           <span><strong>Thêm</strong></span>
         </button>
@@ -178,7 +174,7 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
 
       <BottomSheet open={moreOpen} onOpenChange={setMoreOpen} title="Thêm mục" description="Các khu vực ít dùng hơn trong trung tâm vận hành.">
         <div className="more-sheet-list">
-          {moreItems.map((item) => <NavLink key={item.href} item={item} active={isActive(pathname, item.href)} onClick={() => setMoreOpen(false)} />)}
+          {moreItems.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} onClick={() => setMoreOpen(false)} />)}
           <button className="more-sheet-action" type="button" onClick={() => void handleLogout()}><LogOut size={18} aria-hidden="true" />Đăng xuất</button>
         </div>
       </BottomSheet>
@@ -193,7 +189,7 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
             <div className="command-results">
               {commandItems.map((item) => {
                 const Icon = item.icon;
-                return <Link key={item.href} href={item.href} onClick={() => setCommandOpen(false)}><Icon size={18} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.desc}</small></span></Link>;
+                return <Link key={item.href} href={item.href} aria-current={routeIsActive(pathname, item.href) ? "page" : undefined} onClick={() => setCommandOpen(false)}><Icon size={18} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.desc}</small></span></Link>;
               })}
               {!commandItems.length ? <p className="empty">Không tìm thấy mục phù hợp.</p> : null}
             </div>

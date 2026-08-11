@@ -24,7 +24,7 @@ const OUTCOME_LABELS: Record<FileOutcome, string> = {
   failed: "Lỗi",
 };
 
-const IMPORT_STEPS = ["Tài khoản", "Files", "Queue", "Upload"] as const;
+const IMPORT_STEPS = ["Tài khoản", "Chọn tệp", "Kiểm tra", "Nhập dữ liệu"] as const;
 
 function fileSizeText(size: number) {
   if (size < 1024 * 1024) return `${integer.format(Math.max(1, Math.round(size / 1024)))} KB`;
@@ -135,8 +135,8 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
         <div className="section-heading">
           <div>
             <p className="section-label">Nhập tuần tự</p>
-            <h2>Account → Files → Queue → Upload</h2>
-            <p>Tối đa {integer.format(maxUploadMb)} MB mỗi file; chỉ hỗ trợ định dạng .xlsx.</p>
+            <h2>Chọn tài khoản → Chọn tệp → Kiểm tra → Nhập</h2>
+            <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp; chỉ hỗ trợ định dạng .xlsx.</p>
           </div>
         </div>
         <ol className="workflow-steps" aria-label="Quy trình nhập dữ liệu">
@@ -148,12 +148,16 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
             <select id="import-account" value={account} onChange={(event) => setAccount(event.target.value)} disabled={busy}>{accounts.map((item) => <option key={item}>{item}</option>)}</select>
           </div>
           <div className="field dropzone">
-            <label htmlFor="import-files">2. File Excel đã xuất từ TikTok</label>
-            <input id="import-files" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} disabled={busy} />
-            <span>Có thể chọn nhiều file; hệ thống sẽ nhập lần lượt và tự chống trùng.</span>
+            <span className="field-label">2. Tệp Excel đã xuất từ TikTok</span>
+            <div className="file-picker">
+              <input className="sr-only" id="import-files" aria-label="File Excel đã xuất từ TikTok" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} disabled={busy} />
+              <label className="file-picker-button" htmlFor="import-files">Chọn tệp Excel</label>
+              <span>{fileQueue.length ? `${integer.format(fileQueue.length)} tệp đã chọn` : "Chưa chọn tệp"}</span>
+            </div>
+            <span>Có thể chọn nhiều tệp; hệ thống sẽ nhập lần lượt và tự chống trùng.</span>
           </div>
           <div className="import-queue" aria-live="polite">
-            <div className="record-title"><strong>3. Hàng đợi</strong><span>{integer.format(fileQueue.length)} file</span></div>
+            <div className="record-title"><strong>3. Hàng đợi</strong><span>{integer.format(fileQueue.length)} tệp</span></div>
             {fileQueue.length ? (
               <ol>
                 {fileQueue.map((file, index) => (
@@ -163,12 +167,12 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
                   </li>
                 ))}
               </ol>
-            ) : <p className="empty">Chưa chọn file.</p>}
+            ) : <p className="empty">Chưa chọn tệp.</p>}
           </div>
           <div className="upload-progress" aria-live="polite">
-            <label htmlFor="import-progress">4. Tiến độ upload</label>
+            <label htmlFor="import-progress">4. Tiến độ tải lên</label>
             <progress id="import-progress" max={Math.max(1, fileQueue.length)} value={processedFiles} />
-            <span>{busy && currentFile ? `Đang xử lý ${currentFile}` : `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} file đã xử lý`}</span>
+            <span>{busy && currentFile ? `Đang xử lý ${currentFile}` : `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} tệp đã xử lý`}</span>
           </div>
           <button className="primary" type="button" onClick={() => void submit()} disabled={busy}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>
           {message ? <p className="upload-result" role="status">{message}</p> : null}

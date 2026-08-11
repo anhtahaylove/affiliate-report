@@ -16,7 +16,7 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v2.0.0.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v2.0.2.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -33,7 +33,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\TikTokAffiliateReportSetup-v2.0.0.exe -Algorithm SHA256
+   Get-FileHash .\TikTokAffiliateReportSetup-v2.0.2.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -57,7 +57,7 @@ Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. D
 
 Mỗi máy cài đặt hoạt động độc lập với database riêng. Người dùng chỉ cần cài full installer rồi chạy local; domain, Cloudflare Tunnel, OIDC và PostgreSQL chỉ cần khi chủ động chuyển sang mô hình dùng chung nhiều người.
 
-Owner có thể dùng mục **Reset Data** trong dashboard. App bắt buộc nhập cụm xác nhận, tạo backup đầy đủ tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\backups`, kiểm tra backup rồi mới xoá lịch sử import, đơn hàng và mục tiêu đã chỉnh sửa. Các target mặc định được khôi phục ngay sau reset.
+Owner có thể dùng mục **Reset Data** trong dashboard local. App bắt buộc nhập cụm xác nhận, tạo backup đầy đủ tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\backups`, kiểm tra backup rồi mới xoá lịch sử import và đơn hàng. Account, target, cấu hình đăng nhập và tùy chọn giao diện được giữ nguyên.
 
 Mục **Khôi phục backup** liệt kê thời gian, dung lượng và row counts để xem trước. Restore chỉ thay các bảng dữ liệu báo cáo, giữ nguyên user/session đang dùng và luôn tạo thêm một safety backup của trạng thái hiện tại trước khi ghi đè.
 
@@ -120,6 +120,10 @@ $env:API_HOST = '0.0.0.0'
 
 `AUTH_DEFAULT_ACCOUNTS` mặc định rỗng. User mới chỉ thấy account sau khi owner cấp quyền qua API quản trị. Không commit client secret hoặc database password.
 
+`AUTH_ALLOWED_EMAILS` là chính sách truy cập liên tục, không chỉ là danh sách cho lần đăng nhập đầu. Mỗi OIDC login và mỗi request của session đang hoạt động đều kiểm tra email hiện tại: email phải khớp `AUTH_BOOTSTRAP_OWNER_EMAIL` hoặc nằm trong `AUTH_ALLOWED_EMAILS`. Sau khi đổi biến môi trường và khởi động lại service, session không còn hợp lệ bị thu hồi ở request tiếp theo. Cờ `active` trong trang **Người dùng** vẫn được áp dụng, nhưng không thể vượt qua allowlist.
+
+Trong PostgreSQL dùng chung, **Cài đặt → Dữ liệu** chỉ hiển thị trạng thái quản trị hạ tầng; app không chạy Reset Data, backup hoặc restore kiểu file SQLite. **Cài đặt → Cập nhật** cũng không chạy installer Windows: phiên bản phải được triển khai tại máy chủ. API `/api/v1/meta` công bố capability và lý do để frontend không gọi nhầm endpoint local-only.
+
 Chuyển database SQLite local sang PostgreSQL rỗng:
 
 ```powershell
@@ -139,7 +143,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v2.0.0.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v2.0.2.exe`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
 - `artifacts\installer\stable.json.sig`
