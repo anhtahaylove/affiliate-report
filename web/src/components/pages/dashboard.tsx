@@ -5,7 +5,7 @@ import { DailyRow, ImportHistoryRow, MonthlyKpiRow, OverviewRow, dailyReportExpo
 import { AnalyticsResponse } from "@/lib/api";
 import { BarChart } from "@/components/charts";
 import { UrlFilters } from "@/components/filters";
-import { Metric, Notice, StateCard } from "@/components/ui";
+import { Metric, Notice, Skeleton } from "@/components/ui";
 import { RecentImports } from "@/components/recent-imports";
 import { useApi } from "@/lib/use-api";
 import { accountLabel, achievementTone, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
@@ -35,7 +35,7 @@ export function DashboardHome({ filters, accounts }: { filters: UrlFilters; acco
   );
 
   if (error) return <Notice text={error} />;
-  if (loading || !data) return <StateCard text="Đang tải số liệu dashboard…" />;
+  if (loading || !data) return <Skeleton rows={4} tall label="Đang tải số liệu dashboard" />;
   const { overview, daily, kpi, analytics, history } = data;
   const total = filters.accounts.length === 1 ? overview.find((row) => row.account === filters.accounts[0]) : overview.find((row) => row.account === "ALL");
   const activeKpi = filters.accounts.length === 1 ? kpi.find((row) => row.account === filters.accounts[0]) : kpi.find((row) => row.account === "ALL");
@@ -47,6 +47,9 @@ export function DashboardHome({ filters, accounts }: { filters: UrlFilters; acco
   const combinedProgress = Math.max(0, Math.min((activeKpi?.combined_target_achievement ?? 0) * 100, 100));
   const gap = activeKpi?.gap == null ? null : Math.max(-Number(activeKpi.gap), 0);
   const selectedLabel = filters.accounts.length ? filters.accounts.join(" + ") : accountLabel("ALL");
+  const quality = analytics?.data_quality;
+  // Không có gì bất thường thì đây là dòng thông tin, không phải cảnh báo — đừng tô vàng.
+  const dataQualityClean = !quality || (quality.unknown_status_rows + quality.non_vnd_rows + quality.missing_settlement_date_rows + quality.import_rejected) === 0;
   const unknownOrdersHref = `/orders${queryString({ month: filters.month, start: filters.start, end: filters.end, account: filters.accounts, status: "unknown" })}`;
 
   // Chưa nhập file nào thì một dàn thẻ 0 đồng không nói lên điều gì; chỉ đường ba bước đầu tiên.
@@ -57,10 +60,9 @@ export function DashboardHome({ filters, accounts }: { filters: UrlFilters; acco
 
   return (
     <>
-      <section className="dashboard-toolbar panel" aria-label="Phạm vi báo cáo hiện tại">
-        <div><span>Phạm vi báo cáo</span><strong>{selectedLabel}</strong><small>{filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}</small></div>
+      <div className="page-actions">
         <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a>
-      </section>
+      </div>
       <section className="hero-grid" aria-label="Chỉ số chính">
         <Metric title="Hoa hồng thực tế" value={formatMoney(summary?.actual_commission ?? activeKpi?.actual_commission)} hint={`${selectedLabel} · kỳ trước ${commissionDelta == null ? "—" : formatMoney(commissionDelta)}`} />
         <Metric title="GMV thực tế" value={formatMoney(summary?.actual_gmv ?? total?.actual_gmv)} hint={`${summary ? integer.format(summary.orders) : total ? integer.format(total.orders) : "—"} đơn · kỳ trước ${orderDelta == null ? "—" : integer.format(orderDelta)}`} />
@@ -74,7 +76,7 @@ export function DashboardHome({ filters, accounts }: { filters: UrlFilters; acco
         <div><span>Hoàn tiền</span><strong>{percent(summary?.refund_rate)}</strong><small>không đủ điều kiện {percent(summary?.ineligible_rate)}</small></div>
         <div title="Gồm cả đơn Không đủ điều kiện — phản ánh sức bán thật sự, KHÔNG phải tiền chắc chắn sẽ nhận."><span>Tiến độ gộp</span><strong>{percent(activeKpi?.combined_target_achievement)}</strong><div className="progress-track slim" data-tone={achievementTone(activeKpi?.combined_target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng gộp" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(combinedProgress.toFixed(1))}><span style={{ width: `${combinedProgress}%` }} /></div><small>mất {formatMoney(activeKpi?.ineligible_commission)} do không đủ điều kiện</small></div>
       </section>
-      {analytics ? <section className="notice data-quality-notice" role="status"><strong>Cập nhật gần nhất: {formatDateTime(analytics.data_quality.latest_import_at)}</strong><span>Trạng thái chưa xác định: <Link href={unknownOrdersHref}>{integer.format(analytics.data_quality.unknown_status_rows)} dòng</Link> · Tiền tệ khác VND: {integer.format(analytics.data_quality.non_vnd_rows)} · Thiếu ngày quyết toán: {integer.format(analytics.data_quality.missing_settlement_date_rows)} · Dòng nhập bị từ chối: <Link href="/imports">{integer.format(analytics.data_quality.import_rejected)} dòng</Link></span></section> : null}
+      {analytics ? <section className={`notice data-quality-notice${dataQualityClean ? " is-clean" : ""}`} role="status"><strong>Cập nhật gần nhất: {formatDateTime(analytics.data_quality.latest_import_at)}</strong><span>Trạng thái chưa xác định: <Link href={unknownOrdersHref}>{integer.format(analytics.data_quality.unknown_status_rows)} dòng</Link> · Tiền tệ khác VND: {integer.format(analytics.data_quality.non_vnd_rows)} · Thiếu ngày quyết toán: {integer.format(analytics.data_quality.missing_settlement_date_rows)} · Dòng nhập bị từ chối: <Link href="/imports">{integer.format(analytics.data_quality.import_rejected)} dòng</Link></span></section> : null}
       <div className="content-grid">
         <RecentImports rows={history} />
         <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />

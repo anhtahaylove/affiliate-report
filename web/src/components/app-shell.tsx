@@ -9,17 +9,26 @@ import { ConfirmDialog } from "@/components/ui";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { roleLabel } from "@/lib/format";
 
-type NavItem = { href: string; label: string; roles?: Array<CurrentUser["role"]> };
+type NavItem = { href: string; label: string; icon: string; roles?: Array<CurrentUser["role"]> };
 
+// Đường dẫn SVG 24x24, vẽ tay thay vì kéo cả một thư viện icon vào chỉ để có bảy hình.
 const navItems: NavItem[] = [
-  { href: "/", label: "Tổng quan" },
-  { href: "/analytics", label: "Phân tích" },
-  { href: "/orders", label: "Đơn hàng" },
-  { href: "/imports", label: "Nhập dữ liệu", roles: ["operator", "owner"] },
-  { href: "/targets", label: "Mục tiêu" },
-  { href: "/accounts", label: "Tài khoản", roles: ["owner"] },
-  { href: "/settings/data", label: "Cài đặt", roles: ["owner"] },
+  { href: "/", label: "Tổng quan", icon: "M3 13h6v8H3zM10 3h6v18h-6zM17 9h4v12h-4z" },
+  { href: "/analytics", label: "Phân tích", icon: "M3 18l6-6 4 4 8-8M15 8h6v6" },
+  { href: "/orders", label: "Đơn hàng", icon: "M4 6h16M4 12h16M4 18h10" },
+  { href: "/imports", label: "Nhập dữ liệu", icon: "M12 3v12M7 10l5 5 5-5M4 20h16", roles: ["operator", "owner"] },
+  { href: "/targets", label: "Mục tiêu", icon: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 8a4 4 0 100 8 4 4 0 000-8z" },
+  { href: "/accounts", label: "Tài khoản", icon: "M12 12a4 4 0 100-8 4 4 0 000 8zM4 20a8 8 0 0116 0", roles: ["owner"] },
+  { href: "/settings/data", label: "Cài đặt", icon: "M12 15a3 3 0 100-6 3 3 0 000 6zM4 12h2m12 0h2M12 4v2m0 12v2M6.3 6.3l1.4 1.4m8.6 8.6l1.4 1.4m0-11.4l-1.4 1.4M7.7 16.3l-1.4 1.4", roles: ["owner"] },
 ];
+
+function NavIcon({ path }: { path: string }) {
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  );
+}
 
 export function AppShell({ user, apiError, children }: { user: CurrentUser; apiError?: string; children: ReactNode }) {
   const pathname = usePathname();
@@ -75,7 +84,8 @@ export function AppShell({ user, apiError, children }: { user: CurrentUser; apiE
             const active = item.href === "/settings/data" ? pathname.startsWith("/settings") : pathname === item.href;
             return (
               <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} onClick={() => setOpen(false)}>
-                {item.label}
+                <NavIcon path={item.icon} />
+                <span>{item.label}</span>
               </Link>
             );
           })}

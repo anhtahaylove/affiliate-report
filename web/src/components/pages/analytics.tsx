@@ -2,7 +2,7 @@
 
 import { AnalyticsDimensionRow, AnalyticsResponse, loadAnalytics } from "@/lib/api";
 import { UrlFilters } from "@/components/filters";
-import { Metric, Notice, StateCard, StatusBadge } from "@/components/ui";
+import { Metric, Notice, Skeleton, StateCard, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
 import { accountLabel, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
 
@@ -13,7 +13,7 @@ export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
     "Không thể tải phân tích.",
   );
   if (error) return <Notice text={error} />;
-  if (loading) return <StateCard text="Đang tải phân tích…" />;
+  if (loading) return <Skeleton rows={3} tall label="Đang tải phân tích" />;
   if (!data) return <StateCard text="Chưa có dữ liệu phân tích." />;
   const summary = data.summary;
   const previous = data.previous_period?.summary;

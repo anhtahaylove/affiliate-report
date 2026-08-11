@@ -44,3 +44,6 @@ next-env.d.ts
 # Playwright
 test-results/
 playwright-report/
+
+# Ảnh chụp giao diện chỉ để xem bằng mắt, không cần theo dõi trong git
+e2e/shots/

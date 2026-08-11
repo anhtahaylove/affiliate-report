@@ -4,7 +4,7 @@ import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { OrderRow, OrderVersionRow, PageResponse, loadOrderVersions, loadOrders, ordersExportUrl } from "@/lib/api";
 import { ORDER_PAGE_SIZES, UrlFilters } from "@/components/filters";
-import { Notice, StateCard, StatusBadge } from "@/components/ui";
+import { Notice, Skeleton, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
 import { errorMessage, formatDateTime, formatMoney, integer, statusLabel } from "@/lib/format";
 
@@ -64,7 +64,7 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
   }
 
   if (error) return <Notice text={error} />;
-  if (loading || !data) return <StateCard text="Đang tải đơn hàng…" />;
+  if (loading || !data) return <Skeleton rows={1} tall label="Đang tải đơn hàng" />;
   const orders = data.items;
   const total = data.total;
   const totalPages = Math.max(1, Math.ceil(total / filters.size));
@@ -101,7 +101,7 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
               </th>
             );
           })}</tr></thead>
-          <tbody>{orders.map((row, index) => <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}><td>{row.account}</td><td>{row.order_id ?? "—"}</td><td>{row.sku_id ?? "—"}</td><td className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</td><td><StatusBadge status={row.status} /></td><td>{row.order_date ?? "—"}</td><td>{row.units_sold == null ? "—" : integer.format(row.units_sold)}</td><td>{formatMoney(row.gmv)}</td><td title="Hoa hồng ước tính theo file gốc, chưa trừ đơn Không đủ điều kiện">{formatMoney(row.estimated_commission)}</td><td><details className="order-detail"><summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary><span>ID sản phẩm: {row.product_id ?? "—"}</span><span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span><span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span><span>Loại đơn: {row.order_type ?? "—"}</span><span>Loại hoa hồng: {row.commission_type ?? "—"}</span><span>Ngày quyết toán: {row.settlement_date ?? "—"}</span><span>Hoa hồng thực tế (sau khi trừ không đủ điều kiện): {formatMoney(row.actual_commission)}</span><span>Đã nhận: {formatMoney(row.final_received)}</span><OrderVersions businessKey={row.business_key} /></details></td></tr>)}</tbody>
+          <tbody>{orders.map((row, index) => <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}><td>{row.account}</td><td>{row.order_id ?? "—"}</td><td>{row.sku_id ?? "—"}</td><td className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</td><td><StatusBadge status={row.status} /></td><td>{formatDateTime(row.order_date)}</td><td>{row.units_sold == null ? "—" : integer.format(row.units_sold)}</td><td>{formatMoney(row.gmv)}</td><td title="Hoa hồng ước tính theo file gốc, chưa trừ đơn Không đủ điều kiện">{formatMoney(row.estimated_commission)}</td><td><details className="order-detail"><summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary><span>ID sản phẩm: {row.product_id ?? "—"}</span><span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span><span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span><span>Loại đơn: {row.order_type ?? "—"}</span><span>Loại hoa hồng: {row.commission_type ?? "—"}</span><span>Ngày quyết toán: {formatDateTime(row.settlement_date)}</span><span>Hoa hồng thực tế (sau khi trừ không đủ điều kiện): {formatMoney(row.actual_commission)}</span><span>Đã nhận: {formatMoney(row.final_received)}</span><OrderVersions businessKey={row.business_key} /></details></td></tr>)}</tbody>
         </table>
         {!orders.length ? <p className="empty">Không có đơn phù hợp. Hãy đổi bộ lọc hoặc nhập thêm file TikTok.</p> : null}
       </div>
