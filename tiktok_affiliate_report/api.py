@@ -411,6 +411,9 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "account_items": [item for item in _account_items(_engine(app)) if item["code"] in allowed],
             "statuses": STATUSES,
             "max_upload_mb": MAX_UPLOAD_MB,
+            # Hiện ngay ở thanh bên: trước đây chỉ owner xem được, nằm sâu trong Cài đặt >
+            # Cập nhật, nên người báo lỗi thường không biết mình đang chạy bản nào.
+            "app_version": APP_VERSION,
         }
 
     @app.get("/api/v1/accounts")

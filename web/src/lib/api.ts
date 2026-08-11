@@ -211,6 +211,7 @@ export type MetaResponse = {
   account_items?: AccountItem[];
   statuses: string[];
   max_upload_mb: number;
+  app_version?: string;
 };
 
 export type UserRole = "viewer" | "operator" | "owner";

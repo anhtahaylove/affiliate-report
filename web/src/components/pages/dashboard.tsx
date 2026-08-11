@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DailyRow, ImportHistoryRow, MonthlyKpiRow, OverviewRow, dailyReportExportUrl, loadAnalytics, loadDashboard, loadImportHistory, loadMonthlyKpi, queryString } from "@/lib/api";
+import { DailyRow, ImportHistoryRow, MonthlyKpiRow, OverviewRow, loadAnalytics, loadDashboard, loadImportHistory, loadMonthlyKpi, queryString } from "@/lib/api";
 import { AnalyticsResponse } from "@/lib/api";
 import { BarChart } from "@/components/charts";
 import { UrlFilters } from "@/components/filters";
@@ -60,24 +60,26 @@ export function DashboardHome({ filters, accounts }: { filters: UrlFilters; acco
 
   return (
     <>
-      <div className="page-actions">
-        <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a>
-      </div>
-      <section className="hero-grid" aria-label="Chỉ số chính">
+      {/* Một lưới đều chín ô thay cho bốn thẻ lớn cộng một dải phụ khác kiểu: cùng cỡ chữ, cùng
+          cách xuống dòng thì quét mắt một lượt là đọc hết, không phải đổi cách đọc giữa chừng. */}
+      <section className="hero-grid" aria-label="Chỉ số kỳ báo cáo">
         <Metric title="Hoa hồng thực tế" value={formatMoney(summary?.actual_commission ?? activeKpi?.actual_commission)} hint={`${selectedLabel} · kỳ trước ${commissionDelta == null ? "—" : formatMoney(commissionDelta)}`} />
-        <Metric title="GMV thực tế" value={formatMoney(summary?.actual_gmv ?? total?.actual_gmv)} hint={`${summary ? integer.format(summary.orders) : total ? integer.format(total.orders) : "—"} đơn · kỳ trước ${orderDelta == null ? "—" : integer.format(orderDelta)}`} />
-        <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" data-tone={achievementTone(activeKpi?.target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu tháng {formatMoney(activeKpi?.monthly_target)}</small></article>
-        <article className="metric danger-metric panel"><span>{analytics?.target?.projected_month_end == null ? "Còn thiếu" : "Dự báo cuối tháng"}</span><strong>{formatMoney(analytics?.target?.projected_month_end ?? analytics?.target?.remaining ?? gap)}</strong><small>Còn thiếu {formatMoney(analytics?.target?.remaining ?? gap)} · cần/ngày {formatMoney(analytics?.target?.required_per_remaining_day)}</small></article>
-      </section>
-      <section className="metric-strip panel" aria-label="Chỉ số phụ">
-        <div><span>Đơn hàng</span><strong>{summary ? integer.format(summary.orders) : total ? integer.format(total.orders) : "—"}</strong><small>{summary ? integer.format(summary.order_lines) : total ? integer.format(total.order_lines) : "—"} dòng</small></div>
-        <div><span>GMV gốc</span><strong>{formatMoney(summary?.gross_gmv ?? total?.gmv)}</strong><small>tỷ lệ HH {percent(summary?.effective_commission_rate)}</small></div>
-        <div><span>Đã nhận cuối cùng</span><strong>{formatMoney(summary?.final_received ?? total?.final_received)}</strong><small>lệch HH {formatMoney(summary?.final_received_variance)}</small></div>
-        <div><span>Hoàn tiền</span><strong>{percent(summary?.refund_rate)}</strong><small>không đủ điều kiện {percent(summary?.ineligible_rate)}</small></div>
-        <div title="Gồm cả đơn Không đủ điều kiện — phản ánh sức bán thật sự, KHÔNG phải tiền chắc chắn sẽ nhận."><span>Tiến độ gộp</span><strong>{percent(activeKpi?.combined_target_achievement)}</strong><div className="progress-track slim" data-tone={achievementTone(activeKpi?.combined_target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng gộp" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(combinedProgress.toFixed(1))}><span style={{ width: `${combinedProgress}%` }} /></div><small>mất {formatMoney(activeKpi?.ineligible_commission)} do không đủ điều kiện</small></div>
+        <Metric title="GMV thực tế" value={formatMoney(summary?.actual_gmv ?? total?.actual_gmv)} hint={`kỳ trước ${orderDelta == null ? "—" : integer.format(orderDelta)} đơn`} />
+        <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong data-tone={achievementTone(activeKpi?.target_achievement)}>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" data-tone={achievementTone(activeKpi?.target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu tháng {formatMoney(activeKpi?.monthly_target)}</small></article>
+        <Metric
+          title={analytics?.target?.projected_month_end == null ? "Còn thiếu" : "Dự báo cuối tháng"}
+          value={formatMoney(analytics?.target?.projected_month_end ?? analytics?.target?.remaining ?? gap)}
+          hint={`Còn thiếu ${formatMoney(analytics?.target?.remaining ?? gap)} · cần/ngày ${formatMoney(analytics?.target?.required_per_remaining_day)}`}
+          tone="warning"
+        />
+        <Metric title="Đơn hàng" value={summary ? integer.format(summary.orders) : total ? integer.format(total.orders) : "—"} hint={`${summary ? integer.format(summary.order_lines) : total ? integer.format(total.order_lines) : "—"} dòng`} />
+        <Metric title="GMV gốc" value={formatMoney(summary?.gross_gmv ?? total?.gmv)} hint={`tỷ lệ HH ${percent(summary?.effective_commission_rate)}`} />
+        <Metric title="Đã nhận cuối cùng" value={formatMoney(summary?.final_received ?? total?.final_received)} hint={`lệch HH ${formatMoney(summary?.final_received_variance)}`} />
+        <Metric title="Hoàn tiền" value={percent(summary?.refund_rate)} hint={`không đủ điều kiện ${percent(summary?.ineligible_rate)}`} />
+        <article className="metric progress-metric panel" title="Gồm cả đơn Không đủ điều kiện — phản ánh sức bán thật sự, KHÔNG phải tiền chắc chắn sẽ nhận."><span>Tiến độ gộp</span><strong data-tone={achievementTone(activeKpi?.combined_target_achievement)}>{percent(activeKpi?.combined_target_achievement)}</strong><div className="progress-track" data-tone={achievementTone(activeKpi?.combined_target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng gộp" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(combinedProgress.toFixed(1))}><span style={{ width: `${combinedProgress}%` }} /></div><small>mất {formatMoney(activeKpi?.ineligible_commission)} do không đủ điều kiện</small></article>
       </section>
       {analytics ? <section className={`notice data-quality-notice${dataQualityClean ? " is-clean" : ""}`} role="status"><strong>Cập nhật gần nhất: {formatDateTime(analytics.data_quality.latest_import_at)}</strong><span>Trạng thái chưa xác định: <Link href={unknownOrdersHref}>{integer.format(analytics.data_quality.unknown_status_rows)} dòng</Link> · Tiền tệ khác VND: {integer.format(analytics.data_quality.non_vnd_rows)} · Thiếu ngày quyết toán: {integer.format(analytics.data_quality.missing_settlement_date_rows)} · Dòng nhập bị từ chối: <Link href="/imports">{integer.format(analytics.data_quality.import_rejected)} dòng</Link></span></section> : null}
-      <div className="content-grid">
+      <div className="content-grid stacked">
         <RecentImports rows={history} />
         <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />
         <BarChart title="Nhịp ngày" description="Hoa hồng thực tế 14 ngày gần nhất." rows={daily.filter((row) => row.account === "ALL").slice(0, 14)} />

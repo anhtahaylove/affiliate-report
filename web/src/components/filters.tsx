@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { firstDayOfMonth, lastDayOfMonth, currentMonth, lastDays, previousMonth, statusLabel, wholeMonth } from "@/lib/format";
 import { buildFilterHref } from "@/lib/filter-query";
 
@@ -37,7 +37,7 @@ export function useUrlFilters() {
   }), [month, params]);
 }
 
-export function FilterBar({ accounts, statuses, showSearch = false }: { accounts: string[]; statuses: string[]; showSearch?: boolean }) {
+export function FilterBar({ accounts, statuses, showSearch = false, actions }: { accounts: string[]; statuses: string[]; showSearch?: boolean; actions?: ReactNode }) {
   const filters = useUrlFilters();
   const initialFilters = {
     ...filters,
@@ -45,10 +45,10 @@ export function FilterBar({ accounts, statuses, showSearch = false }: { accounts
     statuses: statuses.length ? (filters.statuses.length ? filters.statuses : statuses) : [],
   };
   const filterKey = JSON.stringify({ filters, accounts, statuses });
-  return <FilterForm key={filterKey} accounts={accounts} statuses={statuses} showSearch={showSearch} initialFilters={initialFilters} />;
+  return <FilterForm key={filterKey} accounts={accounts} statuses={statuses} showSearch={showSearch} actions={actions} initialFilters={initialFilters} />;
 }
 
-function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: { accounts: string[]; statuses: string[]; showSearch?: boolean; initialFilters: UrlFilters }) {
+function FilterForm({ accounts, statuses, showSearch = false, actions, initialFilters }: { accounts: string[]; statuses: string[]; showSearch?: boolean; actions?: ReactNode; initialFilters: UrlFilters }) {
   const router = useRouter();
   const pathname = usePathname();
   const [draft, setDraft] = useState(initialFilters);
@@ -64,12 +64,13 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     statuses.length ? (allStatusesSelected ? "Tất cả trạng thái" : `${draft.statuses.length}/${statuses.length} trạng thái`) : null,
   ].filter(Boolean).join(" · ");
 
-  // Khoảng hay dùng nhất, để không phải bấm tay ba ô ngày mỗi lần.
-  const quickRanges: Array<{ label: string; resolve: () => { start: string; end: string; month: string } }> = [
-    { label: "7 ngày qua", resolve: () => lastDays(7) },
-    { label: "30 ngày qua", resolve: () => lastDays(30) },
-    { label: "Tháng này", resolve: () => wholeMonth(currentMonth()) },
-    { label: "Tháng trước", resolve: () => wholeMonth(previousMonth()) },
+  // Khoảng hay dùng nhất, để không phải bấm tay ba ô ngày mỗi lần. Nằm ngoài phần thu gọn vì
+  // đây là thao tác thường xuyên nhất — bắt mở bộ lọc ra chỉ để đổi sang "30 ngày" là thừa.
+  const quickRanges: Array<{ label: string; range: { start: string; end: string; month: string } }> = [
+    { label: "7 ngày", range: lastDays(7) },
+    { label: "30 ngày", range: lastDays(30) },
+    { label: "Tháng này", range: wholeMonth(currentMonth()) },
+    { label: "Tháng trước", range: wholeMonth(previousMonth()) },
   ];
 
   function applyQuickRange(range: { start: string; end: string; month: string }) {
@@ -112,10 +113,19 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     <form className="command-bar panel" onSubmit={apply}>
       {/* Mở sẵn toàn bộ bộ lọc ngốn gần 300px trên mọi màn hình, đẩy số liệu xuống dưới nếp
           gấp. Mặc định chỉ hiện một dòng tóm tắt phạm vi đang xem; bấm mới mở ra để chỉnh. */}
-      <button className="filter-toggle" type="button" aria-expanded={filtersOpen} aria-controls="report-filters" onClick={() => setFiltersOpen((open) => !open)}>
-        <span><strong>Phạm vi báo cáo</strong><small>{compactSummary}</small></span>
-        <span className="filter-toggle-action" aria-hidden="true">{filtersOpen ? "Thu gọn" : "Chỉnh sửa"}</span>
-      </button>
+      <div className="filter-head">
+        <button className="filter-toggle" type="button" aria-expanded={filtersOpen} aria-controls="report-filters" onClick={() => setFiltersOpen((open) => !open)}>
+          <span><strong>Phạm vi báo cáo</strong><small>{compactSummary}</small></span>
+          <span className="filter-toggle-action" aria-hidden="true">{filtersOpen ? "Thu gọn" : "Chỉnh sửa"}</span>
+        </button>
+        <div className="segmented" role="group" aria-label="Khoảng thời gian nhanh">
+          {quickRanges.map((quick) => {
+            const active = quick.range.start === draft.start && quick.range.end === draft.end;
+            return <button key={quick.label} type="button" aria-pressed={active} onClick={() => applyQuickRange(quick.range)}>{quick.label}</button>;
+          })}
+        </div>
+        {actions}
+      </div>
       <div id="report-filters" className={`filter-body${filtersOpen ? " is-open" : ""}`}>
         <div className="field compact">
           <label htmlFor="target-month">Tháng KPI</label>
@@ -177,11 +187,6 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
             </div>
           </fieldset>
         ) : null}
-        <div className="quick-ranges" role="group" aria-label="Khoảng thời gian nhanh">
-          {quickRanges.map((range) => (
-            <button key={range.label} type="button" className="chip" onClick={() => applyQuickRange(range.resolve())}>{range.label}</button>
-          ))}
-        </div>
         <div className="filter-actions">
           <button className="primary" type="submit">Áp dụng bộ lọc</button>
           <button type="button" onClick={reset}>Đặt lại</button>

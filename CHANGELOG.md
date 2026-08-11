@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.4.1 - 2026-08-11
+
+Đợt chỉnh giao diện thứ hai, lần này dựa trên ảnh chụp thật của OmniRoute chứ không phải suy đoán từ mã nguồn.
+
+**Menu trái chia thành ba nhóm** — Báo cáo, Dữ liệu, Hệ thống — và mỗi mục có thêm một dòng mô tả. Bảy mục xếp phẳng bắt bạn phải nhớ "Mục tiêu" khác "Tài khoản" chỗ nào; giờ đọc là biết.
+
+**Số phiên bản hiện ngay dưới tên ứng dụng.** Trước đây nó nằm sâu trong Cài đặt và chỉ chủ sở hữu xem được, nên lúc báo lỗi thường không ai biết mình đang chạy bản nào.
+
+**Nút Đăng xuất và Thoát ứng dụng chuyển xuống đáy menu trái.** Trước đây "Thoát ứng dụng" nằm ngay cạnh email của bạn ở đầu trang — đúng chỗ dễ bấm nhầm nhất cho thao tác nguy hiểm nhất.
+
+**Chọn khoảng thời gian không cần mở bộ lọc nữa.** 7 ngày / 30 ngày / Tháng này / Tháng trước giờ là một cụm nút liền khối luôn hiện, khoảng đang xem được tô đặc. Trước đây bốn nút này nằm bên trong phần thu gọn và trông giống hệt nhau nên không biết đang ở khoảng nào.
+
+**Tổng quan gọn hơn một màn hình:**
+- Tiêu đề trang dời lên cùng hàng với email và nút đổi màu, thay vì chiếm riêng một hàng trong khi nửa hàng trên bỏ trống.
+- Nút **Xuất báo cáo ngày** về nằm cạnh dòng phạm vi mà nó xuất, không còn đứng một mình một hàng.
+- Bốn thẻ lớn và dải năm chỉ số phụ gộp thành **một lưới đều chín ô**: cùng cỡ chữ, cùng cách trình bày nên quét mắt một lượt là đọc hết.
+- Nhãn mỗi ô chuyển thành chữ nhỏ in hoa để con số là thứ duy nhất bắt mắt.
+- Bỏ ô trống lớn cạnh "Các lần nhập gần đây".
+
+Đã đo tương phản cho toàn bộ màu mới ở cả hai chế độ: thấp nhất 4,87:1, trên ngưỡng WCAG AA cho chữ nhỏ.
+
 ## v1.4.0 - 2026-08-11
 
 Đợt chỉnh giao diện theo hướng bảng điều khiển kỹ thuật: dày thông tin hơn, ít chữ thừa hơn, số dễ so hơn.
