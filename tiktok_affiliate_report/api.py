@@ -428,6 +428,27 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             raise HTTPException(status_code=403, detail="Account access denied")
         return requested
 
+    def permitted_view_filters(
+        current: Principal,
+        route: str,
+        values: dict[str, Any],
+        *,
+        strict: bool,
+    ) -> dict[str, Any]:
+        filters = _sanitize_view_filters(route, values, strict=strict)
+        requested = filters.get("account")
+        if not requested:
+            return filters
+        allowed = set(permitted_accounts(current, None))
+        visible = [account for account in requested if account in allowed]
+        if strict and len(visible) != len(requested):
+            raise HTTPException(status_code=403, detail="Account access denied")
+        if visible:
+            filters["account"] = visible
+        else:
+            filters.pop("account", None)
+        return filters
+
     def permitted_target_accounts(current: Principal, requested: list[str] | None) -> list[str]:
         active = [item["code"] for item in _account_items(_engine(app))]
         allowed = ["ALL", *active] if current.role == "owner" else [account for account in active if account in current.accounts]
@@ -1203,7 +1224,12 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> dict[str, Any]:
         items = _auth(app).list_views(current, route)
         for item in items:
-            item["filters"] = _sanitize_view_filters(route, item.get("filters") or {}, strict=False)
+            item["filters"] = permitted_view_filters(
+                current,
+                route,
+                item.get("filters") or {},
+                strict=False,
+            )
         return {"items": items, "count": len(items)}
 
     @app.post("/api/v1/ui/saved-views")
@@ -1215,7 +1241,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         name = request.name.strip()
         if not name:
             raise HTTPException(status_code=422, detail="Tên chế độ xem là bắt buộc.")
-        filters = _sanitize_view_filters(request.route, request.filters, strict=True)
+        filters = permitted_view_filters(current, request.route, request.filters, strict=True)
         try:
             return _auth(app).create_view(current, request.route, name, filters, request.is_default)
         except IntegrityError as exc:
@@ -1237,7 +1263,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         if request.name is not None and not name:
             raise HTTPException(status_code=422, detail="Tên chế độ xem là bắt buộc.")
         filters = (
-            _sanitize_view_filters(existing["route"], request.filters, strict=True)
+            permitted_view_filters(current, existing["route"], request.filters, strict=True)
             if request.filters is not None
             else None
         )

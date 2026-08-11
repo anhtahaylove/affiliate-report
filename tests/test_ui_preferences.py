@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
 
@@ -7,6 +9,11 @@ from tests.test_api_auth import login, oidc_api
 from tiktok_affiliate_report.api import create_app
 from tiktok_affiliate_report.auth import AuthService, AuthSettings
 from tiktok_affiliate_report.db import app_users, get_engine, saved_report_views, user_ui_preferences
+from tiktok_affiliate_report.reset_data import (
+    RESTORE_CONFIRMATION_PHRASE,
+    backup_sqlite_before_change,
+    restore_sqlite_business_backup,
+)
 
 
 DEFAULT_WIDGETS = [
@@ -104,7 +111,25 @@ def test_saved_views_are_csrf_protected_scoped_and_sanitized(tmp_path):
     assert [item["name"] for item in owner_views if item["is_default"]] == ["Mặc định mới"]
 
     _, viewer_tokens = login(client, auth, "viewer@example.test", "viewer")
-    assert client.get("/api/v1/ui/saved-views", params={"route": "orders"}).json()["count"] == 0
+    viewer = auth.get_principal(viewer_tokens.session_token)
+    assert viewer is not None and viewer.user_id is not None
+    auth.update_user(viewer.user_id, accounts=["CHIISTORE"])
+    denied = client.post(
+        "/api/v1/ui/saved-views",
+        json={**payload, "name": "Ngoài phạm vi", "filters": {"account": ["THAOBRA"]}},
+        headers={"X-CSRF-Token": viewer_tokens.csrf_token},
+    )
+    assert denied.status_code == 403
+    allowed = client.post(
+        "/api/v1/ui/saved-views",
+        json={**payload, "name": "Trong phạm vi", "filters": {"account": ["CHIISTORE"]}},
+        headers={"X-CSRF-Token": viewer_tokens.csrf_token},
+    )
+    assert allowed.status_code == 200
+    auth.update_user(viewer.user_id, accounts=[])
+    stale = client.get("/api/v1/ui/saved-views", params={"route": "orders"}).json()["items"]
+    assert stale[0]["filters"] == {"schema": 1}
+    assert client.get("/api/v1/ui/saved-views", params={"route": "orders"}).json()["count"] == 1
     assert client.delete(
         f"/api/v1/ui/saved-views/{view_id}",
         headers={"X-CSRF-Token": viewer_tokens.csrf_token},
@@ -154,3 +179,68 @@ def test_oidc_user_delete_cascades_preferences_and_saved_views(tmp_path):
     with engine.connect() as conn:
         assert conn.execute(select(func.count()).select_from(user_ui_preferences)).scalar_one() == 0
         assert conn.execute(select(func.count()).select_from(saved_report_views)).scalar_one() == 0
+
+
+def test_restore_maps_oidc_preferences_by_identity_not_reused_user_id(tmp_path):
+    db_path = tmp_path / "identity-safe-restore.db"
+    engine = get_engine(f"sqlite:///{db_path.as_posix()}")
+    auth = AuthService(
+        engine,
+        AuthSettings(
+            mode="oidc",
+            oidc_issuer="https://idp.example.test",
+            oidc_client_id="client",
+            oidc_redirect_uri="http://api.example.test/auth/callback",
+            allowed_emails=("old@example.test", "filler@example.test"),
+        ),
+    )
+    create_app(engine, auth)
+    old = auth.provision_user(
+        issuer="https://idp.example.test",
+        subject="stable-subject",
+        email="old@example.test",
+    )
+    auth.save_preferences(
+        old,
+        {
+            "theme": "dark",
+            "sidebar_collapsed": True,
+            "dashboard_layout": {"schema": 1, "order": DEFAULT_WIDGETS, "hidden": []},
+        },
+    )
+    auth.create_view(
+        old,
+        "orders",
+        "Old identity view",
+        {"schema": 1, "account": ["CHIISTORE"]},
+        True,
+    )
+    backup_path = backup_sqlite_before_change(engine, "identity-map")
+    assert backup_path is not None
+
+    with engine.begin() as conn:
+        conn.execute(delete(app_users).where(app_users.c.id == old.user_id))
+    filler = auth.provision_user(
+        issuer="https://idp.example.test",
+        subject="different-subject",
+        email="filler@example.test",
+    )
+    recreated = auth.provision_user(
+        issuer="https://idp.example.test",
+        subject="stable-subject",
+        email="old@example.test",
+    )
+    assert filler.user_id == old.user_id
+    assert recreated.user_id != old.user_id
+
+    restored = restore_sqlite_business_backup(
+        engine,
+        backup_id=Path(backup_path).name,
+        confirmation=RESTORE_CONFIRMATION_PHRASE,
+    )
+    assert restored["restored_counts"]["user_ui_preferences"] == 1
+    assert restored["restored_counts"]["saved_report_views"] == 1
+    assert auth.get_preferences(filler) is None
+    assert auth.get_preferences(recreated)["theme"] == "dark"
+    assert auth.list_views(filler, "orders") == []
+    assert auth.list_views(recreated, "orders")[0]["name"] == "Old identity view"

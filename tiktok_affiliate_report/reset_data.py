@@ -324,18 +324,51 @@ def _replace_business_tables(conn, backup_path: Path) -> None:
     for table in RESTORE_DELETE_TABLES:
         conn.exec_driver_sql(f'DELETE FROM "{table.name}"').close()
     for table in RESTORE_TABLES:
+        if table in PREFERENCE_TABLES:
+            _restore_preference_table(conn, table)
+            continue
         columns = [column.name for column in table.columns]
         quoted = ", ".join(f'"{column}"' for column in columns)
-        where = ""
-        if "app_user_id" in columns:
-            where = (
-                " WHERE app_user_id IS NULL OR app_user_id IN "
-                '(SELECT id FROM main."app_users")'
-            )
         conn.exec_driver_sql(
             f'INSERT INTO "{table.name}" ({quoted}) '
-            f'SELECT {quoted} FROM restore_backup."{table.name}"{where}'
+            f'SELECT {quoted} FROM restore_backup."{table.name}"'
         ).close()
+
+
+def _restore_preference_table(conn, table) -> None:
+    """Khôi phục UI state theo OIDC identity ổn định, không theo numeric user id.
+
+    SQLite có thể tái sử dụng ``app_users.id`` sau khi xoá user. Nếu copy trực tiếp
+    ``app_user_id``/``principal_key=user:<id>`` từ backup, preferences của identity cũ
+    có thể bị gán cho identity mới. Join issuer+subject tránh rò rỉ chéo identity; local
+    owner là principal ảo duy nhất nên được giữ nguyên.
+    """
+    columns = [column.name for column in table.columns]
+    quoted = ", ".join(f'"{column}"' for column in columns)
+    selected = []
+    for column in columns:
+        if column == "app_user_id":
+            selected.append('current_user."id" AS "app_user_id"')
+        elif column == "principal_key":
+            selected.append(
+                "CASE WHEN source.app_user_id IS NULL "
+                "THEN 'local:local-owner' "
+                "ELSE 'user:' || current_user.id END AS \"principal_key\""
+            )
+        else:
+            selected.append(f'source."{column}"')
+    projection = ", ".join(selected)
+    conn.exec_driver_sql(
+        f'INSERT INTO "{table.name}" ({quoted}) '
+        f'SELECT {projection} FROM restore_backup."{table.name}" AS source '
+        'LEFT JOIN restore_backup."app_users" AS backup_user '
+        'ON backup_user.id = source.app_user_id '
+        'LEFT JOIN main."app_users" AS current_user '
+        'ON current_user.issuer = backup_user.issuer '
+        'AND current_user.subject = backup_user.subject '
+        "WHERE (source.app_user_id IS NULL AND source.principal_key = 'local:local-owner') "
+        'OR current_user.id IS NOT NULL'
+    ).close()
 
 
 def _usable_backup_path(backup_path: Path) -> Path:

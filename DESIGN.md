@@ -74,4 +74,3 @@ Mobile is a first-class composition, not the desktop grid stacked into one colum
 - 390 x 844: polished phone composition with compact KPI layout and safe-area handling.
 - 768 x 1024: tablet layout makes intentional use of width and does not simply stretch mobile cards.
 - 1440 x 900: full Momentum Canvas shell, stable hierarchy and efficient operations density.
-
