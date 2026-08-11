@@ -71,7 +71,7 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
     ["accounts", "/accounts/", ".account-card"],
     ["preferences", "/settings/preferences/", ".theme-preference-grid"],
     ["data", "/settings/data/", ".settings-overview"],
-    ["update", "/settings/update/", ".update-panel"],
+    ["update", "/settings/update/", ".update-settings-page"],
     ["users", "/settings/users/", ".settings-summary-row"],
   ] as const;
 

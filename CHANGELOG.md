@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.3 - 2026-08-12
+
+**Loại bỏ điều hướng Cài đặt bị trùng.** Các trang Giao diện, Dữ liệu, Cập nhật và Người dùng giờ chỉ dùng một nguồn điều hướng: sidebar trên desktop và menu **Thêm** trên mobile. Trạng thái active giữ đúng ở mọi route, kể cả khi thu gọn hoặc mở rộng sidebar.
+
+**Sidebar gọn và hướng tới người dùng cuối.** Bỏ hoàn toàn khối kỹ thuật “API hoạt động / Nội bộ ứng dụng”; tài khoản local được hiển thị là **Chế độ cục bộ** thay cho email giả `local-owner@localhost`. Đăng xuất và Thoát vẫn được ghim ở đáy và tự giãn đúng khi chỉ có một hành động.
+
+**Thiết kế lại trang Cập nhật ứng dụng.** Trạng thái phiên bản, bản đang dùng, bản mới nhất và hành động chính được gom thành một hierarchy rõ ràng. Timeline đủ năm bước luôn nằm một hàng trên desktop và chuyển thành một cột trên mobile, không còn bước “Khởi động lại” bị rớt dòng. Tiến độ tải chỉ xuất hiện khi cần; ghi chú phát hành thu gọn; chữ ký và SHA-256 vẫn được xác minh như trước.
+
+Đợt audit chạy trên toàn bộ 10 route ở 320, 390, 768 và 1440 px, cả sáng/tối. Regression kiểm tra overflow, duplicate ID, active navigation, touch target, accessibility và static production build.
+
 ## v2.0.2 - 2026-08-11
 
 **Làm rõ quyền truy cập và ranh giới vận hành của bản dùng chung.** OIDC allowlist giờ áp dụng nhất quán cho user mới, user hiện hữu và session đang hoạt động; email bị loại khỏi cấu hình sẽ mất quyền ở request tiếp theo thay vì tiếp tục dùng session cũ. Trang **Người dùng** giải thích rõ `active` không thể vượt qua `AUTH_ALLOWED_EMAILS`.
