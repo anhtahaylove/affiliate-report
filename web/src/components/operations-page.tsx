@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { ApiError, CurrentUser, dailyReportExportUrl, loadCurrentUser, loadMeta, loadUiPreferences, saveUiPreferences, type IdentityPolicy, type RuntimeCapabilities, type UiPreferences } from "@/lib/api";
 import { AppShell, AuthCard } from "@/components/app-shell";
 import { FilterBar, useUrlFilters } from "@/components/filters";
@@ -19,7 +17,6 @@ import { UsersSettingsPage } from "@/components/pages/users-settings";
 import { applyThemePreference, ThemePreferences, type Theme } from "@/components/theme-toggle";
 import { errorMessage } from "@/lib/format";
 import { SavedViews } from "@/components/saved-views";
-import { routeIsActive } from "@/lib/navigation";
 
 type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | "accounts" | "preferences" | "data" | "update" | "users";
 
@@ -36,27 +33,6 @@ const routeMeta: Record<RouteKind, { label: string; title: string; copy: string;
   users: { label: "Người dùng", title: "Quản lý người dùng", copy: "Phân quyền vai trò và phạm vi tài khoản cho từng người dùng.", needsOwner: true },
 };
 
-const settingsTabs: Array<{ href: string; label: string }> = [
-  { href: "/settings/preferences", label: "Giao diện" },
-  { href: "/settings/data", label: "Dữ liệu" },
-  { href: "/settings/update", label: "Cập nhật" },
-  { href: "/settings/users", label: "Người dùng" },
-];
-
-function SettingsTabs({ user }: { user: CurrentUser }) {
-  const pathname = usePathname();
-  const visibleTabs = isOwner(user) ? settingsTabs : settingsTabs.slice(0, 1);
-  return (
-    <nav className="settings-tabs" aria-label="Mục cài đặt">
-      {visibleTabs.map((tab) => (
-        <Link key={tab.href} href={tab.href} className={routeIsActive(pathname, tab.href) ? "active" : undefined} aria-current={routeIsActive(pathname, tab.href) ? "page" : undefined}>
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
-
 export function OperationsPage({ route }: { route: RouteKind }) {
   const filters = useUrlFilters();
   const [user, setUser] = useState<CurrentUser | null>(null);
@@ -67,7 +43,7 @@ export function OperationsPage({ route }: { route: RouteKind }) {
   const [capabilities, setCapabilities] = useState<RuntimeCapabilities | null>(null);
   const [identityPolicy, setIdentityPolicy] = useState<IdentityPolicy | null>(null);
   const [loading, setLoading] = useState(true);
-  const [apiError, setApiError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [authError, setAuthError] = useState("");
   const [preferences, setPreferences] = useState<UiPreferences | null>(null);
 
@@ -86,11 +62,11 @@ export function OperationsPage({ route }: { route: RouteKind }) {
         setIdentityPolicy(meta.identity_policy);
         setPreferences(uiPreferences);
         applyThemePreference(uiPreferences.theme);
-        setApiError("");
+        setLoadError("");
       } catch (reason) {
         if (!active) return;
         if (reason instanceof ApiError && reason.status === 401) setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
-        else setApiError(errorMessage(reason, "Không thể tải cấu hình API."));
+        else setLoadError(errorMessage(reason, "Không thể tải cấu hình ứng dụng."));
       } finally {
         if (active) setLoading(false);
       }
@@ -100,7 +76,7 @@ export function OperationsPage({ route }: { route: RouteKind }) {
   }, []);
 
   if (loading) return <main className="auth-shell"><section className="auth-card panel"><div className="brand-badge">AFF</div><h1>Đang tải trung tâm vận hành…</h1><p className="hint">Đang kiểm tra phiên đăng nhập và kết nối dữ liệu.</p></section></main>;
-  if (authError || !user) return <AuthCard message={authError || "Chưa xác thực."} />;
+  if (authError || loadError || !user) return <AuthCard message={authError || loadError || "Chưa xác thực."} />;
   if (!preferences || !capabilities || !identityPolicy) return <AuthCard message="Không thể tải cấu hình ứng dụng." />;
   const meta = routeMeta[route];
   async function updatePreferences(changes: Partial<Pick<UiPreferences, "theme" | "sidebar_collapsed" | "dashboard_layout">>) {
@@ -108,13 +84,12 @@ export function OperationsPage({ route }: { route: RouteKind }) {
     setPreferences(updated);
     applyThemePreference(updated.theme);
   }
-  const shellProps = { user, apiError, appVersion, collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
+  const shellProps = { user, appVersion, collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
   if (meta.needsWrite && !canWrite(user)) return <AppShell {...shellProps}><Notice text="Bạn không có quyền nhập dữ liệu. Hãy liên hệ chủ sở hữu để được cấp quyền." /></AppShell>;
   if (meta.needsOwner && !isOwner(user)) return <AppShell {...shellProps}><Notice text="Chỉ chủ sở hữu được truy cập trang này." /></AppShell>;
 
   return (
     <AppShell {...shellProps} heading={<div className="page-heading"><h1>{meta.title}</h1><p className="subtle">{meta.copy}</p></div>}>
-      {["preferences", "data", "update", "users"].includes(route) ? <SettingsTabs user={user} /> : null}
       {(["dashboard", "analytics", "orders"] as RouteKind[]).includes(route) ? <SavedViews route={route as "dashboard" | "analytics" | "orders"} /> : null}
       {meta.filters ? <FilterBar accounts={accounts} statuses={route === "targets" ? [] : statuses} showSearch={meta.search} actions={route === "dashboard" ? <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a> : null} /> : null}
       {route === "dashboard" ? <DashboardHome filters={filters} accounts={accounts} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}

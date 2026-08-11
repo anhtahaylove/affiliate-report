@@ -6,11 +6,11 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.2"
+        default: "2.0.3"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
-        default: "2.0.0"
+        default: "2.0.2"
   pull_request:
     paths:
       - ".github/workflows/windows-installer-smoke.yml"

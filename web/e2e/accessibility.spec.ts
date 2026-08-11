@@ -1,7 +1,18 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-const ROUTES = ["/", "/orders/", "/imports/", "/settings/preferences/"];
+const ROUTES = [
+  "/",
+  "/analytics/",
+  "/orders/",
+  "/imports/",
+  "/targets/",
+  "/accounts/",
+  "/settings/preferences/",
+  "/settings/data/",
+  "/settings/update/",
+  "/settings/users/",
+];
 
 for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },

@@ -56,7 +56,7 @@ function NavLink({ item, active, onClick, compact = false, iconOnly = false }: {
   );
 }
 
-export function AppShell({ user, apiError, appVersion, heading, children, collapsed = false, onCollapsedChange }: { user: CurrentUser; apiError?: string; appVersion?: string; heading?: ReactNode; children: ReactNode; collapsed?: boolean; onCollapsedChange?: (collapsed: boolean) => Promise<void> }) {
+export function AppShell({ user, appVersion, heading, children, collapsed = false, onCollapsedChange }: { user: CurrentUser; appVersion?: string; heading?: ReactNode; children: ReactNode; collapsed?: boolean; onCollapsedChange?: (collapsed: boolean) => Promise<void> }) {
   const pathname = usePathname();
   const groups = useMemo(() => allowedItems(user), [user]);
   const allItems = groups.flatMap((group) => group.items);
@@ -70,7 +70,7 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [savingSidebar, setSavingSidebar] = useState(false);
-  const apiBaseLabel = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "Nội bộ ứng dụng";
+  const identityLabel = user.auth_method === "local" ? "Chế độ cục bộ" : user.email;
   const commandItems = allItems.filter((item) => `${item.label} ${item.desc}`.toLocaleLowerCase("vi").includes(commandQuery.trim().toLocaleLowerCase("vi")));
 
   useEffect(() => {
@@ -137,10 +137,6 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
           ))}
         </nav>
         <div className="sidebar-footer">
-          <div className={`health-card${apiError ? " offline" : ""}`}>
-            <span>{apiError ? "API gặp lỗi" : "API hoạt động"}</span>
-            <small>{apiBaseLabel}</small>
-          </div>
           {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
           <div className="sidebar-actions">
             <button type="button" onClick={handleLogout} aria-label="Đăng xuất" title={collapsed ? "Đăng xuất" : undefined}><LogOut size={16} aria-hidden="true" /><span>Đăng xuất</span></button>
@@ -157,7 +153,7 @@ export function AppShell({ user, apiError, appVersion, heading, children, collap
           </button>
           <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
             <Shield size={16} aria-hidden="true" />
-            <span className="user-email" title={user.email}>{user.email}</span>
+            <span className="user-email" title={user.email}>{identityLabel}</span>
             <strong>{roleLabel(user.role)}</strong>
           </div>
         </header>

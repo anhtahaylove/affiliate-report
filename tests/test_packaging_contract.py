@@ -159,7 +159,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert 'default: "2.0.0"' in workflow
+    assert 'default: "2.0.2"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
