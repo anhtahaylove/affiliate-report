@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4.2 - 2026-08-11
+
+**Sửa lỗi tiến độ mục tiêu sai khi khoảng ngày bắc qua hai tháng.**
+
+KPI được đặt riêng cho từng tháng. Khi bạn chọn "30 ngày qua" gần đầu tháng, khoảng đó nằm vắt qua hai tháng — nhưng ô **Tiến độ mục tiêu** chỉ tính phần thuộc tháng hiện tại, trong khi ô **Hoa hồng thực tế** ngay cạnh nó tính đủ cả 30 ngày. Hai con số nằm cạnh nhau trên cùng một màn hình nhưng đo hai khoảng thời gian khác nhau, mà không có gì báo cho bạn biết.
+
+Ví dụ đo được: khoảng 13/07–11/08 với KPI 1.000 ₫/ngày và hoa hồng 80.000 ₫. Hệ thống báo tiến độ **181,8%** (chỉ lấy 20.000 ₫ của 11 ngày tháng 8 chia cho mục tiêu 11 ngày). Con số đúng cho cả 30 ngày là **266,7%** — 80.000 ₫ chia cho mục tiêu 30.000 ₫.
+
+Từ bản này, mục tiêu của cả phạm vi là tổng KPI/ngày nhân số ngày của từng tháng trong phạm vi đó, đúng theo cách hệ thống vẫn tính khi bạn chọn một phần của tháng. Nếu có tháng nào trong phạm vi chưa đặt KPI, hệ thống báo "chưa xác định" thay vì cộng các tháng còn lại rồi báo vượt mục tiêu một cách giả tạo.
+
+Lỗi này chỉ ảnh hưởng phần hiển thị tiến độ; hoa hồng, GMV và số đơn luôn đúng.
+
+**Trang Mục tiêu nói rõ đang tính trên khoảng nào**, thay vì chỉ ghi tên tháng trong khi tiến độ lại tính theo phạm vi lọc. Thông báo lỗi khi lưu cũng được đọc lên cho trình đọc màn hình đúng cách.
+
 ## v1.4.1 - 2026-08-11
 
 Đợt chỉnh giao diện thứ hai, lần này dựa trên ảnh chụp thật của OmniRoute chứ không phải suy đoán từ mã nguồn.

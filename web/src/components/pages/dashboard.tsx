@@ -21,11 +21,11 @@ type DashboardData = {
 export function DashboardHome({ filters, accounts }: { filters: UrlFilters; accounts: string[] }) {
   const scope = { accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end };
   const { data, error, loading } = useApi<DashboardData>(
-    `dashboard:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end, filters.month])}`,
+    `dashboard:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end])}`,
     async () => {
       const [dashboard, monthly, analyticData, imports] = await Promise.all([
         loadDashboard(scope),
-        loadMonthlyKpi({ month: filters.month, ...scope }),
+        loadMonthlyKpi(scope),
         loadAnalytics(scope),
         loadImportHistory(5, filters.accounts),
       ]);
@@ -65,7 +65,7 @@ export function DashboardHome({ filters, accounts }: { filters: UrlFilters; acco
       <section className="hero-grid" aria-label="Chỉ số kỳ báo cáo">
         <Metric title="Hoa hồng thực tế" value={formatMoney(summary?.actual_commission ?? activeKpi?.actual_commission)} hint={`${selectedLabel} · kỳ trước ${commissionDelta == null ? "—" : formatMoney(commissionDelta)}`} />
         <Metric title="GMV thực tế" value={formatMoney(summary?.actual_gmv ?? total?.actual_gmv)} hint={`kỳ trước ${orderDelta == null ? "—" : integer.format(orderDelta)} đơn`} />
-        <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong data-tone={achievementTone(activeKpi?.target_achievement)}>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" data-tone={achievementTone(activeKpi?.target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu tháng {formatMoney(activeKpi?.monthly_target)}</small></article>
+        <article className="metric progress-metric panel"><span>Tiến độ mục tiêu</span><strong data-tone={achievementTone(activeKpi?.target_achievement)}>{percent(activeKpi?.target_achievement)}</strong><div className="progress-track" data-tone={achievementTone(activeKpi?.target_achievement)} role="progressbar" aria-label="Tiến độ hoa hồng" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div><small>Mục tiêu trong kỳ {formatMoney(activeKpi?.monthly_target)}</small></article>
         <Metric
           title={analytics?.target?.projected_month_end == null ? "Còn thiếu" : "Dự báo cuối tháng"}
           value={formatMoney(analytics?.target?.projected_month_end ?? analytics?.target?.remaining ?? gap)}

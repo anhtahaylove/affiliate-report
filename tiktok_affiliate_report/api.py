@@ -48,6 +48,7 @@ from .reports import (
     analytics,
     count_orders,
     daily_report,
+    collapse_kpi_to_scope,
     monthly_kpi,
     orders,
     overview,
@@ -526,7 +527,8 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         df = monthly_kpi(_engine(app), accounts, start, end, _list(status))
         if month:
             df = df[pd.to_datetime(df["month"]).dt.strftime("%Y-%m") == month]
-        items = _items(df)
+        # Một dòng cho mỗi tài khoản, phủ đúng phạm vi ngày đang xem — xem collapse_kpi_to_scope.
+        items = _items(collapse_kpi_to_scope(df))
         return {"items": items, "count": len(items)}
 
     @app.get("/api/v1/analytics")
