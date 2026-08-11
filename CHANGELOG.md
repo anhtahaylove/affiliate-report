@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.4.0 - 2026-08-11
+
+Đợt chỉnh giao diện theo hướng bảng điều khiển kỹ thuật: dày thông tin hơn, ít chữ thừa hơn, số dễ so hơn.
+
+**Bộ lọc không còn chiếm nửa màn hình.** Trước đây phần chọn tháng, ngày, tài khoản và trạng thái luôn mở sẵn, ngốn gần 300 điểm ảnh chiều cao và đẩy số liệu xuống dưới. Giờ nó thu lại thành một dòng cho biết đang xem phạm vi nào, bấm **Chỉnh sửa** mới mở ra.
+
+**Số liệu thẳng cột.** Toàn bộ con số trong bảng và thẻ dùng chữ số đều nhau, nên nhìn dọc là so được ngay thay vì phải đọc từng dòng. Mã đơn và mã SKU chuyển sang phông đơn cách vì chúng được đọc theo từng ký tự, không phải theo từ.
+
+**Menu bên trái có biểu tượng** cho từng mục, nhận ra bằng hình nhanh hơn đọc chữ.
+
+**Bớt lặp và bớt ồn:**
+- Bỏ khối "Phạm vi báo cáo" hiện hai lần cạnh nhau trên Tổng quan.
+- Dòng thông tin chất lượng dữ liệu chỉ tô màu cảnh báo khi thật sự có vấn đề; không có gì bất thường thì nó im lặng.
+- Nút **Thoát ứng dụng** không còn là thứ nổi bật nhất màn hình dù là thao tác nguy hiểm nhất; nó chỉ chuyển đỏ khi bạn rê chuột vào.
+- Ngày trong bảng Đơn hàng hiển thị theo định dạng Việt Nam thay vì dạng máy `2026-03-10T08:00:00`.
+
+**Lúc chờ tải, màn hình giữ nguyên khung** thay vì hiện một dòng chữ rồi nhảy layout khi dữ liệu về.
+
 ## v1.3.4 - 2026-08-11
 
 **Cập nhật xong không còn mở thêm tab trình duyệt trùng.** Trước đây mỗi lần mở app lại chọn một cổng ngẫu nhiên mới, nên tab bạn đang xem tiến độ cập nhật trỏ vào một địa chỉ đã chết và app buộc phải mở tab thứ hai — bạn còn lại hai tab, một cái hỏng. Giờ app dùng lại đúng cổng của lần chạy trước nếu còn trống, nên chính tab đang mở tự kết nối lại và hiện bản mới, không mở thêm gì. Nếu cổng cũ đã bị chương trình khác chiếm thì app vẫn mở tab mới như trước, vì lúc đó tab cũ chắc chắn không dùng được nữa.

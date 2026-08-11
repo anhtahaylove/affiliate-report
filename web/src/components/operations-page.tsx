@@ -94,7 +94,7 @@ export function OperationsPage({ route }: { route: RouteKind }) {
     <AppShell user={user} apiError={apiError}>
       <div className="page-heading"><p className="section-label">{meta.label}</p><h1>{meta.title}</h1><p className="subtle">{meta.copy}</p></div>
       {["data", "update", "users"].includes(route) ? <SettingsTabs /> : null}
-      {meta.filters ? <><FilterBar accounts={accounts} statuses={route === "targets" ? [] : statuses} showSearch={meta.search} />{meta.filterHint ? <p className="hint">{meta.filterHint}</p> : null}</> : null}
+      {meta.filters ? <FilterBar accounts={accounts} statuses={route === "targets" ? [] : statuses} showSearch={meta.search} /> : null}
       {route === "dashboard" ? <DashboardHome filters={filters} accounts={accounts} /> : null}
       {route === "analytics" ? <AnalyticsPage filters={filters} /> : null}
       {route === "orders" ? <OrdersPage filters={filters} /> : null}

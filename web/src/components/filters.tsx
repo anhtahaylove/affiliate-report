@@ -53,7 +53,7 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
   const pathname = usePathname();
   const [draft, setDraft] = useState(initialFilters);
   const [error, setError] = useState("");
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const monthStart = draft.month ? firstDayOfMonth(draft.month) : "";
   const monthEnd = draft.month ? lastDayOfMonth(draft.month) : "";
   const allAccountsSelected = accounts.length > 0 && draft.accounts.length === accounts.length;
@@ -76,7 +76,7 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     setError("");
     const nextDraft = { ...draft, ...range, page: 1 };
     setDraft(nextDraft);
-    setMobileOpen(false);
+    setFiltersOpen(false);
     router.push(buildFilterHref(pathname, nextDraft, accounts, statuses));
   }
 
@@ -95,7 +95,7 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     const nextDraft: UrlFilters = { month, start: firstDayOfMonth(month), end: lastDayOfMonth(month), accounts, statuses, search: "", page: 1, size: 100, sort: "", direction: "desc" };
     setError("");
     setDraft(nextDraft);
-    setMobileOpen(false);
+    setFiltersOpen(false);
     router.replace(buildFilterHref(pathname, nextDraft, accounts, statuses));
   }
 
@@ -104,17 +104,19 @@ function FilterForm({ accounts, statuses, showSearch = false, initialFilters }: 
     if (!draft.accounts.length) return setError("Hãy chọn ít nhất một tài khoản.");
     if (statuses.length && !draft.statuses.length) return setError("Hãy chọn ít nhất một trạng thái.");
     setError("");
-    setMobileOpen(false);
+    setFiltersOpen(false);
     router.push(buildFilterHref(pathname, draft, accounts, statuses));
   }
 
   return (
     <form className="command-bar panel" onSubmit={apply}>
-      <button className="filter-toggle" type="button" aria-expanded={mobileOpen} aria-controls="report-filters" onClick={() => setMobileOpen((open) => !open)}>
-        <span><strong>Bộ lọc báo cáo</strong><small>{compactSummary}</small></span>
-        <span aria-hidden="true">{mobileOpen ? "Thu gọn" : "Chỉnh sửa"}</span>
+      {/* Mở sẵn toàn bộ bộ lọc ngốn gần 300px trên mọi màn hình, đẩy số liệu xuống dưới nếp
+          gấp. Mặc định chỉ hiện một dòng tóm tắt phạm vi đang xem; bấm mới mở ra để chỉnh. */}
+      <button className="filter-toggle" type="button" aria-expanded={filtersOpen} aria-controls="report-filters" onClick={() => setFiltersOpen((open) => !open)}>
+        <span><strong>Phạm vi báo cáo</strong><small>{compactSummary}</small></span>
+        <span className="filter-toggle-action" aria-hidden="true">{filtersOpen ? "Thu gọn" : "Chỉnh sửa"}</span>
       </button>
-      <div id="report-filters" className={`filter-body${mobileOpen ? " is-open" : ""}`}>
+      <div id="report-filters" className={`filter-body${filtersOpen ? " is-open" : ""}`}>
         <div className="field compact">
           <label htmlFor="target-month">Tháng KPI</label>
           <input

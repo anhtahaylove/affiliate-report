@@ -26,6 +26,8 @@
   --scrim: rgba(15, 23, 42, 0.28);
   --scrim-clear: rgba(15, 23, 42, 0);
   --radius: 14px;
+  /* Mã đơn/SKU đọc theo ký tự; font hệ thống có sẵn nên không phải tải thêm gì. */
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
   color-scheme: light;
 }
 
@@ -1325,4 +1327,117 @@ th[aria-sort] .sort-button span { color: var(--teal); }
   padding: 0 12px;
   border-radius: 999px;
   font-size: 0.86rem;
+}
+
+/* ---- v1.4.0: mật độ thông tin và thứ bậc thị giác ---- */
+
+/* Đây là app báo cáo tài chính: số phải thẳng cột mới so sánh được bằng mắt. */
+td, th, .metric strong, .metric-strip strong, .analytics-tick, .import-item span, .backup-item small {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mã đơn, SKU và khoá kỹ thuật đọc theo ký tự, không phải theo từ. */
+.orders-table td:nth-child(2),
+.orders-table td:nth-child(3),
+.order-detail span,
+.order-history span,
+.backup-item strong {
+  font-family: var(--font-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  font-size: 0.92em;
+  letter-spacing: -0.01em;
+}
+
+/* Bộ lọc thu gọn mặc định ở mọi khổ màn hình, không chỉ trên điện thoại. */
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 0;
+  background: none;
+}
+
+.filter-toggle > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.filter-toggle small { color: var(--ink-soft); font-weight: 500; overflow-wrap: anywhere; }
+.filter-toggle-action { color: var(--teal); font-size: 0.86rem; white-space: nowrap; }
+.filter-toggle:hover .filter-toggle-action { text-decoration: underline; }
+.command-bar { flex-direction: column; padding: 6px; }
+.filter-body { display: none; }
+.filter-body.is-open { display: flex; padding: 8px 6px 6px; }
+
+/* Nav có icon: nhận diện bằng hình nhanh hơn đọc chữ. */
+.sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-icon { flex: 0 0 auto; opacity: 0.75; }
+.sidebar nav a[aria-current="page"] .nav-icon { opacity: 1; }
+
+/* Thoát ứng dụng là thao tác nguy hiểm nhất nhưng đang là thứ nổi bật nhất màn hình. */
+.user-menu .exit-button {
+  border-color: var(--line);
+  background: none;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.user-menu .exit-button:hover {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Khung xương lúc tải: giữ nguyên chỗ của nội dung thay vì nhảy layout. */
+.skeleton-grid { display: grid; gap: 12px; }
+.skeleton-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+
+.skeleton {
+  height: 76px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-soft) 50%, var(--surface) 75%);
+  background-size: 400% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+.skeleton.tall { height: 220px; }
+
+@keyframes skeleton-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+/* Danh sách bản sao lưu: mỗi dòng phải quét được bằng mắt, không phải một khối chữ xám. */
+.backup-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.backup-item:has(input:checked) { border-color: var(--teal); background: var(--teal-soft); }
+.backup-item span { display: grid; gap: 3px; min-width: 0; }
+.backup-item small { color: var(--ink-soft); font-size: 0.82rem; }
+.backup-item.invalid { border-color: var(--danger-line); background: var(--danger-soft); }
+
+.page-actions { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+.page-actions .button-link { margin-top: 0; }
+
+/* Không có cảnh báo nào thì đây chỉ là dòng thông tin, giữ nó im lặng. */
+.data-quality-notice.is-clean {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
 }

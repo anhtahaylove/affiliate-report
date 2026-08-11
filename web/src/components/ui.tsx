@@ -16,6 +16,19 @@ export function Notice({ text }: { text: string }) {
   return <section className="notice" role="alert">{text}</section>;
 }
 
+/** Khung xương giữ đúng chỗ nội dung sắp hiện, thay cho một dòng chữ "Đang tải…" làm nhảy layout. */
+export function Skeleton({ rows = 4, tall = false, label }: { rows?: number; tall?: boolean; label: string }) {
+  return (
+    <div className="skeleton-grid" role="status" aria-busy="true" aria-label={label}>
+      <div className="skeleton-row">
+        {Array.from({ length: rows }, (_, index) => <div className="skeleton" key={index} />)}
+      </div>
+      {tall ? <div className="skeleton tall" /> : null}
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
 export function StateCard({ text }: { text: string }) {
   return <section className="section panel"><p className="empty">{text}</p></section>;
 }
