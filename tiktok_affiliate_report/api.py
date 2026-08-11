@@ -174,6 +174,10 @@ def _month_start(value: str) -> date:
     return date(parsed.year, parsed.month, 1)
 
 
+def _previous_month(month: date) -> date:
+    return date(month.year - 1, 12, 1) if month.month == 1 else date(month.year, month.month - 1, 1)
+
+
 def _engine(app: FastAPI) -> Engine:
     return app.state.engine
 
@@ -608,6 +612,52 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             )
             conn.execute(stmt)
         return {"account": account, "month": month, "daily_target_commission": changes.daily_target_commission}
+
+    @app.post("/api/v1/targets/{month}/copy-previous")
+    def copy_previous_targets_endpoint(
+        month: str,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        """Chép KPI tháng trước sang tháng này cho các tài khoản chưa đặt.
+
+        Sang tháng mới thì KPI thường giữ nguyên, nhưng phải gõ lại từng tài khoản một.
+        Cố ý KHÔNG đè lên tài khoản đã có KPI cho tháng đích: chép đè sẽ xoá mất con số vừa
+        chỉnh mà không hỏi, còn bỏ qua thì cùng lắm là bấm thừa một lần.
+        """
+        if current.role not in {"owner", "operator"}:
+            raise HTTPException(status_code=403, detail="Target update requires operator or owner role")
+        target_month = _month_start(month)
+        source_month = _previous_month(target_month)
+        allowed = set(permitted_target_accounts(current, None))
+        with _engine(app).begin() as conn:
+            existing = {
+                row.account
+                for row in conn.execute(select(monthly_targets.c.account).where(monthly_targets.c.month == target_month))
+            }
+            source = [
+                row for row in conn.execute(
+                    select(monthly_targets.c.account, monthly_targets.c.daily_target_commission)
+                    .where(monthly_targets.c.month == source_month)
+                    .order_by(monthly_targets.c.account)
+                )
+                if row.account in allowed
+            ]
+            copied = [row for row in source if row.account not in existing]
+            if copied:
+                conn.execute(
+                    monthly_targets.insert(),
+                    [
+                        {"account": row.account, "month": target_month, "daily_target_commission": int(row.daily_target_commission)}
+                        for row in copied
+                    ],
+                )
+        return {
+            "month": month,
+            "from_month": source_month.strftime("%Y-%m"),
+            "copied": [{"account": row.account, "daily_target_commission": int(row.daily_target_commission)} for row in copied],
+            "kept": sorted(row.account for row in source if row.account in existing),
+        }
 
     @app.get("/api/v1/orders")
     def orders_endpoint(

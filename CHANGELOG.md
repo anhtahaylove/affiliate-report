@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.4.3 - 2026-08-11
+
+**Sang tháng mới không phải gõ lại KPI cho từng tài khoản.** Trang **Mục tiêu** có thêm nút **Chép KPI tháng trước**: một lần bấm là chép KPI/ngày của tháng liền trước sang tháng đang xem.
+
+Nút này **không ghi đè** tài khoản nào đã có KPI cho tháng đích. Nếu bạn đã chỉnh một vài tài khoản rồi mới bấm, những con số đó được giữ nguyên và hệ thống báo rõ đã chép bao nhiêu, giữ nguyên bao nhiêu. Bấm nhầm lần nữa cũng không hỏng gì. Việc chép chạy trong một lần ghi duy nhất nên không có chuyện chép được nửa chừng.
+
+Chỉ tài khoản bạn có quyền mới được chép; người chỉ có quyền xem không bấm được.
+
+**Tháng KPI bám theo phạm vi đang lọc.** Trước đây nếu bạn mở trang Mục tiêu bằng đường dẫn có sẵn khoảng ngày (ví dụ tháng 3) thì ô nhập vẫn sửa KPI của tháng hiện tại — sửa nhầm tháng mà không có gì báo. Giờ tháng KPI lấy theo ngày bắt đầu của phạm vi.
+
 ## v1.4.2 - 2026-08-11
 
 **Sửa lỗi tiến độ mục tiêu sai khi khoảng ngày bắc qua hai tháng.**

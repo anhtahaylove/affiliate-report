@@ -577,6 +577,17 @@ export async function saveTarget(account: string, month: string, targetCommissio
   });
 }
 
+export type CopyTargetsResponse = {
+  month: string;
+  from_month: string;
+  copied: Array<{ account: string; daily_target_commission: number }>;
+  kept: string[];
+};
+
+export async function copyPreviousTargets(month: string) {
+  return request<CopyTargetsResponse>(`/api/v1/targets/${month}/copy-previous`, { method: "POST" });
+}
+
 export async function loadImportHistory(limit = 10, accounts?: string[]) {
   return request<ListResponse<ImportHistoryRow> & { limit: number }>(`/api/v1/imports${queryString({ limit, account: accounts })}`);
 }

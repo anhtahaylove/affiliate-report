@@ -22,7 +22,9 @@ export type UrlFilters = {
 
 export function useUrlFilters() {
   const params = useSearchParams();
-  const month = params.get("month") || currentMonth();
+  // Có phạm vi ngày mà không có month thì tháng KPI phải bám theo phạm vi đó, không phải
+  // tháng hiện tại — nếu không trang Mục tiêu sẽ sửa KPI tháng 8 trong khi đang lọc tháng 3.
+  const month = params.get("month") || params.get("start")?.slice(0, 7) || currentMonth();
   return useMemo<UrlFilters>(() => ({
     month,
     start: params.get("start") || firstDayOfMonth(month),

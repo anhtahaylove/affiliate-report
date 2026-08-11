@@ -287,6 +287,42 @@ def test_monthly_kpi_without_target_for_every_month_in_scope_reports_no_target(t
     assert kpi["target_achievement"] is None
 
 
+def test_copy_previous_targets_fills_only_missing_accounts(tmp_path):
+    """Chép KPI sang tháng mới, nhưng không đè lên tài khoản đã đặt cho tháng đó."""
+    client, engine = api(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2026, 3, 1), daily_target_commission=100))
+        conn.execute(monthly_targets.insert().values(account="EMLINHNOIY", month=date(2026, 3, 1), daily_target_commission=200))
+        # THAOBRA đã có KPI riêng cho tháng 4 — chép không được phép ghi đè con số này.
+        conn.execute(monthly_targets.insert().values(account="THAOBRA", month=date(2026, 3, 1), daily_target_commission=300))
+        conn.execute(monthly_targets.insert().values(account="THAOBRA", month=date(2026, 4, 1), daily_target_commission=999))
+
+    payload = client.post("/api/v1/targets/2026-04/copy-previous").json()
+    after = {item["account"]: item["daily_target_commission"] for item in client.get("/api/v1/targets", params={"month": "2026-04"}).json()["items"]}
+
+    assert payload["from_month"] == "2026-03"
+    assert [item["account"] for item in payload["copied"]] == ["CHIISTORE", "EMLINHNOIY"]
+    assert payload["kept"] == ["THAOBRA"]
+    assert after == {"CHIISTORE": 100, "EMLINHNOIY": 200, "THAOBRA": 999}
+
+    # Bấm lần nữa không được nhân đôi hay đổi gì.
+    repeat = client.post("/api/v1/targets/2026-04/copy-previous").json()
+    assert repeat["copied"] == []
+    assert {item["account"]: item["daily_target_commission"] for item in client.get("/api/v1/targets", params={"month": "2026-04"}).json()["items"]} == after
+
+
+def test_copy_previous_targets_crosses_the_year_boundary(tmp_path):
+    """Tháng 1 phải lùi về tháng 12 năm trước, không phải tháng 0 cùng năm."""
+    client, engine = api(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(monthly_targets.insert().values(account="CHIISTORE", month=date(2025, 12, 1), daily_target_commission=750))
+
+    payload = client.post("/api/v1/targets/2026-01/copy-previous").json()
+
+    assert payload["from_month"] == "2025-12"
+    assert payload["copied"] == [{"account": "CHIISTORE", "daily_target_commission": 750}]
+
+
 def test_orders_paginates_with_total(tmp_path):
     client, engine = api(tmp_path)
     import_rows(
