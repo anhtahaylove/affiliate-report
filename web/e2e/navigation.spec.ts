@@ -37,6 +37,7 @@ test("sidebar giữ đúng route, highlight mọi page và mở rộng không đ
 
   await page.goto("/settings/update/");
   await expect(page.locator('.settings-tabs a[aria-current="page"]')).toHaveAttribute("href", "/settings/update/");
+  await expect(page.locator(".settings-tabs")).toBeHidden();
 });
 
 test("mobile đánh dấu mục Thêm khi route hiện tại nằm trong action sheet", async ({ page }) => {
@@ -44,4 +45,8 @@ test("mobile đánh dấu mục Thêm khi route hiện tại nằm trong action 
   await page.goto("/analytics/");
 
   await expect(page.getByRole("button", { name: "Thêm" })).toHaveAttribute("aria-current", "page");
+
+  await page.goto("/settings/update/");
+  await expect(page.locator(".settings-tabs")).toBeVisible();
+  await expect(page.locator('.settings-tabs a[aria-current="page"]')).toHaveAttribute("href", "/settings/update/");
 });

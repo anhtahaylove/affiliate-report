@@ -399,7 +399,7 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .page-heading .subtle { margin: 0; font-size: 0.88rem; }
 
 .settings-tabs {
-  display: flex;
+  display: none;
   gap: 6px;
   margin-bottom: 18px;
   border-bottom: 1px solid var(--line);
@@ -642,6 +642,15 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Inputs inside .field normally stretch to 100%. Keep assistive-only controls
+   out of layout even when both utility rules apply (notably the import picker). */
+.field input.sr-only {
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
 }
 
 .metric {
@@ -1782,7 +1791,7 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .aging-grid strong { font-size: 1.35rem; }
 .quality-summary, .settlement-hero { border-color: var(--accent-line); }
 .chart-data-disclosure { margin-top: 10px; }
-.chart-data-disclosure summary { color: var(--accent-strong); cursor: pointer; font-weight: 700; }
+.chart-data-disclosure summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent-strong); cursor: pointer; font-weight: 700; }
 
 .workflow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
 .workflow-steps > * { min-width: 0; }
@@ -1817,7 +1826,7 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .upload-progress > span, .download-progress > span { color: var(--ink-soft); font-size: .82rem; }
 .update-actions { margin-top: 14px; }
 .column-controls { min-width: 180px; }
-.column-controls summary { cursor: pointer; font-weight: 700; }
+.column-controls summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; }
 .column-controls[open] { flex-basis: 100%; }
 .column-control-grid { margin-top: 10px; }
 .capability-gate { display: flex; align-items: flex-start; gap: 16px; max-width: 900px; }
@@ -1850,10 +1859,15 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 }
 
 @media (max-width: 860px) {
+  html { scroll-padding-bottom: calc(108px + env(safe-area-inset-bottom)); }
   .cockpit-shell, .cockpit-shell.sidebar-collapsed { display: block; }
   .command-trigger span, .command-trigger kbd { display: none; }
-  .command-trigger { min-width: 40px; padding: 0; justify-content: center; }
+  .command-trigger { min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
   .mobile-bottom-nav { grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: 20px; }
+  .settings-tabs { display: flex; }
+  .segmented button { min-height: 44px; }
+  .action-alert a, .text-action { display: inline-flex; align-items: center; min-height: 44px; }
+  :is(a, button, input, select, summary):focus-visible { scroll-margin-bottom: calc(108px + env(safe-area-inset-bottom)); }
   .mobile-filter-overlay { position: fixed; z-index: 44; inset: 0; display: block; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 0; background: var(--scrim); }
   .mobile-filter-sheet-head { display: flex; align-items: center; justify-content: space-between; width: 100%; }
   .mobile-filter-sheet-head > span { display: flex; align-items: center; gap: 8px; }
@@ -1910,6 +1924,9 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .orders-sticky-toolbar { position: static; display: grid; }
   .workflow-steps, .update-stages { grid-template-columns: 1fr 1fr; }
   .theme-preference-grid { grid-template-columns: 1fr; }
+  .analytics-tab-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .analytics-tab-list button { min-width: 0; min-height: 44px; white-space: normal; }
+  .analytics-tab-list button:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .command-palette { top: 10px; max-height: calc(100svh - 20px); overflow: auto; }
   .target-edit-row, .account-create-panel, .user-permission-grid, .account-meta { grid-template-columns: 1fr; }
   .target-edit-row > button, .account-create-panel > button, .user-permission-grid .row-actions button { width: 100%; }

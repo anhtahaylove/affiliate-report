@@ -1,10 +1,14 @@
 # Changelog
 
-## v2.0.1 - 2026-08-11
+## v2.0.2 - 2026-08-11
 
 **Làm rõ quyền truy cập và ranh giới vận hành của bản dùng chung.** OIDC allowlist giờ áp dụng nhất quán cho user mới, user hiện hữu và session đang hoạt động; email bị loại khỏi cấu hình sẽ mất quyền ở request tiếp theo thay vì tiếp tục dùng session cũ. Trang **Người dùng** giải thích rõ `active` không thể vượt qua `AUTH_ALLOWED_EMAILS`.
 
 API meta công bố capability theo runtime/database. Trên PostgreSQL hoặc OIDC dùng chung, trang **Dữ liệu** và **Cập nhật** chuyển sang trạng thái do hạ tầng quản lý, không gọi endpoint Reset/Restore hoặc trình cài Windows local-only. Bản local SQLite/Windows giữ nguyên đầy đủ backup, restore và auto-update hiện có.
+
+**Hoàn thiện responsive sau audit toàn bộ ứng dụng.** Tất cả route được kiểm tra ở 320, 390, 768 và 1440 px. Import không còn tạo overflow ngang do file input ẩn; tab Phân tích mobile tự dàn thành lưới đọc được đầy đủ; các điều khiển quan trọng đạt vùng chạm tối thiểu 44 px và có khoảng cuộn an toàn phía trên bottom navigation.
+
+**Giảm trùng lặp và làm rõ thông tin.** Navigation Settings theo chiều ngang chỉ xuất hiện trên mobile, nơi sidebar không có mặt. Orders đổi nhãn thành **Bộ lọc đang áp dụng**; ngày giờ luôn hiển thị năm bốn chữ số để tránh hiểu nhầm.
 
 ## v2.0.0 - 2026-08-11
 

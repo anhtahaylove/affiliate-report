@@ -134,8 +134,8 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
       </div>
 
       <div className="orders-sticky-toolbar" aria-label="Thanh thao tác đơn hàng">
-        <div className="saved-view-strip" aria-label="Chế độ xem hiện tại">
-          <strong>Chế độ xem hiện tại</strong>
+        <div className="saved-view-strip" aria-label="Bộ lọc đang áp dụng">
+          <strong>Bộ lọc đang áp dụng</strong>
           {filterSummary(filters).map((item) => <span className="saved-view-chip" key={item}>{item}</span>)}
         </div>
         <div className="row-actions">
