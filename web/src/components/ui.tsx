@@ -33,8 +33,8 @@ export function StateCard({ text }: { text: string }) {
   return <section className="section panel"><p className="empty">{text}</p></section>;
 }
 
-export function Metric({ title, value, hint }: { title: string; value: string; hint: string }) {
-  return <article className="metric panel"><span>{title}</span><strong>{value}</strong><small>{hint}</small></article>;
+export function Metric({ title, value, hint, tone }: { title: string; value: string; hint: string; tone?: "good" | "warning" | "critical" }) {
+  return <article className="metric panel"><span>{title}</span><strong data-tone={tone}>{value}</strong><small>{hint}</small></article>;
 }
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
