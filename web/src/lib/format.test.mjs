@@ -26,7 +26,7 @@ test("achievementTone maps target-achievement ratios to a traffic-light tone", (
 });
 
 test("formatDateTime keeps a four-digit year and unambiguous Vietnamese date", () => {
-  const formatted = formatDateTime("2026-03-10T08:05:00+07:00");
+  const formatted = formatDateTime(new Date(2026, 2, 10, 8, 5).toISOString());
   assert.match(formatted, /2026/);
   assert.match(formatted, /10\/03/);
   assert.match(formatted, /08:05/);
