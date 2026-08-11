@@ -110,7 +110,7 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
     _check_backup(backup_path)
     usable_path = _usable_backup_path(backup_path)
     _check_required_schema(usable_path)
-    safety_backup_path = _backup_path(db_path, "restore-safety")
+    safety_backup_path = _backup_path(db_path, "restore-safety", protect=backup_path)
 
     with engine.connect() as conn:
         conn.exec_driver_sql("BEGIN IMMEDIATE")
@@ -154,9 +154,38 @@ def _backup_dir(db_path: Path) -> Path:
     return db_path.parent / "backups"
 
 
-def _backup_path(db_path: Path, label: str) -> Path:
+BACKUP_RETENTION = 3
+
+
+def _prune_backups(db_path: Path, keep: int, protect: Path | None = None) -> list[str]:
+    """Mỗi thao tác nguy hiểm tạo một bản sao lưu đầy đủ. Không dọn thì thư mục phình mãi —
+    một database 25 MB nhân với vài chục lần xoá tài khoản là hàng trăm MB nằm chết."""
+    backup_dir = _backup_dir(db_path)
+    if not backup_dir.exists():
+        return []
+    keeper = protect.resolve() if protect else None
+    candidates = sorted(
+        (path for path in backup_dir.iterdir() if _is_candidate_backup(db_path, path)),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    removed: list[str] = []
+    for path in candidates[max(keep, 0):]:
+        if keeper is not None and path.resolve() == keeper:
+            continue  # không bao giờ xoá bản đang được khôi phục
+        try:
+            path.unlink()
+            removed.append(path.name)
+        except OSError:
+            pass
+    return removed
+
+
+def _backup_path(db_path: Path, label: str, protect: Path | None = None) -> Path:
     backup_dir = _backup_dir(db_path)
     backup_dir.mkdir(parents=True, exist_ok=True)
+    # Dọn trước khi tạo: giữ lại chỗ cho đúng bản sắp ghi để tổng luôn bằng BACKUP_RETENTION.
+    _prune_backups(db_path, BACKUP_RETENTION - 1, protect)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     suffix = db_path.suffix or ".db"
     for _ in range(100):

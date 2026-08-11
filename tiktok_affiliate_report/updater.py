@@ -652,7 +652,7 @@ try {
     $exitCode = Start-Child $Installer $arguments ([System.IO.Path]::GetDirectoryName($Installer)) $true
     if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
     Write-UpdateStatus 'restarting' $null
-    Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
+    Start-Child $AppExe '--updated' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
     # Bản onedir không giải nén runtime ra %TEMP% nữa. Mở ngay sau khi cài thường mất 2-4s vì
     # installer vừa ghi xong nên file còn trong cache của OS; nhưng mở nguội (file đã rơi khỏi
     # cache, antivirus quét lại gần 1.800 file) đã đo được tới 35s trên máy thật. Cho 90s để một

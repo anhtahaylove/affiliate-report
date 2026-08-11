@@ -428,6 +428,36 @@ def test_reset_data_shrinks_the_database_file_instead_of_leaving_dead_pages(tmp_
     assert client.get("/api/v1/orders").json()["total"] == 0
 
 
+def test_backups_keep_only_the_most_recent_few_instead_of_piling_up(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    backup_dir = tmp_path / "backups"
+
+    for _ in range(6):
+        assert client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"}).status_code == 200
+
+    kept = sorted(backup_dir.glob("*.db"))
+    assert len(kept) == reset_data_module.BACKUP_RETENTION
+    assert client.get("/api/v1/admin/backups").json()["count"] == reset_data_module.BACKUP_RETENTION
+
+
+def test_restore_never_prunes_the_backup_it_is_restoring(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
+    # Lấp đủ hạn mức rồi khôi phục từ bản CŨ NHẤT còn giữ. Bản sao lưu an toàn tạo trong lúc
+    # khôi phục sẽ dọn bớt, và nếu không chừa thì nó xoá đúng bản đang được đọc.
+    for _ in range(reset_data_module.BACKUP_RETENTION):
+        assert client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"}).status_code == 200
+    oldest = client.get("/api/v1/admin/backups").json()["items"][-1]["id"]
+
+    restored = client.post(
+        "/api/v1/admin/backups/restore",
+        json={"backup_id": oldest, "confirmation": "KHOI PHUC DU LIEU"},
+    )
+    assert restored.status_code == 200
+    assert (tmp_path / "backups" / oldest).exists()
+
+
 def test_reset_data_aborts_before_delete_when_backup_check_fails(tmp_path, monkeypatch):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])
