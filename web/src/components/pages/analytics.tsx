@@ -1,154 +1,172 @@
 "use client";
 
-import { AnalyticsDimensionRow, AnalyticsResponse, loadAnalytics } from "@/lib/api";
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import { Tabs } from "radix-ui";
+import { AnalyticsBreakdownRow, AnalyticsDimensionRow, AnalyticsResponse, loadAnalytics } from "@/lib/api";
 import { UrlFilters } from "@/components/filters";
-import { Metric, Notice, Skeleton, StateCard, StatusBadge } from "@/components/ui";
+import { Notice, Skeleton, StateCard, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
-import { accountLabel, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
+import { accountLabel, formatDateTime, formatMoney, integer, percent, statusLabel } from "@/lib/format";
+
+const CommissionTrendChart = dynamic(
+  () => import("@/components/commerce-intelligence-charts").then((module) => module.CommissionTrendChart),
+  { ssr: false, loading: () => <div className="chart-loading" aria-label="Đang dựng biểu đồ" /> },
+);
+const AccountContributionChart = dynamic(
+  () => import("@/components/commerce-intelligence-charts").then((module) => module.AccountContributionChart),
+  { ssr: false, loading: () => <div className="chart-loading" aria-label="Đang dựng biểu đồ" /> },
+);
+const StatusMixChart = dynamic(
+  () => import("@/components/commerce-intelligence-charts").then((module) => module.StatusMixChart),
+  { ssr: false, loading: () => <div className="chart-loading" aria-label="Đang dựng biểu đồ" /> },
+);
 
 export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
   const { data, error, loading } = useApi<AnalyticsResponse>(
-    `analytics:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end])}`,
+    `analytics-v2:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end])}`,
     () => loadAnalytics({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end }),
-    "Không thể tải phân tích.",
+    "Không thể tải Commerce Intelligence.",
   );
   if (error) return <Notice text={error} />;
-  if (loading) return <Skeleton rows={3} tall label="Đang tải phân tích" />;
+  if (loading) return <Skeleton rows={4} tall label="Đang tải Commerce Intelligence" />;
   if (!data) return <StateCard text="Chưa có dữ liệu phân tích." />;
-  const summary = data.summary;
+
   const previous = data.previous_period?.summary;
-  const commissionDelta = previous ? summary.actual_commission - previous.actual_commission : null;
+  const commissionDelta = previous ? data.summary.actual_commission - previous.actual_commission : null;
+  const qualityIssues = data.data_quality.unknown_status_rows
+    + data.data_quality.non_vnd_rows
+    + data.data_quality.missing_settlement_date_rows
+    + data.data_quality.import_rejected;
+
   return (
-    <div className="content-grid">
-      <section className="hero-grid wide" aria-label="Tóm tắt analytics">
-        <Metric title="Hoa hồng so kỳ trước" value={commissionDelta == null ? "—" : formatMoney(commissionDelta)} hint={`${integer.format(summary.orders)} đơn kỳ này · ${previous ? integer.format(previous.orders) : "—"} đơn kỳ trước`} />
-        <Metric title="Tỷ lệ hoa hồng hiệu dụng" value={percent(summary.effective_commission_rate)} hint={`Hoàn tiền ${percent(summary.refund_rate)} · không đủ điều kiện ${percent(summary.ineligible_rate)}`} />
-        <Metric title="Độ mới dữ liệu" value={formatDateTime(data.data_quality.latest_import_at)} hint={`Đơn mới nhất ${summary.latest_order_date ?? "—"}`} />
+    <div className="intelligence-page">
+      <section className="analytics-pulse" aria-label="Tóm tắt phân tích">
+        <InsightMetric label="Hoa hồng thực tế" value={formatMoney(data.summary.actual_commission)} note={commissionDelta == null ? "Chưa có kỳ so sánh" : `${commissionDelta >= 0 ? "+" : "−"}${formatMoney(Math.abs(commissionDelta))} so kỳ trước`} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
+        <InsightMetric label="Tỷ lệ hoa hồng" value={percent(data.summary.effective_commission_rate)} note={`${integer.format(data.summary.orders)} đơn`} />
+        <InsightMetric label="Dòng tiền đã nhận" value={formatMoney(data.summary.final_received)} note={`Chênh ${formatMoney(data.summary.final_received_variance)}`} />
+        <InsightMetric label="Chất lượng dữ liệu" value={qualityIssues ? `${integer.format(qualityIssues)} vấn đề` : "Sạch"} note={`Cập nhật ${formatDateTime(data.data_quality.latest_import_at)}`} tone={qualityIssues ? "warning" : "success"} />
       </section>
-      <AnalyticsTrend rows={data.trend} />
-      <AnalyticsBreakdown title="Theo trạng thái" rows={data.status_breakdown} labelKey="status" />
-      <AnalyticsBreakdown title="Theo tài khoản" rows={data.account_breakdown} labelKey="account" />
-      <DimensionTable title="Sản phẩm" rows={data.products} />
-      <DimensionTable title="Cửa hàng" rows={data.shops} />
-      <DimensionTable title="Nội dung" rows={data.content} />
-      <SettlementQuality data={data} />
+
+      <Tabs.Root className="analytics-tabs" defaultValue="finance">
+        <Tabs.List className="analytics-tab-list" aria-label="Nhóm phân tích">
+          <Tabs.Trigger value="finance">Tài chính</Tabs.Trigger>
+          <Tabs.Trigger value="accounts">Account</Tabs.Trigger>
+          <Tabs.Trigger value="commerce">Sản phẩm & nội dung</Tabs.Trigger>
+          <Tabs.Trigger value="settlement">Đối soát</Tabs.Trigger>
+          <Tabs.Trigger value="quality">Chất lượng dữ liệu</Tabs.Trigger>
+        </Tabs.List>
+
+        <Tabs.Content value="finance" className="analytics-tab-panel">
+          <section className="canvas-panel analytics-chart-panel">
+            <div className="panel-heading"><div><p className="section-label">Đà tài chính</p><h2>Hoa hồng và dòng tiền theo kỳ</h2></div><span>{data.filters.group_by === "day" ? "Theo ngày" : data.filters.group_by === "week" ? "Theo tuần" : "Theo tháng"}</span></div>
+            {data.trend.length ? <CommissionTrendChart rows={data.trend} /> : <p className="empty">Chưa có dữ liệu xu hướng.</p>}
+            <ChartDataTable rows={data.trend} />
+          </section>
+          <div className="analytics-split">
+            <section className="canvas-panel">
+              <div className="panel-heading"><div><p className="section-label">Order funnel</p><h2>Quy mô theo trạng thái</h2></div></div>
+              {data.status_breakdown.length ? <StatusMixChart rows={data.status_breakdown} /> : <p className="empty">Chưa có dữ liệu trạng thái.</p>}
+            </section>
+            <BreakdownList rows={data.status_breakdown} mode="status" />
+          </div>
+        </Tabs.Content>
+
+        <Tabs.Content value="accounts" className="analytics-tab-panel">
+          <div className="analytics-split account-analysis">
+            <section className="canvas-panel">
+              <div className="panel-heading"><div><p className="section-label">Contribution</p><h2>Tài khoản tạo ra hoa hồng</h2></div><Link className="text-action" href="/accounts">Quản lý account</Link></div>
+              {data.account_breakdown.length ? <AccountContributionChart rows={data.account_breakdown} /> : <p className="empty">Chưa có dữ liệu account.</p>}
+            </section>
+            <BreakdownList rows={data.account_breakdown} mode="account" />
+          </div>
+          <BreakdownTable rows={data.account_breakdown} mode="account" />
+        </Tabs.Content>
+
+        <Tabs.Content value="commerce" className="analytics-tab-panel">
+          <DimensionLeaderboard title="Sản phẩm dẫn đầu" eyebrow="Product momentum" rows={data.products} />
+          <DimensionLeaderboard title="Cửa hàng tạo doanh thu" eyebrow="Shop contribution" rows={data.shops} />
+          <DimensionLeaderboard title="Nội dung chuyển đổi" eyebrow="Content performance" rows={data.content} />
+        </Tabs.Content>
+
+        <Tabs.Content value="settlement" className="analytics-tab-panel">
+          <SettlementStudio data={data} />
+        </Tabs.Content>
+
+        <Tabs.Content value="quality" className="analytics-tab-panel">
+          <QualityStudio data={data} />
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 }
 
-/** Bar path with rounded top corners and a flat bottom, so the mark stays anchored to the baseline. */
-function roundedTopBarPath(x: number, y: number, width: number, height: number, radius: number) {
-  const r = Math.max(0, Math.min(radius, width / 2, height));
-  return `M${x},${y + height} V${y + r} Q${x},${y} ${x + r},${y} H${x + width - r} Q${x + width},${y} ${x + width},${y + r} V${y + height} Z`;
+function InsightMetric({ label, value, note, tone = "neutral" }: { label: string; value: string; note: string; tone?: "neutral" | "success" | "warning" | "danger" }) {
+  return <article className="insight-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
 }
 
-/** Rút gọn tiền cho nhãn trục: 1.200.000 → "1,2 tr". Trục chỉ để ước lượng, số chính xác nằm ở bảng. */
-function axisLabel(value: number) {
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace(".", ",")} tỷ`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(".", ",")} tr`;
-  if (value >= 1_000) return `${Math.round(value / 1_000)}k`;
-  return String(value);
-}
-
-const CHART = { width: 900, height: 260, left: 74, right: 16, top: 16, bottom: 34 };
-
-function AnalyticsTrend({ rows }: { rows: AnalyticsResponse["trend"] }) {
-  const chartRows = rows.slice(-30);
-  const max = Math.max(...chartRows.map((row) => row.actual_commission), 1);
-  const plotWidth = CHART.width - CHART.left - CHART.right;
-  const plotHeight = CHART.height - CHART.top - CHART.bottom;
-  const baseline = CHART.top + plotHeight;
-  const step = chartRows.length ? plotWidth / chartRows.length : plotWidth;
-  const barWidth = Math.max(step * 0.68, 1);
-  const ticks = [0, 0.25, 0.5, 0.75, 1];
+function BreakdownList({ rows, mode }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account" }) {
   return (
-    <section className="section panel wide">
-      <div className="section-heading"><div><p className="section-label">Xu hướng tài chính</p><h2>Hoa hồng theo kỳ</h2></div></div>
-      {rows.length ? (
-        <>
-          <svg className="analytics-svg" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-labelledby="analytics-trend-title analytics-trend-desc">
-            <title id="analytics-trend-title">Hoa hồng thực tế theo kỳ</title>
-            <desc id="analytics-trend-desc">Biểu đồ cột của tối đa 30 kỳ gần nhất; bảng ngay sau biểu đồ chứa dữ liệu đầy đủ.</desc>
-            {ticks.map((tick) => {
-              const y = baseline - tick * plotHeight;
-              return (
-                <g key={tick}>
-                  <line className="analytics-grid" x1={CHART.left} y1={y} x2={CHART.width - CHART.right} y2={y} />
-                  <text className="analytics-tick" x={CHART.left - 10} y={y + 4} textAnchor="end">{axisLabel(Math.round(max * tick))}</text>
-                </g>
-              );
-            })}
-            <line className="analytics-axis" x1={CHART.left} y1={baseline} x2={CHART.width - CHART.right} y2={baseline} />
-            {chartRows.map((row, index) => {
-              const height = Math.max((row.actual_commission / max) * plotHeight, 2);
-              const x = CHART.left + index * step + (step - barWidth) / 2;
-              const last = index === chartRows.length - 1;
-              return (
-                <g key={row.period} className={last ? "bar last" : "bar"}>
-                  <path d={roundedTopBarPath(x, baseline - height, barWidth, height, 3)} />
-                  <rect x={CHART.left + index * step} y={CHART.top} width={step} height={plotHeight} className="bar-hit">
-                    <title>{`${row.period}: ${formatMoney(row.actual_commission)}`}</title>
-                  </rect>
-                </g>
-              );
-            })}
-            {chartRows.length ? (
-              <>
-                <text className="analytics-tick" x={CHART.left} y={CHART.height - 12} textAnchor="start">{chartRows[0].period}</text>
-                <text className="analytics-tick" x={CHART.width - CHART.right} y={CHART.height - 12} textAnchor="end">{chartRows[chartRows.length - 1].period}</text>
-              </>
-            ) : null}
-          </svg>
-          <div className="table-wrap chart-fallback" role="region" aria-label="Bảng xu hướng hoa hồng, có thể cuộn ngang" tabIndex={0}><table><thead><tr><th>Kỳ</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Đã nhận</th></tr></thead><tbody>{rows.map((row) => <tr key={row.period}><td>{row.period}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(row.final_received)}</td></tr>)}</tbody></table></div>
-        </>
-      ) : <p className="empty">Chưa có dữ liệu xu hướng trong bộ lọc.</p>}
+    <section className="canvas-panel breakdown-list-panel">
+      <div className="panel-heading"><div><p className="section-label">Phân bổ</p><h2>{mode === "status" ? "Tín hiệu cần chú ý" : "Tỷ trọng account"}</h2></div></div>
+      <ol className="rank-list">
+        {rows.slice(0, 6).map((row, index) => {
+          const label = mode === "status" ? statusLabel(row.status) : accountLabel(row.account);
+          const share = row.commission_share ?? 0;
+          return <li key={`${mode}-${label}`}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{label}</strong><small>{integer.format(row.orders)} đơn · {formatMoney(mode === "status" ? row.initial_commission : row.actual_commission)}</small><div className="share-track" aria-label={`${label}: ${percent(share)}`}><span style={{ width: `${Math.max(0, Math.min(share * 100, 100))}%` }} /></div></div><b>{percent(share)}</b></li>;
+        })}
+      </ol>
     </section>
   );
 }
 
-function AnalyticsBreakdown({ title, rows, labelKey }: { title: string; rows: AnalyticsResponse["status_breakdown"]; labelKey: "status" | "account" }) {
-  // Bảng "Theo trạng thái" nhóm chính theo status, nên với dòng "Không đủ điều kiện" thì
-  // actual_gmv/actual_commission luôn = 0 do định nghĩa (bị trừ hết) — hiện số đó ở đây sẽ trông
-  // như thiếu dữ liệu. Dùng gross_gmv/initial_commission (số thô, chưa trừ đơn không đủ điều
-  // kiện) để mỗi dòng vẫn phản ánh đúng quy mô đơn thật sự có trong file gốc. Bảng "Theo tài
-  // khoản" thì giữ actual vì đó là con số thực nhận có ý nghĩa để so sánh giữa các account.
-  const byStatus = labelKey === "status";
+function BreakdownTable({ rows, mode }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account" }) {
+  return <section className="canvas-panel desktop-data-table"><div className="panel-heading"><div><p className="section-label">Chi tiết</p><h2>Bảng đóng góp</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng đóng góp theo tài khoản" tabIndex={0}><table><thead><tr><th>{mode === "status" ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Tỷ trọng</th></tr></thead><tbody>{rows.map((row) => <tr key={row[mode === "status" ? "status" : "account"] ?? "unknown"}><td>{mode === "status" ? <StatusBadge status={row.status} /> : accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table></div></section>;
+}
+
+function DimensionLeaderboard({ title, eyebrow, rows }: { title: string; eyebrow: string; rows: AnalyticsDimensionRow[] }) {
   return (
-    <section className="section panel">
-      <div className="section-heading"><div><p className="section-label">Phân bổ</p><h2>{title}</h2></div></div>
-      <div className="table-wrap" role="region" aria-label={`${title}, có thể cuộn ngang`} tabIndex={0}>{rows.length ? <table><thead><tr><th>{byStatus ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>{byStatus ? "GMV" : "GMV thực tế"}</th><th>{byStatus ? "Hoa hồng ước tính" : "Hoa hồng thực tế"}</th><th>Tỷ trọng HH</th></tr></thead><tbody>{rows.map((row) => <tr key={row[labelKey] ?? "unknown"}><td>{byStatus ? <StatusBadge status={row.status} /> : accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(byStatus ? row.gross_gmv : row.actual_gmv)}</td><td>{formatMoney(byStatus ? row.initial_commission : row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu {title.toLowerCase()}.</p>}</div>
+    <section className="canvas-panel dimension-leaderboard">
+      <div className="panel-heading"><div><p className="section-label">{eyebrow}</p><h2>{title}</h2></div><span>Top {rows.length}</span></div>
+      {rows.length ? <>
+        <ol className="dimension-ranks">{rows.slice(0, 5).map((row, index) => <li key={row.id}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{row.label}</strong><small>{integer.format(row.orders)} đơn · {integer.format(row.units_sold)} sản phẩm</small></div><div><b>{formatMoney(row.actual_commission)}</b><small>Huỷ {percent(row.cancellation_rate)}</small></div></li>)}</ol>
+        <div className="table-wrap desktop-data-table" role="region" aria-label={`Bảng ${title.toLowerCase()}`} tabIndex={0}><table><thead><tr><th>Tên</th><th>Đơn</th><th>SL</th><th>Hoàn</th><th>GMV</th><th>Hoa hồng</th><th>Tỷ lệ huỷ</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.label}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{integer.format(row.units_refunded)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.cancellation_rate)}</td></tr>)}</tbody></table></div>
+      </> : <p className="empty">Chưa có dữ liệu trong phạm vi này.</p>}
     </section>
   );
 }
 
-function DimensionTable({ title, rows }: { title: string; rows: AnalyticsDimensionRow[] }) {
+function SettlementStudio({ data }: { data: AnalyticsResponse }) {
   return (
-    <section className="section panel wide">
-      <div className="section-heading"><div><p className="section-label">Xếp hạng</p><h2>{title}</h2></div></div>
-      <div className="table-wrap" role="region" aria-label={`Xếp hạng ${title.toLowerCase()}, có thể cuộn ngang`} tabIndex={0}>{rows.length ? <table><thead><tr><th>Tên</th><th>Đơn</th><th>SL</th><th>Hoàn</th><th>GMV</th><th>HH</th><th>Tỷ lệ huỷ</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.label}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{integer.format(row.units_refunded)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.cancellation_rate)}</td></tr>)}</tbody></table> : <p className="empty">Chưa có dữ liệu {title.toLowerCase()} trong bộ lọc.</p>}</div>
-    </section>
+    <div className="settlement-studio">
+      <section className="settlement-hero canvas-panel">
+        <div><p className="section-label">Receivables</p><h2>{formatMoney(data.summary.final_received)}</h2><p>Tiền đã nhận cuối cùng trong phạm vi đang xem.</p></div>
+        <div className="settlement-kpis"><InsightMetric label="Đã quyết toán" value={integer.format(data.settlement.settled_lines)} note={`Trung vị ${data.settlement.median_lag_days ?? "—"} ngày`} /><InsightMetric label="Đang chờ" value={integer.format(data.settlement.pending_lines)} note="Theo dõi các bucket bên dưới" tone={data.settlement.pending_lines ? "warning" : "success"} /><InsightMetric label="Chênh tiền về" value={formatMoney(data.summary.final_received_variance)} note="So với hoa hồng thực tế" tone={data.summary.final_received_variance < 0 ? "danger" : "neutral"} /></div>
+      </section>
+      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Pending aging</p><h2>Tuổi khoản đang chờ</h2></div></div>{data.settlement.pending_aging.length ? <div className="aging-grid">{data.settlement.pending_aging.map((row) => <article key={row.bucket}><span>{row.bucket}</span><strong>{integer.format(row.count)}</strong><small>dòng đang chờ</small></article>)}</div> : <p className="empty">Không có khoản đang chờ trong phạm vi này.</p>}</section>
+    </div>
   );
 }
 
-function SettlementQuality({ data }: { data: AnalyticsResponse }) {
+function QualityStudio({ data }: { data: AnalyticsResponse }) {
   const quality = data.data_quality;
-  const qualityRows = [
-    ["Trạng thái chưa xác định", quality.unknown_status_rows],
-    ["Không phải VND", quality.non_vnd_rows],
-    ["Thiếu ngày đơn", quality.missing_order_date_rows],
-    ["Thiếu ngày quyết toán", quality.missing_settlement_date_rows],
-    ["Đã quyết toán nhưng thiếu ngày quyết toán", quality.settled_missing_settlement_rows],
-    ["Thời gian quyết toán âm", quality.negative_settlement_lag_rows],
-    ["Dòng nhập bị từ chối", quality.import_rejected],
-  ];
+  const issues = [
+    ["Trạng thái chưa xác định", quality.unknown_status_rows, "Cần cập nhật mapping trạng thái."],
+    ["Không phải VND", quality.non_vnd_rows, "Tách riêng trước khi cộng báo cáo VND."],
+    ["Thiếu ngày đơn", quality.missing_order_date_rows, "Không thể xếp đúng kỳ báo cáo."],
+    ["Thiếu ngày quyết toán", quality.missing_settlement_date_rows, "Không thể tính độ trễ quyết toán."],
+    ["Đã quyết toán nhưng thiếu ngày", quality.settled_missing_settlement_rows, "Dữ liệu trạng thái và ngày không nhất quán."],
+    ["Độ trễ quyết toán âm", quality.negative_settlement_lag_rows, "Ngày quyết toán trước ngày đặt đơn."],
+    ["Import bị từ chối", quality.import_rejected, "Dòng chưa được đưa vào báo cáo."],
+  ] as const;
   return (
-    <section className="section panel wide">
-      <div className="section-heading"><div><p className="section-label">Quyết toán và chất lượng dữ liệu</p><h2>Đối soát dữ liệu</h2></div></div>
-      <div className="content-grid compact-grid">
-        <div className="import-item"><strong>Tình trạng quyết toán</strong><span>Đã quyết toán {integer.format(data.settlement.settled_lines)} · Đang chờ {integer.format(data.settlement.pending_lines)} · Trung vị {data.settlement.median_lag_days ?? "—"} ngày</span>{data.settlement.pending_aging.length ? <small>{data.settlement.pending_aging.map((item) => `${item.bucket}: ${integer.format(item.count)}`).join(" · ")}</small> : null}</div>
-        <div className="import-item"><strong>Độ mới dữ liệu nhập</strong><span>{formatDateTime(quality.latest_import_at)} · {integer.format(quality.import_batches)} lượt nhập</span><small>Thêm {integer.format(quality.import_inserted)} · cập nhật {integer.format(quality.import_updated)} · trùng {integer.format(quality.import_unchanged)}</small></div>
-      </div>
-      <div className="table-wrap chart-fallback" role="region" aria-label="Bảng cảnh báo chất lượng dữ liệu" tabIndex={0}><table><thead><tr><th>Cảnh báo</th><th>Số dòng</th></tr></thead><tbody>{qualityRows.map(([label, count]) => <tr key={label}><td>{label}</td><td>{integer.format(count as number)}</td></tr>)}</tbody></table></div>
-    </section>
+    <div className="quality-studio">
+      <section className="canvas-panel quality-summary"><div className="panel-heading"><div><p className="section-label">Data lineage</p><h2>Lịch sử xử lý dữ liệu</h2></div><span>Cập nhật {formatDateTime(quality.latest_import_at)}</span></div><div className="quality-flow"><InsightMetric label="Lượt import" value={integer.format(quality.import_batches)} note="batch nguồn bất biến" /><InsightMetric label="Dòng mới" value={integer.format(quality.import_inserted)} note="được thêm vào lịch sử" tone="success" /><InsightMetric label="Đã cập nhật" value={integer.format(quality.import_updated)} note="snapshot mới hơn" /><InsightMetric label="Không thay đổi" value={integer.format(quality.import_unchanged)} note="đã chống trùng" /></div></section>
+      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Exceptions</p><h2>Vấn đề cần làm sạch</h2></div><Link className="text-action" href="/imports">Mở lịch sử import</Link></div><div className="exception-list">{issues.map(([label, value, help]) => <article data-tone={value ? "warning" : "success"} key={label}><div><strong>{label}</strong><p>{help}</p></div><span>{integer.format(value)}</span></article>)}</div></section>
+    </div>
   );
+}
+
+function ChartDataTable({ rows }: { rows: AnalyticsResponse["trend"] }) {
+  return <details className="chart-data-disclosure"><summary>Xem bảng dữ liệu biểu đồ</summary><div className="table-wrap" role="region" aria-label="Bảng dữ liệu xu hướng" tabIndex={0}><table><thead><tr><th>Kỳ</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Đã nhận</th></tr></thead><tbody>{rows.map((row) => <tr key={row.period}><td>{row.period}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(row.final_received)}</td></tr>)}</tbody></table></div></details>;
 }

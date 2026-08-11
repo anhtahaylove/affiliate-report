@@ -31,6 +31,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from .accounts import (
+    ACCOUNT_CODE_RE,
     can_hard_delete_accounts,
     create_account,
     delete_account,
@@ -82,6 +83,124 @@ class UserUpdate(BaseModel):
     role: Literal["owner", "operator", "viewer"] | None = None
     accounts: list[str] | None = None
     active: bool | None = None
+
+class PreferencesPatch(BaseModel):
+    theme: Literal["system", "light", "dark"] | None = None
+    sidebar_collapsed: bool | None = None
+    dashboard_layout: dict[str, Any] | None = None
+
+
+class SavedViewCreate(BaseModel):
+    route: Literal["dashboard", "analytics", "orders"]
+    name: str = Field(min_length=1, max_length=64)
+    filters: dict[str, Any] = Field(default_factory=dict)
+    is_default: bool = False
+
+
+class SavedViewPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    filters: dict[str, Any] | None = None
+    is_default: bool | None = None
+
+
+DASHBOARD_WIDGETS = (
+    "today_pulse",
+    "target_progress",
+    "action_alerts",
+    "trend",
+    "account_contribution",
+    "settlement",
+    "data_freshness",
+    "recent_imports",
+)
+DEFAULT_DASHBOARD_LAYOUT = {"schema": 1, "order": list(DASHBOARD_WIDGETS), "hidden": []}
+DEFAULT_UI_PREFERENCES = {
+    "theme": "system",
+    "sidebar_collapsed": False,
+    "dashboard_layout": DEFAULT_DASHBOARD_LAYOUT,
+}
+COMMON_VIEW_FILTERS = {"schema", "account", "status", "start", "end", "month"}
+VIEW_FILTERS = {
+    "dashboard": COMMON_VIEW_FILTERS,
+    "analytics": COMMON_VIEW_FILTERS | {"group_by", "top"},
+    "orders": COMMON_VIEW_FILTERS | {"search", "sort", "direction", "size"},
+}
+ORDER_SORT_FIELDS = {
+    "account", "order_id", "sku_id", "product_name", "status", "order_date",
+    "units_sold", "gmv", "estimated_commission",
+}
+
+
+def _validate_dashboard_layout(value: dict[str, Any]) -> dict[str, Any]:
+    if set(value) != {"schema", "order", "hidden"} or value.get("schema") != 1:
+        raise HTTPException(status_code=422, detail="dashboard_layout không đúng schema 1.")
+    order = value.get("order")
+    hidden = value.get("hidden")
+    if not isinstance(order, list) or not isinstance(hidden, list):
+        raise HTTPException(status_code=422, detail="dashboard_layout order/hidden phải là danh sách.")
+    if len(order) != len(set(order)) or set(order) != set(DASHBOARD_WIDGETS):
+        raise HTTPException(status_code=422, detail="dashboard_layout phải chứa đúng danh sách widget hỗ trợ.")
+    if len(hidden) != len(set(hidden)) or not set(hidden).issubset(DASHBOARD_WIDGETS):
+        raise HTTPException(status_code=422, detail="dashboard_layout hidden chứa widget không hợp lệ.")
+    return {"schema": 1, "order": list(order), "hidden": list(hidden)}
+
+
+def _valid_date_filter(value: Any, pattern: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.strptime(value, pattern)
+        return True
+    except ValueError:
+        return False
+
+
+def _sanitize_view_filters(route: str, values: dict[str, Any], *, strict: bool) -> dict[str, Any]:
+    allowed = VIEW_FILTERS[route]
+    unknown = set(values) - allowed
+    if strict and unknown:
+        raise HTTPException(status_code=422, detail=f"Bộ lọc không hỗ trợ: {', '.join(sorted(unknown))}")
+    output: dict[str, Any] = {"schema": 1}
+    def valid_account(value: Any) -> bool:
+        items = value if isinstance(value, list) else [value]
+        return (
+            1 <= len(items) <= 100
+            and all(isinstance(item, str) and item != "ALL" and ACCOUNT_CODE_RE.fullmatch(item) for item in items)
+        )
+
+    def valid_status(value: Any) -> bool:
+        items = value if isinstance(value, list) else [value]
+        return (
+            1 <= len(items) <= len(STATUSES)
+            and all(isinstance(item, str) for item in items)
+            and len(items) == len(set(items))
+            and set(items).issubset(STATUSES)
+        )
+
+    validators: dict[str, Callable[[Any], bool]] = {
+        "schema": lambda value: value == 1,
+        "account": valid_account,
+        "status": valid_status,
+        "start": lambda value: _valid_date_filter(value, "%Y-%m-%d"),
+        "end": lambda value: _valid_date_filter(value, "%Y-%m-%d"),
+        "month": lambda value: _valid_date_filter(value, "%Y-%m"),
+        "search": lambda value: isinstance(value, str) and len(value) <= 256,
+        "sort": lambda value: isinstance(value, str) and value in ORDER_SORT_FIELDS,
+        "direction": lambda value: value in {"asc", "desc"},
+        "size": lambda value: isinstance(value, int) and not isinstance(value, bool) and value in {50, 100, 200},
+        "group_by": lambda value: value in {"day", "week", "month"},
+        "top": lambda value: isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 100,
+    }
+    for key, value in values.items():
+        if key not in allowed:
+            continue
+        if not validators[key](value):
+            if strict:
+                raise HTTPException(status_code=422, detail=f"Giá trị bộ lọc {key!r} không hợp lệ.")
+            continue
+        if key != "schema":
+            output[key] = value
+    return output
 
 
 class TargetUpdate(BaseModel):
@@ -1045,6 +1164,102 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "active": updated.active,
             "accounts": list(updated.accounts),
         }
+
+    @app.get("/api/v1/ui/preferences")
+    def get_preferences(current: Principal = Depends(principal)) -> dict[str, Any]:
+        stored = _auth(app).get_preferences(current) or {}
+        theme = stored.get("theme")
+        if theme not in {"system", "light", "dark"}:
+            theme = DEFAULT_UI_PREFERENCES["theme"]
+        try:
+            dashboard_layout = _validate_dashboard_layout(
+                stored.get("dashboard_layout", DEFAULT_DASHBOARD_LAYOUT)
+            )
+        except HTTPException:
+            dashboard_layout = _validate_dashboard_layout(DEFAULT_DASHBOARD_LAYOUT)
+        return {
+            "theme": theme,
+            "sidebar_collapsed": stored.get("sidebar_collapsed", DEFAULT_UI_PREFERENCES["sidebar_collapsed"]),
+            "dashboard_layout": dashboard_layout,
+            "updated_at": stored.get("updated_at"),
+        }
+
+    @app.patch("/api/v1/ui/preferences")
+    def patch_preferences(
+        changes: PreferencesPatch,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        current_values = get_preferences(current)
+        values = current_values | changes.model_dump(exclude_none=True)
+        values["dashboard_layout"] = _validate_dashboard_layout(values["dashboard_layout"])
+        _auth(app).save_preferences(current, values)
+        return get_preferences(current)
+
+    @app.get("/api/v1/ui/saved-views")
+    def get_saved_views(
+        route: Literal["dashboard", "analytics", "orders"],
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        items = _auth(app).list_views(current, route)
+        for item in items:
+            item["filters"] = _sanitize_view_filters(route, item.get("filters") or {}, strict=False)
+        return {"items": items, "count": len(items)}
+
+    @app.post("/api/v1/ui/saved-views")
+    def post_saved_view(
+        request: SavedViewCreate,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        name = request.name.strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Tên chế độ xem là bắt buộc.")
+        filters = _sanitize_view_filters(request.route, request.filters, strict=True)
+        try:
+            return _auth(app).create_view(current, request.route, name, filters, request.is_default)
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Tên chế độ xem đã tồn tại.") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.patch("/api/v1/ui/saved-views/{view_id}")
+    def patch_saved_view(
+        view_id: int,
+        request: SavedViewPatch,
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        existing = _auth(app).get_view(current, view_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy chế độ xem.")
+        name = request.name.strip() if request.name is not None else None
+        if request.name is not None and not name:
+            raise HTTPException(status_code=422, detail="Tên chế độ xem là bắt buộc.")
+        filters = (
+            _sanitize_view_filters(existing["route"], request.filters, strict=True)
+            if request.filters is not None
+            else None
+        )
+        try:
+            updated = _auth(app).update_view(
+                current,
+                view_id,
+                name=name,
+                filters=filters,
+                is_default=request.is_default,
+            )
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Tên chế độ xem đã tồn tại.") from exc
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy chế độ xem.")
+        return updated
+
+    @app.delete("/api/v1/ui/saved-views/{view_id}")
+    def remove_saved_view(view_id: int, _: None = Depends(csrf), current: Principal = Depends(principal)) -> dict[str, bool]:
+        if not _auth(app).delete_view(current, view_id):
+            raise HTTPException(status_code=404, detail="Không tìm thấy chế độ xem.")
+        return {"deleted": True}
 
     static_dir = os.getenv("WEB_STATIC_DIR")
     if static_dir and os.path.isdir(static_dir):

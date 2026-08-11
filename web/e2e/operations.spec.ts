@@ -28,7 +28,7 @@ test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async
 
   await test.step("dashboard hiện đúng tổng hoa hồng", async () => {
     await page.goto(`/${SCOPE}`);
-    const commission = page.locator("article.metric", { hasText: "Hoa hồng thực tế" });
+    const commission = page.locator("article.pulse-metric", { hasText: "Hoa hồng thực tế" });
     await expect(commission.locator("strong")).toContainText("40.000");
   });
 

@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 
 from .accounts import active_account_codes
-from .db import app_users, auth_sessions, oidc_login_states, user_account_access
+from .db import app_users, auth_sessions, oidc_login_states, user_account_access, user_ui_preferences, saved_report_views
 
 ROLES = {"owner", "operator", "viewer"}
 
@@ -182,6 +182,149 @@ class AuthService:
 
     def revoke_session(self, session_token: str | None) -> None:
         self.logout(session_token)
+
+    @staticmethod
+    def principal_key(principal: Principal) -> str:
+        return f"user:{principal.user_id}" if principal.user_id is not None else "local:local-owner"
+
+    def get_preferences(self, principal: Principal) -> dict[str, Any] | None:
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                select(user_ui_preferences).where(
+                    user_ui_preferences.c.principal_key == self.principal_key(principal)
+                )
+            ).mappings().one_or_none()
+        if row is None:
+            return None
+        return {
+            "theme": row["theme"],
+            "sidebar_collapsed": bool(row["sidebar_collapsed"]),
+            "dashboard_layout": row["dashboard_layout_json"],
+            "updated_at": row["updated_at"],
+        }
+
+    def save_preferences(self, principal: Principal, values: dict[str, Any]) -> None:
+        key = self.principal_key(principal)
+        stored = {
+            "theme": values["theme"],
+            "sidebar_collapsed": bool(values["sidebar_collapsed"]),
+            "dashboard_layout_json": values["dashboard_layout"],
+            "updated_at": func.now(),
+        }
+        with self.engine.begin() as conn:
+            existing = conn.execute(select(user_ui_preferences.c.principal_key).where(user_ui_preferences.c.principal_key == key)).first()
+            if existing:
+                conn.execute(update(user_ui_preferences).where(user_ui_preferences.c.principal_key == key).values(**stored))
+            else:
+                conn.execute(user_ui_preferences.insert().values(principal_key=key, app_user_id=principal.user_id, **stored))
+
+    def list_views(self, principal: Principal, route: str) -> list[dict[str, Any]]:
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                select(saved_report_views).where(
+                    saved_report_views.c.principal_key == self.principal_key(principal),
+                    saved_report_views.c.route == route,
+                ).order_by(saved_report_views.c.is_default.desc(), saved_report_views.c.name)
+            ).mappings().all()
+        return [self._saved_view_public(row) for row in rows]
+
+    def get_view(self, principal: Principal, view_id: int) -> dict[str, Any] | None:
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                select(saved_report_views).where(
+                    saved_report_views.c.id == view_id,
+                    saved_report_views.c.principal_key == self.principal_key(principal),
+                )
+            ).mappings().one_or_none()
+        return self._saved_view_public(row) if row is not None else None
+
+    def create_view(self, principal: Principal, route: str, name: str, filters: dict[str, Any], is_default: bool = False) -> dict[str, Any]:
+        key = self.principal_key(principal)
+        with self.engine.begin() as conn:
+            count = conn.execute(
+                select(func.count()).select_from(saved_report_views).where(saved_report_views.c.principal_key == key)
+            ).scalar_one()
+            if count >= 50:
+                raise ValueError("saved view limit exceeded")
+            if is_default:
+                conn.execute(
+                    update(saved_report_views)
+                    .where(saved_report_views.c.principal_key == key, saved_report_views.c.route == route)
+                    .values(is_default=False, updated_at=func.now())
+                )
+            result = conn.execute(
+                saved_report_views.insert().values(
+                    principal_key=key,
+                    app_user_id=principal.user_id,
+                    route=route,
+                    name=name,
+                    filters_json=filters,
+                    is_default=is_default,
+                )
+            )
+            view_id = result.inserted_primary_key[0]
+            row = conn.execute(select(saved_report_views).where(saved_report_views.c.id == view_id)).mappings().one()
+        return self._saved_view_public(row)
+
+    def update_view(
+        self,
+        principal: Principal,
+        view_id: int,
+        *,
+        name: str | None = None,
+        filters: dict[str, Any] | None = None,
+        is_default: bool | None = None,
+    ) -> dict[str, Any] | None:
+        key = self.principal_key(principal)
+        with self.engine.begin() as conn:
+            existing = conn.execute(
+                select(saved_report_views).where(
+                    saved_report_views.c.id == view_id,
+                    saved_report_views.c.principal_key == key,
+                )
+            ).mappings().one_or_none()
+            if existing is None:
+                return None
+            if is_default:
+                conn.execute(
+                    update(saved_report_views)
+                    .where(
+                        saved_report_views.c.principal_key == key,
+                        saved_report_views.c.route == existing["route"],
+                    )
+                    .values(is_default=False, updated_at=func.now())
+                )
+            changes: dict[str, Any] = {"updated_at": func.now()}
+            if name is not None:
+                changes["name"] = name
+            if filters is not None:
+                changes["filters_json"] = filters
+            if is_default is not None:
+                changes["is_default"] = is_default
+            conn.execute(
+                update(saved_report_views)
+                .where(saved_report_views.c.id == view_id, saved_report_views.c.principal_key == key)
+                .values(**changes)
+            )
+            row = conn.execute(select(saved_report_views).where(saved_report_views.c.id == view_id)).mappings().one()
+        return self._saved_view_public(row)
+
+    def delete_view(self, principal: Principal, view_id: int) -> bool:
+        with self.engine.begin() as conn:
+            result = conn.execute(delete(saved_report_views).where(saved_report_views.c.id == view_id, saved_report_views.c.principal_key == self.principal_key(principal)))
+        return bool(result.rowcount)
+
+    @staticmethod
+    def _saved_view_public(row: Any) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "route": row["route"],
+            "name": row["name"],
+            "filters": row["filters_json"],
+            "is_default": bool(row["is_default"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
 
     def list_users(self) -> list[dict[str, Any]]:
         with self.engine.connect() as conn:

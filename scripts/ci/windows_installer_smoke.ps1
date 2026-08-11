@@ -115,8 +115,10 @@ function Stop-App {
     throw 'Installed app processes did not stop within 10 seconds.'
 }
 
-function Assert-Routes([string]$BaseUrl) {
-    foreach ($route in $routes) {
+function Assert-Routes([string]$BaseUrl, [switch]$IncludePreferences) {
+    $expectedRoutes = @($routes)
+    if ($IncludePreferences) { $expectedRoutes += '/settings/preferences' }
+    foreach ($route in $expectedRoutes) {
         $response = Invoke-WebRequest -UseBasicParsing "$BaseUrl$route" -TimeoutSec 10
         if ($response.StatusCode -ne 200 -or $response.Content -notmatch '<html') {
             throw "Static route failed: $route"
@@ -130,13 +132,13 @@ function Assert-Routes([string]$BaseUrl) {
 }
 
 function Set-Target([string]$BaseUrl, [string]$Account, [string]$Month, [int64]$Value) {
-    $body = @{ target_commission = $Value } | ConvertTo-Json -Compress
+    $body = @{ daily_target_commission = $Value } | ConvertTo-Json -Compress
     Invoke-RestMethod "$BaseUrl/api/v1/targets/$Account/$Month" -Method Put -ContentType 'application/json' -Body $body | Out-Null
 }
 
 function Assert-Target([string]$BaseUrl, [string]$Account, [string]$Month, [int64]$Value) {
     $targets = Invoke-RestMethod "$BaseUrl/api/v1/targets?account=$Account&month=$Month" -TimeoutSec 10
-    $match = @($targets.items | Where-Object { $_.account -eq $Account -and [int64]$_.target_commission -eq $Value })
+    $match = @($targets.items | Where-Object { $_.account -eq $Account -and [int64]$_.daily_target_commission -eq $Value })
     if ($match.Count -ne 1) {
         throw "Target marker was not preserved for $Account/$Month."
     }
@@ -162,7 +164,7 @@ try {
         Install-App $CurrentInstaller
         Assert-InstalledVersion $CurrentVersion
         $baseUrl = Start-App 43120
-        $meta = Assert-Routes $baseUrl
+        $meta = Assert-Routes $baseUrl -IncludePreferences
         if (@($meta.accounts).Count -ne 0) { throw "Fresh v$CurrentVersion unexpectedly seeded accounts." }
 
         $body = @{ code = 'SMOKE'; display_name = 'Smoke Account'; display_order = 1 } | ConvertTo-Json -Compress
@@ -172,7 +174,7 @@ try {
         Stop-App
 
         $baseUrl = Start-App 43121
-        $meta = Assert-Routes $baseUrl
+        $meta = Assert-Routes $baseUrl -IncludePreferences
         if ('SMOKE' -notin @($meta.accounts)) { throw 'Fresh-install data did not persist after restart.' }
         Assert-Target $baseUrl 'SMOKE' '2099-12' 123456789
     } else {
@@ -191,7 +193,7 @@ try {
         Install-App $CurrentInstaller
         Assert-InstalledVersion $CurrentVersion
         $baseUrl = Start-App 43123
-        $meta = Assert-Routes $baseUrl
+        $meta = Assert-Routes $baseUrl -IncludePreferences
         if ('SMOKE' -notin @($meta.accounts)) { throw 'Smoke account was not preserved during upgrade.' }
         Assert-Target $baseUrl 'SMOKE' '2099-12' 987654321
     }

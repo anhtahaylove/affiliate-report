@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.0.0 - 2026-08-11
+
+**Momentum Canvas thay toàn bộ lớp trải nghiệm, giữ nguyên lõi dữ liệu đã đối soát.** App có hệ thống thiết kế mới cho vận hành và tăng trưởng: Today Pulse, tiến độ mục tiêu, cảnh báo hành động, biểu đồ xu hướng, đóng góp theo tài khoản, đối soát và sức khỏe dữ liệu. Navigation desktop hỗ trợ thu gọn và tìm nhanh `Ctrl/Cmd + K`; mobile có bottom navigation, action sheet và filter bottom sheet thay vì nhồi toàn bộ điều khiển lên đầu trang.
+
+**Mobile không còn là bản desktop co nhỏ.** Dashboard, Đơn hàng, Nhập dữ liệu và các trang quản trị có bố cục riêng cho màn hình 320–390 px, card list, thao tác chạm đủ lớn, safe-area và trạng thái loading/empty/error rõ ràng. Biểu đồ Recharts có bảng dữ liệu thay thế cho trình đọc màn hình.
+
+**Chế độ sáng/tối được đưa về đúng Cài đặt → Giao diện.** Tuỳ chọn `Theo hệ thống / Sáng / Tối`, trạng thái thu gọn sidebar, thứ tự/ẩn widget Dashboard và chế độ xem báo cáo được lưu riêng theo người dùng trong database. Reset Data không xoá các tuỳ chọn này; full backup/restore có thể khôi phục chúng.
+
+**Operations và Finance workflows được tổ chức lại.** Analytics chia theo tài chính, account, sản phẩm/nội dung, đối soát và chất lượng dữ liệu. Orders có chế độ xem lưu sẵn, cột tuỳ chọn và mobile cards. Imports thành quy trình Account → Files → Queue → Upload. Targets, Accounts, Data, Updates và Users được làm rõ quyền, preview ảnh hưởng và thao tác xác nhận.
+
+Python/FastAPI, SQLite/PostgreSQL, công thức KPI, deduplication theo snapshot/version, dữ liệu người dùng và signed public updater vẫn được giữ nguyên. Migration mới chỉ bổ sung bảng cá nhân hoá và tự chạy khi mở database cũ.
+
 ## v1.4.3 - 2026-08-11
 
 **Sang tháng mới không phải gõ lại KPI cho từng tài khoản.** Trang **Mục tiêu** có thêm nút **Chép KPI tháng trước**: một lần bấm là chép KPI/ngày của tháng liền trước sang tháng đang xem.

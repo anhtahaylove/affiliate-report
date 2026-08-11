@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { firstDayOfMonth, lastDayOfMonth, currentMonth, lastDays, previousMonth, statusLabel, wholeMonth } from "@/lib/format";
 import { buildFilterHref } from "@/lib/filter-query";
 
@@ -128,7 +129,12 @@ function FilterForm({ accounts, statuses, showSearch = false, actions, initialFi
         </div>
         {actions}
       </div>
+      {filtersOpen ? <button className="mobile-filter-overlay" type="button" aria-label="Đóng bộ lọc" onClick={() => setFiltersOpen(false)} /> : null}
       <div id="report-filters" className={`filter-body${filtersOpen ? " is-open" : ""}`}>
+        <div className="mobile-filter-sheet-head">
+          <span><SlidersHorizontal size={18} aria-hidden="true" /><strong>Bộ lọc báo cáo</strong></span>
+          <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Đóng bộ lọc"><X size={18} aria-hidden="true" /></button>
+        </div>
         <div className="field compact">
           <label htmlFor="target-month">Tháng KPI</label>
           <input

@@ -200,6 +200,40 @@ oidc_login_states = Table(
 )
 Index("ix_oidc_login_states_expires_at", oidc_login_states.c.expires_at)
 
+user_ui_preferences = Table(
+    "user_ui_preferences", metadata,
+    Column("principal_key", String(160), primary_key=True),
+    Column("app_user_id", Integer, ForeignKey("app_users.id", ondelete="CASCADE")),
+    Column("theme", String(16), nullable=False, default="system"),
+    Column("sidebar_collapsed", Boolean, nullable=False, default=False),
+    Column("dashboard_layout_json", JSON, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    UniqueConstraint("app_user_id", name="uq_ui_preferences_app_user"),
+)
+
+saved_report_views = Table(
+    "saved_report_views", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("principal_key", String(160), nullable=False),
+    Column("app_user_id", Integer, ForeignKey("app_users.id", ondelete="CASCADE")),
+    Column("route", String(32), nullable=False),
+    Column("name", String(64), nullable=False),
+    Column("filters_json", JSON, nullable=False),
+    Column("is_default", Boolean, nullable=False, default=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    UniqueConstraint("principal_key", "route", "name", name="uq_saved_view_principal_route_name"),
+)
+Index("ix_saved_views_principal_route", saved_report_views.c.principal_key, saved_report_views.c.route)
+Index(
+    "uq_saved_view_default_principal_route",
+    saved_report_views.c.principal_key,
+    saved_report_views.c.route,
+    unique=True,
+    sqlite_where=saved_report_views.c.is_default.is_(True),
+    postgresql_where=saved_report_views.c.is_default.is_(True),
+)
+
 
 def _unicode_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
@@ -209,6 +243,7 @@ def _register_sqlite_unicode_lower(dbapi_connection, _record) -> None:
     # lower() dựng sẵn của SQLite chỉ đổi hoa-thường cho ASCII, nên tìm "áo thun" sẽ không ra
     # "Áo Thun". Thay bằng str.lower của Python để tìm kiếm tiếng Việt khớp như PostgreSQL.
     dbapi_connection.create_function("lower", 1, _unicode_lower, deterministic=True)
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 
 def get_engine(database_url: str | None = None) -> Engine:

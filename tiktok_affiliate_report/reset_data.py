@@ -19,16 +19,28 @@ from .db import (
     oidc_login_states,
     order_line_versions,
     raw_import_rows,
+    saved_report_views,
     user_account_access,
+    user_ui_preferences,
 )
 
 RESET_CONFIRMATION_PHRASE = "XOA DU LIEU"
 RESTORE_CONFIRMATION_PHRASE = "KHOI PHUC DU LIEU"
 RESET_TABLES = (raw_import_rows, order_line_versions, import_batches)
-RESTORE_DELETE_TABLES = (raw_import_rows, order_line_versions, import_batches, monthly_targets, accounts)
+PREFERENCE_TABLES = (user_ui_preferences, saved_report_views)
+RESTORE_DELETE_TABLES = (
+    saved_report_views,
+    user_ui_preferences,
+    raw_import_rows,
+    order_line_versions,
+    import_batches,
+    monthly_targets,
+    accounts,
+)
 BUSINESS_TABLES = (accounts, monthly_targets, import_batches, raw_import_rows, order_line_versions)
+RESTORE_TABLES = (*BUSINESS_TABLES, *PREFERENCE_TABLES)
 AUTH_TABLES = (app_users, user_account_access, auth_sessions, oidc_login_states)
-REQUIRED_TABLES = (*BUSINESS_TABLES, *AUTH_TABLES)
+REQUIRED_TABLES = (*RESTORE_TABLES, *AUTH_TABLES)
 
 
 def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
@@ -119,7 +131,7 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
             _check_backup(safety_backup_path)
             _check_required_schema(safety_backup_path)
             _replace_business_tables(conn, usable_path)
-            restored_counts = _table_counts(conn, BUSINESS_TABLES)
+            restored_counts = _table_counts(conn, RESTORE_TABLES)
             conn.commit()
             _detach_restore_backup(conn)
         except Exception:
@@ -254,7 +266,7 @@ def _backup_item(path: Path) -> dict[str, object]:
     except (RuntimeError, ValueError) as exc:
         return _backup_meta(path) | {
             "valid": False,
-            "counts": {"business": {}, "auth": {}},
+            "counts": {"business": {}, "ui": {}, "auth": {}},
             "error": str(exc),
         }
 
@@ -276,10 +288,11 @@ def _counts(path: Path) -> dict[str, dict[str, int]]:
     conn = sqlite3.connect(str(path))
     try:
         business = {table.name: _sqlite_count(conn, table.name) for table in BUSINESS_TABLES}
+        ui = {table.name: _sqlite_count(conn, table.name) for table in PREFERENCE_TABLES}
         auth = {table.name: _sqlite_count(conn, table.name) for table in AUTH_TABLES}
     finally:
         conn.close()
-    return {"business": business, "auth": auth}
+    return {"business": business, "ui": ui, "auth": auth}
 
 
 def _sqlite_count(conn: sqlite3.Connection, table_name: str) -> int:
@@ -310,12 +323,18 @@ def _replace_business_tables(conn, backup_path: Path) -> None:
     conn.exec_driver_sql("ATTACH DATABASE ? AS restore_backup", (str(backup_path),)).close()
     for table in RESTORE_DELETE_TABLES:
         conn.exec_driver_sql(f'DELETE FROM "{table.name}"').close()
-    for table in BUSINESS_TABLES:
+    for table in RESTORE_TABLES:
         columns = [column.name for column in table.columns]
         quoted = ", ".join(f'"{column}"' for column in columns)
+        where = ""
+        if "app_user_id" in columns:
+            where = (
+                " WHERE app_user_id IS NULL OR app_user_id IN "
+                '(SELECT id FROM main."app_users")'
+            )
         conn.exec_driver_sql(
             f'INSERT INTO "{table.name}" ({quoted}) '
-            f'SELECT {quoted} FROM restore_backup."{table.name}"'
+            f'SELECT {quoted} FROM restore_backup."{table.name}"{where}'
         ).close()
 
 

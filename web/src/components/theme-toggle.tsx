@@ -1,45 +1,72 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import * as RadioGroup from "@radix-ui/react-radio-group";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { useState } from "react";
+import type { UiPreferences } from "@/lib/api";
 
-type Theme = "system" | "light" | "dark";
+export type Theme = UiPreferences["theme"];
 
 const STORAGE_KEY = "tiktok-affiliate-theme";
-const NEXT: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
-const LABELS: Record<Theme, string> = { system: "Theo hệ thống", light: "Sáng", dark: "Tối" };
+const LABELS: Record<Theme, { title: string; description: string }> = {
+  system: { title: "Theo hệ thống", description: "Tự đổi theo cài đặt sáng/tối của thiết bị." },
+  light: { title: "Sáng", description: "Nền sáng, phù hợp khi đối soát ban ngày." },
+  dark: { title: "Tối", description: "Giảm chói cho ca trực tối hoặc màn hình OLED." },
+};
 
-// Nguồn sự thật là thuộc tính data-theme trên <html>, do script trong <head> đặt trước khi vẽ.
-let listeners: Array<() => void> = [];
-
-function subscribe(callback: () => void) {
-  listeners.push(callback);
-  return () => {
-    listeners = listeners.filter((item) => item !== callback);
-  };
-}
-
-function readTheme(): Theme {
-  const value = document.documentElement.getAttribute("data-theme");
-  return value === "dark" || value === "light" ? value : "system";
-}
-
-function setTheme(theme: Theme) {
-  const root = document.documentElement;
-  if (theme === "system") {
-    root.removeAttribute("data-theme");
-    window.localStorage.removeItem(STORAGE_KEY);
-  } else {
-    root.setAttribute("data-theme", theme);
+export function applyThemePreference(theme: Theme) {
+  if (typeof document === "undefined") return;
+  if (theme === "system") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+  try {
     window.localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // Database remains the source of truth; local storage only prevents first-paint flash.
   }
-  listeners.forEach((listener) => listener());
 }
 
-export function ThemeToggle() {
-  const theme = useSyncExternalStore<Theme>(subscribe, readTheme, () => "system");
+function ThemeIcon({ theme }: { theme: Theme }) {
+  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+  return <Icon size={18} aria-hidden="true" />;
+}
+
+export function ThemePreferences({ value, onChange }: { value: Theme; onChange: (theme: Theme) => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function select(theme: Theme) {
+    if (saving || theme === value) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onChange(theme);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Không thể lưu chế độ giao diện.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <button className="theme-toggle" type="button" onClick={() => setTheme(NEXT[theme])} aria-label={`Giao diện: ${LABELS[theme]}. Bấm để đổi.`}>
-      {LABELS[theme]}
-    </button>
+    <section className="section panel preference-panel" aria-labelledby="appearance-heading" aria-busy={saving}>
+      <div className="section-heading">
+        <div>
+          <p className="section-label">Cá nhân hóa</p>
+          <h2 id="appearance-heading">Chế độ màu</h2>
+          <p>Tuỳ chọn được lưu theo người dùng và chỉ đặt tại Cài đặt để tránh đổi nhầm khi đang vận hành.</p>
+        </div>
+        <span className="preference-save-state" aria-live="polite">{saving ? "Đang lưu…" : "Tự động lưu"}</span>
+      </div>
+      <RadioGroup.Root className="theme-preference-grid" value={value} onValueChange={(theme) => void select(theme as Theme)} aria-label="Chọn chế độ giao diện">
+        {(Object.keys(LABELS) as Theme[]).map((item) => (
+          <RadioGroup.Item className="theme-preference-card" value={item} key={item} disabled={saving}>
+            <span className="theme-preference-icon"><ThemeIcon theme={item} /></span>
+            <span><strong>{LABELS[item].title}</strong><small>{LABELS[item].description}</small></span>
+            <span className="theme-radio-dot" aria-hidden="true" />
+          </RadioGroup.Item>
+        ))}
+      </RadioGroup.Root>
+      {error ? <p className="filter-error" role="alert">{error}</p> : null}
+    </section>
   );
 }
