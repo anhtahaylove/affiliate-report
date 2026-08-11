@@ -150,14 +150,16 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert 'TikTokAffiliateReportSetup-v$Version.exe' in smoke
     assert "Get-Content -LiteralPath $ChecksumFile" in smoke
     assert "Get-FileHash -LiteralPath $Path -Algorithm SHA256" in smoke
+    assert "'/settings/preferences'" in smoke
+    assert "Assert-Routes $baseUrl -IncludePreferences" in smoke
     assert "'/settings/data'" in smoke
     assert "PreviousVersion must be lower than CurrentVersion" in smoke
 
     assert "workflow_dispatch:" in workflow
     assert "current_version:" in workflow
-    assert 'default: "1.2.13"' in workflow
+    assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert 'default: "1.2.12"' in workflow
+    assert 'default: "1.4.3"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -179,6 +181,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "python -m pip install pytest" in workflow
     assert "python -m pip install -r requirements.txt" not in workflow
     assert "Smoke account was not preserved during upgrade." in smoke
+    assert "daily_target_commission" in smoke
+    assert "@{ target_commission = $Value }" not in smoke
     assert "v$PreviousVersion legacy account is missing" not in smoke
 
 

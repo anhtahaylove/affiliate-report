@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccountDeletePreview, AccountItem, createAccount, deleteAccount, loadAccounts, previewDeleteAccount, updateAccount } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
-import { countsText, errorMessage } from "@/lib/format";
+import { countsText, errorMessage, formatDateTime, integer } from "@/lib/format";
 
 export function AccountsPage() {
   const [records, setRecords] = useState<AccountItem[]>([]);
@@ -26,12 +26,13 @@ export function AccountsPage() {
     }
     void load();
   }, [refreshAccounts]);
+  const activeRecords = useMemo(() => records.filter((record) => record.active), [records]);
+  const archivedRecords = useMemo(() => records.filter((record) => !record.active), [records]);
+
   async function create() {
     const code = draft.code.trim().toUpperCase();
     if (!code) return setMessage("Hãy nhập mã tài khoản.");
     try {
-      // Mỗi account chỉ có một định danh — mã tài khoản. display_name vẫn tồn tại trong DB
-      // (không đổi schema) nhưng luôn khớp code, không cho người dùng đặt riêng nữa.
       await createAccount({ code, display_name: code });
       invalidateApiCache();
       setDraft({ code: "" });
@@ -43,11 +44,11 @@ export function AccountsPage() {
   }
   async function patch(record: AccountItem, changes: Partial<AccountItem>) {
     try {
-      invalidateApiCache();
       await updateAccount(record.code, {
         display_order: changes.display_order,
         active: changes.active,
       });
+      invalidateApiCache();
       setMessage(`Đã cập nhật ${record.code}.`);
       await refreshAccounts();
     } catch (reason) {
@@ -83,34 +84,64 @@ export function AccountsPage() {
       setMessage(errorMessage(reason, "Không thể xóa tài khoản."));
     }
   }
+
+  function accountCard(record: AccountItem) {
+    const rowDraft = accountDrafts[record.code] ?? { display_order: String(record.display_order) };
+    return (
+      <article className="account-card" key={record.code} data-state={record.active ? "active" : "archived"}>
+        <div className="record-title">
+          <div><strong>{record.code}</strong><span>{record.active ? "Sẵn sàng lọc, nhập file và gán người dùng" : "Đã ẩn khỏi luồng vận hành mặc định"}</span></div>
+          <span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span>
+        </div>
+        <dl className="account-meta">
+          <div><dt>Thứ tự</dt><dd>{integer.format(record.display_order)}</dd></div>
+          <div><dt>Tạo lúc</dt><dd>{formatDateTime(record.created_at)}</dd></div>
+          <div><dt>Cập nhật</dt><dd>{formatDateTime(record.updated_at)}</dd></div>
+        </dl>
+        <div className="account-edit-grid">
+          <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { display_order: event.target.value } }))} /></div>
+        </div>
+        <div className="row-actions">
+          <button type="button" onClick={() => void saveAccount(record)}>Lưu thay đổi</button>
+          <button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button>
+          <button type="button" className="danger-button" onClick={() => void previewDelete(record)}>Xem trước khi xóa</button>
+        </div>
+      </article>
+    );
+  }
+
   return (
-    <section className="section panel">
+    <section className="section panel accounts-workflow-page">
       <div className="section-heading">
         <div>
           <p className="section-label">Danh sách tài khoản</p>
-          <h2>Thêm và quản lý tài khoản</h2>
+          <h2>Quản lý active/archive</h2>
           <p>{hardDeleteSupported ? "Có thể xóa vĩnh viễn sau khi tạo bản sao lưu." : "Dữ liệu dùng chung chỉ cho phép lưu trữ tài khoản; lịch sử vẫn được giữ lại."}</p>
         </div>
       </div>
-      <div className="upload-form">
-        <div className="field"><label htmlFor="new-account-code">Mã tài khoản</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft({ code: event.target.value })} placeholder="SHOP_1 hoặc username TikTok" /></div>
+      <div className="account-create-panel upload-form">
+        <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft({ code: event.target.value })} placeholder="SHOP_1 hoặc username TikTok" /></div>
         <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
-        {records.map((record) => {
-          const rowDraft = accountDrafts[record.code] ?? { display_order: String(record.display_order) };
-          return (
-            <article className="import-item" key={record.code}>
-              <div className="record-title"><strong>{record.code}</strong><span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span></div>
-              <span>Thứ tự {record.display_order}</span>
-              <div className="account-edit-grid">
-                <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { display_order: event.target.value } }))} /></div>
-              </div>
-              <div className="row-actions"><button type="button" onClick={() => void saveAccount(record)}>Lưu thay đổi</button><button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button><button type="button" className="danger-button" onClick={() => void previewDelete(record)}>Xem trước khi xóa</button></div>
-            </article>
-          );
-        })}
-        {message ? <p className="upload-result" role="status">{message}</p> : null}
-        {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
       </div>
+      <div className="account-summary-row" aria-label="Tổng quan tài khoản">
+        <span><strong>{integer.format(activeRecords.length)}</strong> đang hoạt động</span>
+        <span><strong>{integer.format(archivedRecords.length)}</strong> đã lưu trữ</span>
+      </div>
+      <div className="account-sections">
+        <section className="account-section" aria-labelledby="active-accounts-title">
+          <div className="section-heading compact"><div><p className="section-label">Active</p><h3 id="active-accounts-title">Tài khoản đang vận hành</h3></div></div>
+          {activeRecords.map(accountCard)}
+          {!activeRecords.length ? <p className="empty">Chưa có tài khoản đang hoạt động.</p> : null}
+        </section>
+        <section className="account-section" aria-labelledby="archived-accounts-title">
+          <div className="section-heading compact"><div><p className="section-label">Archive</p><h3 id="archived-accounts-title">Tài khoản đã lưu trữ</h3></div></div>
+          {archivedRecords.map(accountCard)}
+          {!archivedRecords.length ? <p className="empty">Chưa có tài khoản lưu trữ.</p> : null}
+        </section>
+      </div>
+      {deletePreview ? <div className="delete-preview panel-muted" role="status"><strong>Preview {deletePreview.code}</strong><span>{deletePreview.action === "hard_delete" ? "Sẽ xóa vĩnh viễn sau khi sao lưu" : "Sẽ chuyển vào archive"} · {countsText(deletePreview.dependency_counts)}</span></div> : null}
+      {message ? <p className="upload-result" role="status">{message}</p> : null}
+      {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
       <ConfirmDialog
         open={deletePreview !== null}
         title={deletePreview?.action === "hard_delete" ? `Xóa vĩnh viễn tài khoản ${deletePreview?.code}?` : `Lưu trữ tài khoản ${deletePreview?.code}?`}

@@ -19,16 +19,28 @@ from .db import (
     oidc_login_states,
     order_line_versions,
     raw_import_rows,
+    saved_report_views,
     user_account_access,
+    user_ui_preferences,
 )
 
 RESET_CONFIRMATION_PHRASE = "XOA DU LIEU"
 RESTORE_CONFIRMATION_PHRASE = "KHOI PHUC DU LIEU"
 RESET_TABLES = (raw_import_rows, order_line_versions, import_batches)
-RESTORE_DELETE_TABLES = (raw_import_rows, order_line_versions, import_batches, monthly_targets, accounts)
+PREFERENCE_TABLES = (user_ui_preferences, saved_report_views)
+RESTORE_DELETE_TABLES = (
+    saved_report_views,
+    user_ui_preferences,
+    raw_import_rows,
+    order_line_versions,
+    import_batches,
+    monthly_targets,
+    accounts,
+)
 BUSINESS_TABLES = (accounts, monthly_targets, import_batches, raw_import_rows, order_line_versions)
+RESTORE_TABLES = (*BUSINESS_TABLES, *PREFERENCE_TABLES)
 AUTH_TABLES = (app_users, user_account_access, auth_sessions, oidc_login_states)
-REQUIRED_TABLES = (*BUSINESS_TABLES, *AUTH_TABLES)
+REQUIRED_TABLES = (*RESTORE_TABLES, *AUTH_TABLES)
 
 
 def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
@@ -119,7 +131,7 @@ def restore_sqlite_business_backup(engine: Engine, backup_id: str, confirmation:
             _check_backup(safety_backup_path)
             _check_required_schema(safety_backup_path)
             _replace_business_tables(conn, usable_path)
-            restored_counts = _table_counts(conn, BUSINESS_TABLES)
+            restored_counts = _table_counts(conn, RESTORE_TABLES)
             conn.commit()
             _detach_restore_backup(conn)
         except Exception:
@@ -254,7 +266,7 @@ def _backup_item(path: Path) -> dict[str, object]:
     except (RuntimeError, ValueError) as exc:
         return _backup_meta(path) | {
             "valid": False,
-            "counts": {"business": {}, "auth": {}},
+            "counts": {"business": {}, "ui": {}, "auth": {}},
             "error": str(exc),
         }
 
@@ -276,10 +288,11 @@ def _counts(path: Path) -> dict[str, dict[str, int]]:
     conn = sqlite3.connect(str(path))
     try:
         business = {table.name: _sqlite_count(conn, table.name) for table in BUSINESS_TABLES}
+        ui = {table.name: _sqlite_count(conn, table.name) for table in PREFERENCE_TABLES}
         auth = {table.name: _sqlite_count(conn, table.name) for table in AUTH_TABLES}
     finally:
         conn.close()
-    return {"business": business, "auth": auth}
+    return {"business": business, "ui": ui, "auth": auth}
 
 
 def _sqlite_count(conn: sqlite3.Connection, table_name: str) -> int:
@@ -310,13 +323,52 @@ def _replace_business_tables(conn, backup_path: Path) -> None:
     conn.exec_driver_sql("ATTACH DATABASE ? AS restore_backup", (str(backup_path),)).close()
     for table in RESTORE_DELETE_TABLES:
         conn.exec_driver_sql(f'DELETE FROM "{table.name}"').close()
-    for table in BUSINESS_TABLES:
+    for table in RESTORE_TABLES:
+        if table in PREFERENCE_TABLES:
+            _restore_preference_table(conn, table)
+            continue
         columns = [column.name for column in table.columns]
         quoted = ", ".join(f'"{column}"' for column in columns)
         conn.exec_driver_sql(
             f'INSERT INTO "{table.name}" ({quoted}) '
             f'SELECT {quoted} FROM restore_backup."{table.name}"'
         ).close()
+
+
+def _restore_preference_table(conn, table) -> None:
+    """Khôi phục UI state theo OIDC identity ổn định, không theo numeric user id.
+
+    SQLite có thể tái sử dụng ``app_users.id`` sau khi xoá user. Nếu copy trực tiếp
+    ``app_user_id``/``principal_key=user:<id>`` từ backup, preferences của identity cũ
+    có thể bị gán cho identity mới. Join issuer+subject tránh rò rỉ chéo identity; local
+    owner là principal ảo duy nhất nên được giữ nguyên.
+    """
+    columns = [column.name for column in table.columns]
+    quoted = ", ".join(f'"{column}"' for column in columns)
+    selected = []
+    for column in columns:
+        if column == "app_user_id":
+            selected.append('current_user."id" AS "app_user_id"')
+        elif column == "principal_key":
+            selected.append(
+                "CASE WHEN source.app_user_id IS NULL "
+                "THEN 'local:local-owner' "
+                "ELSE 'user:' || current_user.id END AS \"principal_key\""
+            )
+        else:
+            selected.append(f'source."{column}"')
+    projection = ", ".join(selected)
+    conn.exec_driver_sql(
+        f'INSERT INTO "{table.name}" ({quoted}) '
+        f'SELECT {projection} FROM restore_backup."{table.name}" AS source '
+        'LEFT JOIN restore_backup."app_users" AS backup_user '
+        'ON backup_user.id = source.app_user_id '
+        'LEFT JOIN main."app_users" AS current_user '
+        'ON current_user.issuer = backup_user.issuer '
+        'AND current_user.subject = backup_user.subject '
+        "WHERE (source.app_user_id IS NULL AND source.principal_key = 'local:local-owner') "
+        'OR current_user.id IS NOT NULL'
+    ).close()
 
 
 def _usable_backup_path(backup_path: Path) -> Path:

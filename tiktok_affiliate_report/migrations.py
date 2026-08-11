@@ -161,6 +161,10 @@ def _migration_0006_rename_target_commission(conn: Connection) -> None:
         return
     conn.execute(text("ALTER TABLE monthly_targets RENAME COLUMN target_commission TO daily_target_commission"))
 
+def _migration_0007_ui_preferences_saved_views(conn: Connection) -> None:
+    from .db import metadata, saved_report_views, user_ui_preferences
+    metadata.create_all(conn, tables=[user_ui_preferences, saved_report_views])
+
 
 MIGRATIONS = [
     Migration(1, "baseline_create_or_adopt", _migration_0001_baseline),
@@ -169,6 +173,7 @@ MIGRATIONS = [
     Migration(4, "auth_rbac_tables", _migration_0004_auth_rbac_tables),
     Migration(5, "account_registry_and_analytics_columns", _migration_0005_account_registry_and_analytics_columns),
     Migration(6, "rename_target_commission_to_daily", _migration_0006_rename_target_commission),
+    Migration(7, "ui_preferences_saved_views", _migration_0007_ui_preferences_saved_views),
 ]
 
 

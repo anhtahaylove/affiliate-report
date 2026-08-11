@@ -182,13 +182,14 @@ export function UpdateSettingsPage() {
   const canInstall = Boolean(status?.available && status.installable && status.automatic_install_supported && !installing);
 
   return (
-    <section className="section panel wide" aria-busy={busy || installing || reconnecting}>
+    <section className="section panel wide update-settings-page" aria-busy={busy || installing || reconnecting}>
       <div className="section-heading">
-        <div><p className="section-label">Phiên bản ứng dụng</p><h2>Kiểm tra và cài cập nhật</h2></div>
+        <div><p className="section-label">Phiên bản ứng dụng</p><h2>Kiểm tra → Tải → Xác minh → Cài đặt</h2><p className="subtle">Luồng cập nhật giữ nguyên signed feed hiện có, chỉ cài tự động khi app Windows hỗ trợ.</p></div>
         <button type="button" onClick={() => void check()} disabled={busy || installing}>{busy ? "Đang kiểm tra…" : "Kiểm tra cập nhật"}</button>
       </div>
       <div className="update-panel">
-        <div className="update-versions"><span>Đang dùng <strong>{progress?.current_version ?? status?.current_version ?? "—"}</strong></span><span>Mới nhất <strong>{targetVersion ?? "—"}</strong></span><span>Trạng thái <strong>{phaseLabel(phase)}</strong></span></div>
+        <div className="settings-summary-row update-versions"><span>Đang dùng <strong>{progress?.current_version ?? status?.current_version ?? "—"}</strong></span><span>Mới nhất <strong>{targetVersion ?? "—"}</strong></span><span>Trạng thái <strong>{phaseLabel(phase)}</strong></span></div>
+        <div className="update-safeguards panel-muted"><strong>Safeguards</strong><span>Feed public không dùng token · gói cài được xác minh chữ ký · khi app tạm mất kết nối, trang tự chờ reconnect tối đa 120 giây.</span></div>
         {status?.release_name ? <p><strong>{status.release_name}</strong></p> : null}
         {status?.published_at ? <p>Ngày phát hành: {formatDateTime(status.published_at)}</p> : null}
         {status?.source_repo ? <p className="source-repo">Nguồn cập nhật: {status.source_repo}</p> : null}
@@ -196,7 +197,7 @@ export function UpdateSettingsPage() {
         {status?.release_url ? <a className="button-link secondary-link" href={status.release_url} target="_blank" rel="noreferrer">Xem trang phát hành</a> : null}
         {status && !status.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
 
-        <div className="update-progress" aria-live="polite">
+        <div className="update-progress" aria-live="polite" aria-label="Tiến độ cập nhật">
           <div className="download-progress">
             <label htmlFor="update-download-progress">Tiến độ tải gói cài</label>
             <progress id="update-download-progress" max={100} value={downloadValue}>{downloadValue ? `${Math.round(downloadValue)}%` : undefined}</progress>
@@ -207,7 +208,7 @@ export function UpdateSettingsPage() {
           </ol>
         </div>
 
-        <button className="primary" type="button" onClick={() => setAskInstall(true)} disabled={!canInstall}>Cài bản cập nhật</button>
+        <div className="row-actions update-actions"><button className="primary" type="button" onClick={() => setAskInstall(true)} disabled={!canInstall}>Cài bản cập nhật</button><button type="button" onClick={() => void check()} disabled={busy || installing}>Làm mới trạng thái</button></div>
         <p className="hint">Sau khi bắt đầu, trang này chỉ theo dõi tiến độ. Ứng dụng có thể tạm mất kết nối khi đóng để cài và khởi động lại.</p>
         {message ? <p className={phase === "failed" ? "reset-result" : "upload-result"} role="status" aria-live="polite">{message}</p> : null}
         {phase === "failed" || (!installing && message.includes("kết nối lại")) ? <button type="button" onClick={() => void check()} disabled={busy}>Thử lại kiểm tra cập nhật</button> : null}

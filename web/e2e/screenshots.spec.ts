@@ -25,12 +25,13 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
   await expect(page.locator(".import-result")).toHaveCount(1);
 
   for (const theme of ["dark", "light"] as const) {
-    // Đặt vào localStorage chứ không gán thẳng data-theme: mỗi lần chuyển trang là DOM dựng
-    // lại từ đầu, nên ảnh của các trang sau lần chụp đầu đều bị chụp ở màu hệ thống.
-    await page.evaluate((value) => window.localStorage.setItem("tiktok-affiliate-theme", value), theme);
+    // Database là source of truth; localStorage chỉ dùng để tránh loé màu trước lần tải đầu.
+    const saved = await page.request.patch("/api/v1/ui/preferences", { data: { theme } });
+    expect(saved.ok()).toBeTruthy();
 
     await page.goto(`/${SCOPE}`);
-    await expect(page.locator("article.metric").first()).toBeVisible();
+    await expect(page.locator("article.pulse-metric").first()).toBeVisible();
+    await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
     await page.screenshot({ path: `e2e/shots/dashboard-${theme}.png`, fullPage: true });
 
     await page.goto(`/orders/${SCOPE}`);
@@ -40,7 +41,26 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
     await page.goto(`/targets/${SCOPE}`);
     // Chờ số liệu chứ không chờ tiêu đề: tiêu đề là chữ tĩnh nên hiện ngay, ảnh sẽ chụp
     // đúng lúc mọi con số còn là dấu gạch.
-    await expect(page.locator(".target-row").first()).toContainText("₫");
+    await expect(page.locator(".target-card").first()).toContainText("₫");
     await page.screenshot({ path: `e2e/shots/targets-${theme}.png`, fullPage: true });
   }
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.goto(`/${SCOPE}`);
+  await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
+  await page.screenshot({ path: "e2e/shots/dashboard-tablet-768.png", fullPage: true });
+
+  await page.goto(`/orders/${SCOPE}`);
+  await expect(page.getByRole("heading", { level: 2 })).toContainText("đơn trong bộ lọc");
+  await page.screenshot({ path: "e2e/shots/orders-tablet-768.png", fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${SCOPE}`);
+  await expect(page.locator("article.pulse-metric").first()).toBeVisible();
+  await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
+  await page.screenshot({ path: "e2e/shots/dashboard-mobile-390.png", fullPage: true });
+
+  await page.goto(`/orders/${SCOPE}`);
+  await expect(page.locator(".order-card").first()).toBeVisible();
+  await page.screenshot({ path: "e2e/shots/orders-mobile-390.png", fullPage: true });
 });

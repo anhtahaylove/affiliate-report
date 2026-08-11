@@ -5,7 +5,18 @@ import { CurrentUser, MonthlyKpiRow, TargetRow, copyPreviousTargets, loadMonthly
 import { UrlFilters } from "@/components/filters";
 import { canWrite } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
-import { accountLabel, achievementTone, errorMessage, formatMoney, percent } from "@/lib/format";
+import { accountLabel, achievementTone, errorMessage, formatMoney, integer, percent } from "@/lib/format";
+
+function previousMonthOf(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const previous = new Date(year, monthNumber - 2, 1);
+  return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(month: string) {
+  const [year, monthNumber] = month.split("-");
+  return `${monthNumber}/${year}`;
+}
 
 export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: UrlFilters; accounts: string[] }) {
   const [targets, setTargets] = useState<TargetRow[]>([]);
@@ -16,6 +27,7 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
   const [message, setMessage] = useState("");
   const scopedAccounts = filters.accounts.length ? accounts.filter((account) => filters.accounts.includes(account)) : accounts;
   const allowedAccounts = user.role === "owner" ? ["ALL", ...scopedAccounts] : scopedAccounts;
+  const previousMonth = previousMonthOf(filters.month);
   const refresh = useCallback(async () => {
     const [targetData, monthly] = await Promise.all([
       loadTargets(filters.month),
@@ -39,7 +51,7 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
     try {
       await saveTarget(account, filters.month, Number(draft));
       invalidateApiCache();
-      setMessage(`Đã lưu KPI/ngày cho ${account}.`);
+      setMessage(`Đã lưu KPI/ngày cho ${accountLabel(account)}.`);
       await refresh();
     } catch (reason) {
       setMessage(errorMessage(reason, "Không thể lưu mục tiêu."));
@@ -47,16 +59,15 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
       setSaving("");
     }
   }
-  // Sang tháng mới KPI thường giữ nguyên, nhưng phải gõ lại từng tài khoản một.
   async function copyPrevious() {
     setCopying(true);
     try {
       const result = await copyPreviousTargets(filters.month);
       invalidateApiCache();
-      const kept = result.kept.length ? ` Giữ nguyên ${result.kept.length} tài khoản đã có KPI.` : "";
+      const kept = result.kept.length ? ` Giữ nguyên ${integer.format(result.kept.length)} tài khoản đã có KPI.` : "";
       setMessage(result.copied.length
-        ? `Đã chép KPI của ${result.copied.length} tài khoản từ tháng ${result.from_month}.${kept}`
-        : `Tháng ${result.from_month} không có KPI nào để chép.${kept}`);
+        ? `Đã chép KPI của ${integer.format(result.copied.length)} tài khoản từ tháng ${monthLabel(result.from_month)}.${kept}`
+        : `Tháng ${monthLabel(result.from_month)} không có KPI nào để chép.${kept}`);
       await refresh();
     } catch (reason) {
       setMessage(errorMessage(reason, "Không thể chép KPI từ tháng trước."));
@@ -66,5 +77,54 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
   }
   const targetMap = new Map(targets.map((target) => [target.account, target]));
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
-  return <section className="section panel wide"><div className="section-heading"><div><p className="section-label">KPI mỗi ngày</p><h2>Mục tiêu tháng {filters.month}</h2><p className="subtle">Tiến độ tính trên phạm vi đang lọc: {filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}.</p></div>{canWrite(user) ? <button type="button" onClick={() => void copyPrevious()} disabled={copying}>{copying ? "Đang chép…" : "Chép KPI tháng trước"}</button> : <span className="read-only">Chỉ xem</span>}</div><div className="target-list">{allowedAccounts.map((account) => { const achievement = kpiMap.get(account)?.target_achievement; return <div className="target-row" key={account}><div><strong>{accountLabel(account)}</strong><span>Hoa hồng {formatMoney(kpiMap.get(account)?.actual_commission)} · KPI/ngày {formatMoney(targetMap.get(account)?.daily_target_commission)} · đã đạt <span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></span></div><input type="number" min="0" step="1" value={drafts[account] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${accountLabel(account)}`} /><button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button></div>; })}</div>{message ? <p className="upload-result" role={/^(Đã lưu|Đã chép|Tháng )/.test(message) ? "status" : "alert"}>{message}</p> : null}</section>;
+  return (
+    <section className="section panel wide targets-workflow-page">
+      <div className="section-heading">
+        <div>
+          <p className="section-label">KPI mỗi ngày</p>
+          <h2>Planner mục tiêu tháng {monthLabel(filters.month)}</h2>
+          <p className="subtle">Tiến độ tính trên phạm vi đang lọc: {filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}.</p>
+        </div>
+        {canWrite(user) ? <button type="button" onClick={() => void copyPrevious()} disabled={copying}>{copying ? "Đang chép…" : `Chép từ ${monthLabel(previousMonth)}`}</button> : <span className="read-only">Chỉ xem</span>}
+      </div>
+      <div className="target-context panel-muted">
+        <strong>Ngữ cảnh tháng trước</strong>
+        <span>Nếu API copy có dữ liệu tháng {monthLabel(previousMonth)}, nút chép sẽ tạo KPI còn thiếu và giữ nguyên KPI đã nhập cho tháng hiện tại.</span>
+      </div>
+      <div className="target-planner-grid">
+        {allowedAccounts.map((account) => {
+          const target = targetMap.get(account);
+          const row = kpiMap.get(account);
+          const achievement = row?.target_achievement;
+          const draft = drafts[account] ?? "";
+          return (
+            <article className="target-card" key={account}>
+              <div className="record-title">
+                <div>
+                  <strong>{accountLabel(account)}</strong>
+                  <span>{account === "ALL" ? "Mục tiêu mặc định cho toàn bộ tài khoản" : "Mục tiêu riêng theo tài khoản"}</span>
+                </div>
+                <span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span>
+              </div>
+              <dl className="target-metrics">
+                <div><dt>Hoa hồng thực tế</dt><dd>{formatMoney(row?.actual_commission)}</dd></div>
+                <div><dt>KPI/ngày hiện tại</dt><dd>{formatMoney(target?.daily_target_commission)}</dd></div>
+                <div><dt>KPI tháng</dt><dd>{formatMoney(row?.monthly_target)}</dd></div>
+                <div><dt>Chênh lệch</dt><dd>{formatMoney(row?.gap)}</dd></div>
+              </dl>
+              <div className="target-edit-row">
+                <div className="field">
+                  <label htmlFor={`target-${account}`}>KPI/ngày mới</label>
+                  <input id={`target-${account}`} type="number" min="0" step="1" value={draft} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${accountLabel(account)}`} />
+                </div>
+                <button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button>
+              </div>
+              <p className="hint">Cập nhật gần nhất: {target?.updated_at ? target.updated_at : "chưa có"}{target?.updated_by ? ` bởi ${target.updated_by}` : ""}</p>
+            </article>
+          );
+        })}
+      </div>
+      {message ? <p className="upload-result" role={/^(Đã lưu|Đã chép|Tháng )/.test(message) ? "status" : "alert"}>{message}</p> : null}
+    </section>
+  );
 }

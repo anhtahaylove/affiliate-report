@@ -163,6 +163,7 @@ export type BackupItem = {
   valid: boolean;
   counts: {
     business: Record<string, number>;
+    ui?: Record<string, number>;
     auth: Record<string, number>;
   };
   error?: string | null;
@@ -171,6 +172,39 @@ export type BackupItem = {
 export type RestoreBackupResponse = {
   restored_counts: Record<string, number>;
   safety_backup_path: string;
+};
+
+export type DashboardWidget =
+  | "today_pulse"
+  | "target_progress"
+  | "action_alerts"
+  | "trend"
+  | "account_contribution"
+  | "settlement"
+  | "data_freshness"
+  | "recent_imports";
+
+export type UiPreferences = {
+  theme: "system" | "light" | "dark";
+  sidebar_collapsed: boolean;
+  dashboard_layout: {
+    schema: 1;
+    order: DashboardWidget[];
+    hidden: DashboardWidget[];
+  };
+  updated_at?: string | null;
+};
+
+export type SavedViewRoute = "dashboard" | "analytics" | "orders";
+
+export type SavedReportView = {
+  id: number;
+  route: SavedViewRoute;
+  name: string;
+  filters: Record<string, unknown> & { schema: 1 };
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type UpdateStatus = {
@@ -497,6 +531,39 @@ export async function exitApplication(controlToken: string) {
 
 export async function loadMeta() {
   return request<MetaResponse>("/api/v1/meta");
+}
+
+export async function loadUiPreferences() {
+  return request<UiPreferences>("/api/v1/ui/preferences");
+}
+
+export async function saveUiPreferences(changes: Partial<Pick<UiPreferences, "theme" | "sidebar_collapsed" | "dashboard_layout">>) {
+  return request<UiPreferences>("/api/v1/ui/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  });
+}
+
+export async function loadSavedViews(route: SavedViewRoute) {
+  return request<ListResponse<SavedReportView>>(`/api/v1/ui/saved-views?route=${encodeURIComponent(route)}`);
+}
+
+export async function createSavedView(changes: { route: SavedViewRoute; name: string; filters: Record<string, unknown>; is_default?: boolean }) {
+  return request<SavedReportView>("/api/v1/ui/saved-views", {
+    method: "POST",
+    body: JSON.stringify(changes),
+  });
+}
+
+export async function updateSavedView(viewId: number, changes: { name?: string; filters?: Record<string, unknown>; is_default?: boolean }) {
+  return request<SavedReportView>(`/api/v1/ui/saved-views/${viewId}`, {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  });
+}
+
+export async function deleteSavedView(viewId: number) {
+  return request<{ deleted: boolean }>(`/api/v1/ui/saved-views/${viewId}`, { method: "DELETE" });
 }
 
 export async function loadAccounts() {
