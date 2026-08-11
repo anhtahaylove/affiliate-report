@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.3 - 2026-08-11
+
+**Khi app đã đóng, màn hình không còn hiện "Failed to fetch".** Nếu bạn chọn Thoát ứng dụng từ biểu tượng khay hệ thống mà vẫn còn tab trình duyệt đang mở, tab đó mất kết nối và trước đây hiện đúng dòng chữ tiếng Anh của trình duyệt, không nói được phải làm gì. Giờ nó nói thẳng: hãy mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu rồi tải lại trang.
+
+**Chờ app mở lại sau khi cập nhật lâu hơn trước khi báo lỗi.** Đo trên máy thật: mở app ngay sau khi cài mất 2-4 giây, nhưng mở nguội (máy nghỉ lâu, phần mềm diệt virus quét lại gần 1.800 file) có lần mất tới 35 giây. Ngưỡng cũ 45 giây quá sát con số đó nên máy chậm hơn một chút là bị báo nhầm "chưa tự mở lại được" dù app vẫn đang khởi động bình thường. Nâng lên 90 giây; chờ lâu không còn gây hại gì kể từ khi bỏ việc mở app lần thứ hai ở v1.3.2.
+
 ## v1.3.2 - 2026-08-11
 
 **Sửa lỗi cập nhật báo "Failed to load Python DLL".** Sau khi cài xong bản mới, app không tự mở lại được và hiện hộp lỗi đỏ về `python312.dll`. Nguyên nhân: mỗi lần chạy, app phải tự bung toàn bộ 59 MB thư viện Python ra thư mục tạm của Windows. Ngay sau khi cài, file vừa ghi xuống đĩa còn đang bị phần mềm diệt virus quét, nên bước bung này hỏng giữa chừng. Tệ hơn, khi chờ quá lâu app lại được mở thêm lần thứ hai, hai lần bung chạy song song tranh nhau ổ đĩa và làm hỏng chắc chắn hơn.
