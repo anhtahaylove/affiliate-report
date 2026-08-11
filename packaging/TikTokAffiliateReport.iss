@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "1.3.1"
+  #define MyAppVersion "1.3.2"
 #endif
 
 [Setup]
@@ -28,8 +28,13 @@ UsePreviousTasks=yes
 [Tasks]
 Name: "desktopicon"; Description: "Tạo biểu tượng ngoài Desktop"; GroupDescription: "Biểu tượng bổ sung:"; Flags: checkedonce
 
+; Dọn runtime cũ trước khi chép bản mới: sót một .dll/.pyd lệch phiên bản là app không mở nổi.
+; Chỉ đụng _internal, không bao giờ chạm {app}\data.
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\_internal"
+
 [Files]
-Source: "..\build\installer-app\TikTokAffiliateReport.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\installer-app\TikTokAffiliateReport\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Dirs]
 Name: "{app}\data"; Flags: uninsneveruninstall

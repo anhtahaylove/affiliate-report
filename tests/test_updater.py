@@ -310,17 +310,17 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     assert "Wait-FileUnlocked $AppExe 15000" in helper
     assert helper.index("Wait-FileUnlocked $AppExe") > helper.index("$parentExited = $true")
     assert helper.index("Wait-FileUnlocked $AppExe") < helper.index("Start-Child $Installer")
-    # Start-Child launching the app back up isn't proof it's usable — a freshly-installed onefile
-    # exe has to unpack its bundled runtime with no warm cache, and antivirus scanning each
-    # extracted file is the leading theory for why that first run can take a while. Give the
-    # first launch a long runway (a premature relaunch would just add a second concurrent
-    # extraction competing for the same disk/AV budget) and retry only once after that.
+    # Start-Child launching the app back up isn't proof it's usable, nên vẫn phải chờ /health thật.
+    # Bản onedir không giải nén runtime ra %TEMP% nữa nên lần mở đầu nhanh như mọi lần khác.
     assert "function Wait-AppHealthy" in helper
-    assert "Wait-AppHealthy $InstanceStatePath 60000" in helper
-    assert "Wait-AppHealthy $InstanceStatePath 20000" in helper
+    assert "Wait-AppHealthy $InstanceStatePath 45000" in helper
     restarting_index = helper.index("Write-UpdateStatus 'restarting'")
     first_start_child_index = helper.index("Start-Child $AppExe", restarting_index)
-    assert first_start_child_index < helper.index("Wait-AppHealthy $InstanceStatePath 60000")
+    assert first_start_child_index < helper.index("Wait-AppHealthy $InstanceStatePath 45000")
+    # Chỉ mở app đúng MỘT lần sau khi cài. Mở lần hai khi lần đầu chưa phản hồi là thứ đã sinh ra
+    # hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và AV.
+    assert helper.count("Start-Child $AppExe") == 2  # một lần sau khi cài, một lần khi cài lỗi
+    assert "retrying launch once" not in helper
     for forbidden in ("Wait-Process", "Get-FileHash", "Get-Process", "Start-Process", "Remove-Item"):
         assert forbidden not in helper
     assert captured["args"][0] == str(powershell)

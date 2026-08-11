@@ -653,20 +653,17 @@ try {
     if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
     Write-UpdateStatus 'restarting' $null
     Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-    # A freshly-installed onefile exe unpacks its bundled Python runtime + deps (pandas,
-    # sqlalchemy, uvicorn, ...) into a brand new _MEI temp dir on this very first run — there is
-    # no warm cache to reuse yet, and antivirus commonly scans each extracted file as it lands.
-    # That alone can take well over 12s under real disk/AV contention, so give the FIRST launch a
-    # long runway before assuming it's actually stuck (a premature relaunch would only add a
-    # second concurrent extraction competing for the same disk/AV budget, making it worse).
-    if (-not (Wait-AppHealthy $InstanceStatePath 60000)) {
-        Write-UpdateLog 'Warning: app did not respond within 60s after restart; retrying launch once.'
-        Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-        if (Wait-AppHealthy $InstanceStatePath 20000) {
-            Write-UpdateLog 'App responded after retry launch.'
-        } else {
-            Write-UpdateLog 'Warning: app still not responding after retry; the update itself succeeded, but the user may need to reopen it manually.'
-        }
+    # Bản onedir không giải nén runtime ra %TEMP% khi chạy, nên lần mở đầu tiên sau khi cài nhanh
+    # ngang các lần sau; 45s là dư dả kể cả khi antivirus còn quét thư mục vừa ghi.
+    #
+    # KHÔNG mở lần thứ hai khi chờ quá hạn. Bản onefile trước đây làm vậy và chính đó là thứ sinh
+    # ra hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và
+    # antivirus, một trong hai nạp DLL hỏng giữa chừng. Chờ không thấy thì báo thật cho người dùng.
+    if (-not (Wait-AppHealthy $InstanceStatePath 45000)) {
+        Write-UpdateLog 'Warning: install succeeded but the app did not report healthy within 45s; leaving it to the user to open.'
+        Write-UpdateStatus 'installed' 'Đã cài xong nhưng ứng dụng chưa tự mở lại được. Hãy mở TikTok Affiliate Report từ Desktop hoặc Start Menu.'
+        Write-UpdateLog 'Update installed successfully.'
+        return
     }
     Write-UpdateLog 'Update installed successfully.'
 } catch {

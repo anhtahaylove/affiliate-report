@@ -405,6 +405,29 @@ def test_owner_reset_data_creates_backup_deletes_imports_and_preserves_targets(t
         assert conn.execute(select(accounts.c.code).where(accounts.c.code == "CHIISTORE")).scalar_one() == "CHIISTORE"
 
 
+def test_reset_data_shrinks_the_database_file_instead_of_leaving_dead_pages(tmp_path):
+    client, engine = api(tmp_path)
+    import_rows(
+        engine,
+        filename="big.xlsx",
+        file_bytes=b"big",
+        account="CHIISTORE",
+        rows=[normalized(**{"ID đơn hàng": f"O{index}", "ID SKU": f"S{index}"}) for index in range(2000)],
+    )
+    db_path = tmp_path / "api.db"
+    engine.dispose()
+    before = db_path.stat().st_size
+
+    payload = client.post("/api/v1/admin/reset-data", json={"confirmation": "XOA DU LIEU"}).json()
+
+    after = db_path.stat().st_size
+    # Không VACUUM thì xoá xong file vẫn nằm ì nguyên kích thước cũ.
+    assert before > 1_000_000
+    assert after < before / 2
+    assert payload["freed_bytes"] >= before - after
+    assert client.get("/api/v1/orders").json()["total"] == 0
+
+
 def test_reset_data_aborts_before_delete_when_backup_check_fails(tmp_path, monkeypatch):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])

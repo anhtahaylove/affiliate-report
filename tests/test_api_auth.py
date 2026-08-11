@@ -482,7 +482,7 @@ def test_restore_backup_requires_owner_csrf_phrase_preserves_auth_and_makes_safe
     safety_path = Path(payload["safety_backup_path"])
     assert safety_path.exists()
     assert safety_path.parent.name == "backups"
-    assert set(payload) == {"restored_counts", "safety_backup_path"}
+    assert set(payload) == {"restored_counts", "safety_backup_path", "freed_bytes"}
     assert payload["restored_counts"]["import_batches"] == 1
     assert payload["restored_counts"]["order_line_versions"] == 1
     assert client.get("/auth/me").json()["email"] == owner.email
