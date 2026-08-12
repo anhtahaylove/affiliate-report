@@ -383,11 +383,34 @@ def write_update_status(
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             json.dump(status, handle, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             handle.write("\n")
-        os.replace(tmp_name, target)
+        _replace_with_retry(tmp_name, target)
     except OSError as exc:
         Path(tmp_name).unlink(missing_ok=True)
         raise UpdateError("Không thể ghi trạng thái cập nhật.") from exc
     return status
+
+
+def _replace_with_retry(source: str, target: Path, timeout: float = 2.0) -> None:
+    """Thay file trạng thái, chịu được việc có ai đó đang mở đọc đúng lúc đó.
+
+    Trên Windows os.replace dùng MoveFileEx và ném PermissionError nếu file đích đang được mở —
+    kể cả chỉ mở để đọc. Endpoint /progress đọc đúng file này và giao diện hỏi nó mỗi 750 ms
+    trong suốt lúc cài, nên hai bên va nhau là chuyện sẽ xảy ra chứ không phải có thể xảy ra:
+    đo trên gate cập nhật thật, 2 trong 5 lần cài hỏng ngay ở lần ghi trạng thái đầu tiên với
+    đúng lỗi này, và cả bản cập nhật bị bỏ dở.
+
+    Bên đọc chỉ giữ file trong khoảnh khắc nên thử lại là đủ. Hết thời gian thì vẫn ném lỗi
+    như cũ, không nuốt.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
 
 
 def read_update_status(path: Path, current_version: str = APP_VERSION) -> dict[str, Any]:
