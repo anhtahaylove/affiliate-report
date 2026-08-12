@@ -119,7 +119,9 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     anonymous_publish = workflow.index("gh release edit $tag --repo $repo --draft=false", promote)
     anonymous_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/$tag/$asset"', promote)
     feed_push = workflow.index("git push", promote)
-    raw_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?', promote)
+    # Feed và asset nay ở hai repo khác nhau: feed ở repo nguồn ($feedRepo), asset vẫn ở repo
+    # cũ ($repo). Thứ tự các bước vẫn là thứ đáng canh, chỉ đổi biến.
+    raw_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$feedRepo/main/stable.json?', promote)
     private_publish = workflow.index("gh release edit $tag --draft=false", promote)
     latest = workflow.index("gh release edit $tag --repo $repo --prerelease=false --latest", promote)
     assert anonymous_publish < anonymous_download < feed_push < raw_download < private_publish < latest
@@ -170,8 +172,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.11"
-    assert 'default: "2.0.10"' in workflow
+    assert APP_VERSION == "2.0.12"
+    assert 'default: "2.0.11"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -280,8 +282,8 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
+    assert 'default: "2.0.12"' in updater_ui
     assert 'default: "2.0.11"' in updater_ui
-    assert 'default: "2.0.10"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui

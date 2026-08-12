@@ -229,9 +229,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Public draft manifest verification failed" }
           $draft = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
+      # Feed đã chuyển về repo nguồn từ v2.0.11 (updater.py đọc URL này). Asset vẫn nằm ở repo
+      # cũ vì mô hình phát hành hai tầng cần một nơi công bố sớm để gate tải xuống được, còn
+      # release ở repo nguồn chỉ được công bố ở bước cuối cùng.
       - uses: actions/checkout@v7
         with:
-          repository: anhtahaylove/tiktok-affiliate-report-updates
+          repository: anhtahaylove/tiktok-affiliate-report
           token: ${{ secrets.UPDATE_FEED_TOKEN }}
           path: update-feed
       - name: Promote public stable feed and releases
@@ -244,6 +247,8 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          # Nơi chứa asset và nơi chứa feed nay là hai repo khác nhau; đừng gộp lại một biến.
+          $feedRepo = "anhtahaylove/tiktok-affiliate-report"
           $assetNames = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig")
           $stableCommitted = $false
           $stableCommit = ""
@@ -333,8 +338,8 @@ jobs:
             for ($attempt = 1; $attempt -le 12 -and !$rawReady; $attempt++) {
               try {
                 $cacheBust = if ($stableCommit) { $stableCommit } else { [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
-                Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?commit=$cacheBust&attempt=$attempt" -OutFile (Join-Path $verify "stable.json")
-                Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json.sig?commit=$cacheBust&attempt=$attempt" -OutFile (Join-Path $verify "stable.json.sig")
+                Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$feedRepo/main/stable.json?commit=$cacheBust&attempt=$attempt" -OutFile (Join-Path $verify "stable.json")
+                Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$feedRepo/main/stable.json.sig?commit=$cacheBust&attempt=$attempt" -OutFile (Join-Path $verify "stable.json.sig")
                 $rawReady = ((Get-FileHash -Algorithm SHA256 (Join-Path $verify "stable.json")).Hash -eq (Get-FileHash -Algorithm SHA256 "artifacts\installer\stable.json").Hash) -and ((Get-FileHash -Algorithm SHA256 (Join-Path $verify "stable.json.sig")).Hash -eq (Get-FileHash -Algorithm SHA256 "artifacts\installer\stable.json.sig").Hash)
               } catch {
                 $rawReady = $false
@@ -474,8 +479,8 @@ jobs:
               $rollbackReady = $false
               for ($attempt = 1; $attempt -le 12 -and !$rollbackReady; $attempt++) {
                 try {
-                  Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?rollback=$rollbackCommit&attempt=$attempt" -OutFile (Join-Path $rollbackVerify "stable.json")
-                  Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json.sig?rollback=$rollbackCommit&attempt=$attempt" -OutFile (Join-Path $rollbackVerify "stable.json.sig")
+                  Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$feedRepo/main/stable.json?rollback=$rollbackCommit&attempt=$attempt" -OutFile (Join-Path $rollbackVerify "stable.json")
+                  Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$feedRepo/main/stable.json.sig?rollback=$rollbackCommit&attempt=$attempt" -OutFile (Join-Path $rollbackVerify "stable.json.sig")
                   $rollbackReady = ((Get-FileHash -Algorithm SHA256 (Join-Path $rollbackVerify "stable.json")).Hash -eq $previousManifestHash) -and ((Get-FileHash -Algorithm SHA256 (Join-Path $rollbackVerify "stable.json.sig")).Hash -eq $previousSignatureHash)
                 } catch {
                   $rollbackReady = $false

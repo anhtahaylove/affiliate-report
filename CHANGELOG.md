@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.0.12 - 2026-08-13
+
+**Tổng quan gọn lại một phần ba.** Những khối gần như luôn im lặng giờ co lại còn một dòng có số tóm tắt, bấm vào là mở ra đầy đủ như cũ:
+
+- **Trung tâm hành động** khi không có cảnh báo nào
+- **Dòng tiền đối soát** khi không còn dòng chờ
+- **Độ tin cậy dữ liệu** khi cả bốn chỉ số cảnh báo bằng 0
+- **Đóng góp theo tài khoản** khi bạn chỉ có một tài khoản — biểu đồ một thanh chỉ nói được "100%"
+
+**Nhắc thiết lập không còn chiếm cả khung.** Khi ứng dụng đã chạy được và chỉ sót một bước chưa làm, trước đây vẫn hiện đủ ba bước giữa trang, trong đó hai bước chỉ để khoe dấu "Hoàn tất". Giờ còn một dòng nhắc đúng việc chưa xong. Lần đầu dùng thật thì vẫn hiện đủ ba bước như cũ.
+
+**Biểu đồ xu hướng dùng hết chiều ngang** thay vì bỏ trống hơn một phần ba khung bên phải.
+
+Đo trên cùng dữ liệu: trang Tổng quan cao **3.308 điểm ảnh xuống còn 2.166**, giảm 35%. Không thông tin nào bị xoá, không khối nào đổi chỗ, màu sắc giữ nguyên.
+
+**Bên trong:** nguồn cập nhật hoàn tất chuyển về kho mã nguồn chính — từ bản này, thông tin bản mới được ghi thẳng ở đó.
+
 ## v2.0.11 - 2026-08-13
 
 **Nguồn cập nhật chuyển về kho mã nguồn chính.** Trước đây ứng dụng đọc thông tin bản mới từ một kho lưu trữ riêng; nay kho mã nguồn đã công khai nên gộp về một chỗ, bớt một nơi phải trông coi.
