@@ -39,7 +39,9 @@ test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async
 
   await test.step("hoàn tác lần nhập qua hộp xác nhận", async () => {
     await page.goto("/imports/");
-    await page.getByRole("button", { name: "Hoàn tác lần nhập này" }).first().click();
+    const importedBatch = page.locator("article.import-item", { hasText: ACCOUNT });
+    await expect(importedBatch).toHaveCount(1);
+    await importedBatch.getByRole("button", { name: "Hoàn tác lần nhập này" }).click();
     const dialog = page.locator("dialog.confirm-dialog[open]");
     await expect(dialog).toBeVisible();
     const phrase = await dialog.locator("label strong").innerText();

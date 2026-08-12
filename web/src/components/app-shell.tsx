@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { usePathname } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, Target, UploadCloud, Users, X, XCircle, type LucideIcon } from "lucide-react";
 import { apiUrl, CurrentUser, exitApplication, logout } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
@@ -70,6 +70,7 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [savingSidebar, setSavingSidebar] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const identityLabel = user.auth_method === "local" ? "Chế độ cục bộ" : user.email;
   const commandItems = allItems.filter((item) => `${item.label} ${item.desc}`.toLocaleLowerCase("vi").includes(commandQuery.trim().toLocaleLowerCase("vi")));
 
@@ -162,13 +163,13 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
 
       <nav className="mobile-bottom-nav" aria-label="Điều hướng nhanh mobile">
         {primaryMobile.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} compact />)}
-        <button className="mobile-nav-link" type="button" aria-haspopup="dialog" aria-expanded={moreOpen} aria-current={moreActive ? "page" : undefined} onClick={() => setMoreOpen(true)}>
+        <button ref={moreButtonRef} className="mobile-nav-link" type="button" aria-haspopup="dialog" aria-expanded={moreOpen} aria-current={moreActive ? "page" : undefined} onClick={() => setMoreOpen(true)}>
           <MoreHorizontal size={20} aria-hidden="true" />
           <span><strong>Thêm</strong></span>
         </button>
       </nav>
 
-      <BottomSheet open={moreOpen} onOpenChange={setMoreOpen} title="Thêm mục" description="Các khu vực ít dùng hơn trong trung tâm vận hành.">
+      <BottomSheet open={moreOpen} onOpenChange={setMoreOpen} restoreFocusRef={moreButtonRef} title="Thêm mục" description="Các khu vực ít dùng hơn trong trung tâm vận hành.">
         <div className="more-sheet-list">
           {moreItems.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} onClick={() => setMoreOpen(false)} />)}
           <button className="more-sheet-action" type="button" onClick={() => void handleLogout()}><LogOut size={18} aria-hidden="true" />Đăng xuất</button>
@@ -181,7 +182,7 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
           <Dialog.Content className="command-palette" aria-describedby="command-description">
             <Dialog.Title><Command size={18} aria-hidden="true" />Đi đến nhanh</Dialog.Title>
             <Dialog.Description id="command-description">Tìm trang hoặc hành động bạn có quyền truy cập.</Dialog.Description>
-            <label className="command-search"><Search size={18} aria-hidden="true" /><span className="sr-only">Tìm trang</span><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Nhập tên trang…" /></label>
+            <label className="command-search"><Search size={18} aria-hidden="true" /><span className="sr-only">Tìm trang</span><input value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Nhập tên trang…" /></label>
             <div className="command-results">
               {commandItems.map((item) => {
                 const Icon = item.icon;

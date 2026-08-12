@@ -237,6 +237,7 @@ export type UpdateProgress = {
   bytes_total: number;
   percent: number | null;
   error: string | null;
+  error_action: string | null;
   updated_at: string | null;
 };
 

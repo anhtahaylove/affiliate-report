@@ -123,10 +123,11 @@ export function AccountsPage() {
         <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft({ code: event.target.value })} placeholder="SHOP_1 hoặc username TikTok" /></div>
         <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
       </div>
-      <div className="account-summary-row" aria-label="Tổng quan tài khoản">
+      <section className="account-summary-row" aria-labelledby="account-summary-title">
+        <h3 className="sr-only" id="account-summary-title">Tổng quan tài khoản</h3>
         <span><strong>{integer.format(activeRecords.length)}</strong> đang hoạt động</span>
         <span><strong>{integer.format(archivedRecords.length)}</strong> đã lưu trữ</span>
-      </div>
+      </section>
       <div className="account-sections">
         <section className="account-section" aria-labelledby="active-accounts-title">
           <div className="section-heading compact"><div><p className="section-label">Đang dùng</p><h3 id="active-accounts-title">Tài khoản đang vận hành</h3></div></div>

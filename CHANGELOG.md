@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.4 - 2026-08-12
+
+**Điều hướng static export và cache sau cập nhật ổn định hơn.** Backend phục vụ đúng các RSC payload do Next.js static export tạo ra thay vì để client nhận `404`; resolver chỉ ánh xạ file hợp lệ trong static root. Service worker dùng cache namespace theo phiên bản ứng dụng, bao phủ đủ route Settings và hiển thị trang kết nối lại riêng khi offline thay vì trả nhầm Dashboard.
+
+**Accessibility được khóa bằng regression thực tế.** Focus ring và chữ phụ đạt ngưỡng tương phản ở chế độ sáng/tối; các summary dùng semantic HTML; command palette, bottom sheet và dialogs giữ luồng focus bàn phím đúng. Axe chạy trên 10 route ở 320, 390, 768 và 1440 px không còn violation; reduced-motion và capability states cũng được kiểm tra.
+
+**Dashboard mobile gọn nhưng không mất dữ liệu.** Today Pulse, mục tiêu và cảnh báo hành động được ưu tiên; sáu khối phân tích thứ cấp thu gọn bằng disclosure có vùng chạm tối thiểu 44 px, hỗ trợ bàn phím và không tràn ngang ở 320 px. Desktop tiếp tục hiển thị đầy đủ và tùy chỉnh widget vẫn được giữ.
+
+**Updater có trạng thái kết thúc rõ ràng.** Helper ghi `installed` sau health handshake thành công, tương thích trạng thái legacy và dùng thời gian reconnect 90 giây nhất quán. API/UI không hiển thị path, exit code hoặc log nội bộ; thay vào đó đưa thông báo tiếng Việt cùng hành động tiếp theo.
+
 ## v2.0.3 - 2026-08-12
 
 **Loại bỏ điều hướng Cài đặt bị trùng.** Các trang Giao diện, Dữ liệu, Cập nhật và Người dùng giờ chỉ dùng một nguồn điều hướng: sidebar trên desktop và menu **Thêm** trên mobile. Trạng thái active giữ đúng ở mọi route, kể cả khi thu gọn hoặc mở rộng sidebar.

@@ -30,7 +30,7 @@
   --danger-wash: #fffafa;
   --text-primary: var(--ink);
   --text-secondary: var(--ink-soft);
-  --text-muted: #72807d;
+  --text-muted: #5d6966;
   --border-strong: var(--line-strong);
   --chart-cyan: #008b98;
   --chart-cyan-soft: #d8f3f5;
@@ -40,7 +40,7 @@
   --chart-neutral: #8a9996;
   --chart-grid: #dfe6e3;
   --shadow-popover: 0 18px 50px rgba(15, 40, 39, 0.14);
-  --focus-ring: rgba(122, 61, 40, 0.24);
+  --focus-ring: #006b75;
   --scrim: rgba(15, 23, 42, 0.28);
   --scrim-clear: rgba(15, 23, 42, 0);
   --radius: 14px;
@@ -78,7 +78,7 @@
     --danger-wash: #2a1614;
     --text-primary: var(--ink);
     --text-secondary: var(--ink-soft);
-    --text-muted: #879793;
+    --text-muted: #9caca8;
     --border-strong: var(--line-strong);
     --chart-cyan: #62d8df;
     --chart-cyan-soft: #17383b;
@@ -88,7 +88,7 @@
     --chart-neutral: #879793;
     --chart-grid: #293735;
     --shadow-popover: 0 18px 50px rgba(0, 0, 0, 0.36);
-    --focus-ring: rgba(240, 176, 153, 0.28);
+    --focus-ring: #91eef3;
     --scrim: rgba(1, 4, 9, 0.62);
     --scrim-clear: rgba(1, 4, 9, 0);
     color-scheme: dark;
@@ -123,7 +123,7 @@
   --danger-wash: #2a1614;
   --text-primary: var(--ink);
   --text-secondary: var(--ink-soft);
-  --text-muted: #879793;
+  --text-muted: #9caca8;
   --border-strong: var(--line-strong);
   --chart-cyan: #62d8df;
   --chart-cyan-soft: #17383b;
@@ -133,7 +133,7 @@
   --chart-neutral: #879793;
   --chart-grid: #293735;
   --shadow-popover: 0 18px 50px rgba(0, 0, 0, 0.36);
-  --focus-ring: rgba(240, 176, 153, 0.28);
+  --focus-ring: #91eef3;
   --scrim: rgba(1, 4, 9, 0.62);
   --scrim-clear: rgba(1, 4, 9, 0);
   color-scheme: dark;
@@ -176,10 +176,14 @@ button {
 
 button:hover { border-color: var(--teal); }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible {
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Radix chuyển focus vào ô tìm kiếm bằng script sau phím Ctrl/Cmd+K. Chromium không luôn
+   gắn :focus-visible cho focus được chuyển này, nên giữ indicator trong phạm vi palette. */
+.command-palette input:focus {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -901,6 +905,7 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .update-state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 13px; min-width: 0; }
 .update-state-icon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 14px; background: var(--teal-soft); color: var(--teal); }
 .update-state[data-tone="success"] .update-state-icon { background: var(--success-soft); color: var(--success); }
+.update-state[data-tone="warning"] .update-state-icon { background: var(--warning-soft); color: var(--warning); }
 .update-state[data-tone="danger"] .update-state-icon { background: var(--danger-soft); color: var(--danger); }
 .update-state h2 { margin: 2px 0 4px; font-size: clamp(1.25rem, 2.5vw, 1.65rem); }
 .update-state p { margin: 0; color: var(--ink-soft); line-height: 1.5; }
@@ -992,11 +997,16 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .update-release-row h3, .update-release-row p { margin: 0; }
 .update-release-row p { color: var(--ink-soft); line-height: 1.5; }
 .update-release-row .button-link { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; }
-.update-safeguards { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; margin: 0; padding: 12px 14px; border-left: 3px solid var(--success); background: var(--success-soft); }
+.update-safeguards { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; margin: 0; padding: 12px 14px; border: 1px solid var(--success-line); border-radius: 12px; background: var(--success-soft); }
 .update-safeguards > svg { margin-top: 2px; color: var(--success); }
 .update-safeguards p, .update-safeguards span { margin: 0; }
 .update-safeguards p { display: grid; gap: 3px; }
 .update-safeguards span { color: var(--ink-soft); line-height: 1.5; }
+.update-message { display: grid; gap: 4px; margin: 0; padding: 12px 14px; border: 1px solid var(--accent-line); border-radius: 12px; background: var(--teal-soft); color: var(--ink); line-height: 1.5; overflow-wrap: anywhere; }
+.update-message p { margin: 0; }
+.update-message[data-tone="success"] { border-color: var(--success-line); background: var(--success-soft); }
+.update-message[data-tone="warning"] { border-color: var(--warning-line); background: var(--warning-soft); }
+.update-message[data-tone="danger"] { border-color: var(--danger-line); background: var(--danger-soft); }
 .update-actions { margin-top: 0; }
 .update-actions button { display: inline-flex; align-items: center; gap: 7px; }
 
@@ -1670,6 +1680,9 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .saved-view-create button { display: inline-flex; align-items: center; gap: 6px; }
 
 .momentum-dashboard { display: flex; flex-direction: column; gap: 16px; }
+.mobile-dashboard-disclosure,
+.mobile-dashboard-content { min-width: 0; }
+.mobile-dashboard-summary[hidden] { display: none; }
 .dashboard-customizer { order: -1; padding: 0; overflow: hidden; }
 .dashboard-customizer summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 14px; cursor: pointer; list-style: none; }
 .dashboard-customizer summary::-webkit-details-marker { display: none; }
@@ -1844,6 +1857,16 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 }
 
 @media (max-width: 760px) {
+  .mobile-dashboard-disclosure { border-block: 1px solid var(--line); }
+  .mobile-dashboard-disclosure + .mobile-dashboard-disclosure { border-top: 0; }
+  .mobile-dashboard-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 2px; cursor: pointer; list-style: none; }
+  .mobile-dashboard-summary::-webkit-details-marker { display: none; }
+  .mobile-dashboard-summary > span { display: grid; gap: 2px; min-width: 0; }
+  .mobile-dashboard-summary strong { font-size: .92rem; }
+  .mobile-dashboard-summary small { overflow: hidden; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-dashboard-chevron { flex: 0 0 auto; transition: transform 160ms ease-out; }
+  .mobile-dashboard-disclosure[open] > .mobile-dashboard-summary .mobile-dashboard-chevron { transform: rotate(180deg); }
+  .mobile-dashboard-disclosure[open] > .mobile-dashboard-summary { margin-bottom: 8px; }
   .orders-table, .desktop-data-table { display: none !important; }
   .orders-card-list, .mobile-data-list { display: grid; gap: 10px; }
   .order-card, .mobile-data-card { padding: 13px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
@@ -1852,6 +1875,10 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .order-card-metrics > div, .mobile-data-card dl > div { display: grid; gap: 3px; padding: 9px; border-radius: 11px; background: var(--surface-soft); }
   .order-card dt, .mobile-data-card dt { color: var(--ink-soft); font-size: .75rem; }
   .order-card dd, .mobile-data-card dd { margin: 0; font-weight: 800; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-dashboard-chevron { transition: none; }
 }
 
 @media (max-width: 620px) {
