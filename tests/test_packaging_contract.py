@@ -222,6 +222,7 @@ def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "retention-days: 3" in candidate
     assert "candidate-release-gate:" in candidate
     assert "github.event_name == 'push'" in candidate
+    assert candidate.count("if: always() && needs.candidate-build.result == 'success'") == 2
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Fresh" in candidate
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Upgrade" in candidate
     assert '"- Upgrade $previousVersion -> ${currentVersion}: PASS"' in candidate
