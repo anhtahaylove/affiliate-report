@@ -232,8 +232,23 @@ jobs:
           $previousVersion = $env:PREVIOUS_STABLE_VERSION
           $previousInstaller = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$previousVersion.exe"
           $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/TikTokAffiliateReportSetup-v$previousVersion.exe" -OutFile $previousInstaller
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/SHA256SUMS.txt" -OutFile $previousChecksums
+          # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
+          # nên GitHub trả 503 cho vài job là chuyện sẽ xảy ra. Tải một phát không thử lại biến
+          # chuyện đó thành gate đỏ. Đây là chỗ yếu của bộ kiểm thử, không phải của sản phẩm.
+          function Get-PublicAsset([string]$Url, [string]$OutFile) {
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing $Url -OutFile $OutFile
+                if ((Get-Item -LiteralPath $OutFile).Length -gt 0) { return }
+                throw "Empty download"
+              } catch {
+                if ($attempt -eq 6) { throw "Could not download $Url after 6 attempts: $($_.Exception.Message)" }
+                Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(2, $attempt)))
+              }
+            }
+          }
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/TikTokAffiliateReportSetup-v$previousVersion.exe" $previousInstaller
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/SHA256SUMS.txt" $previousChecksums
       - name: Smoke candidate upgrade and data preservation
         shell: pwsh
         run: |
@@ -319,8 +334,23 @@ jobs:
           if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid current_version: $currentVersion" }
           $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe"
           $checksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" -OutFile $installer
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" -OutFile $checksums
+          # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
+          # nên GitHub trả 503 cho vài job là chuyện sẽ xảy ra. Tải một phát không thử lại biến
+          # chuyện đó thành gate đỏ. Đây là chỗ yếu của bộ kiểm thử, không phải của sản phẩm.
+          function Get-PublicAsset([string]$Url, [string]$OutFile) {
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing $Url -OutFile $OutFile
+                if ((Get-Item -LiteralPath $OutFile).Length -gt 0) { return }
+                throw "Empty download"
+              } catch {
+                if ($attempt -eq 6) { throw "Could not download $Url after 6 attempts: $($_.Exception.Message)" }
+                Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(2, $attempt)))
+              }
+            }
+          }
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" $installer
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" $checksums
       - name: Smoke fresh install
         shell: pwsh
         run: |
@@ -352,10 +382,25 @@ jobs:
           $previousInstaller = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$previousVersion.exe"
           $currentChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
           $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" -OutFile $currentInstaller
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" -OutFile $currentChecksums
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/TikTokAffiliateReportSetup-v$previousVersion.exe" -OutFile $previousInstaller
-          Invoke-WebRequest -UseBasicParsing "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/SHA256SUMS.txt" -OutFile $previousChecksums
+          # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
+          # nên GitHub trả 503 cho vài job là chuyện sẽ xảy ra. Tải một phát không thử lại biến
+          # chuyện đó thành gate đỏ. Đây là chỗ yếu của bộ kiểm thử, không phải của sản phẩm.
+          function Get-PublicAsset([string]$Url, [string]$OutFile) {
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing $Url -OutFile $OutFile
+                if ((Get-Item -LiteralPath $OutFile).Length -gt 0) { return }
+                throw "Empty download"
+              } catch {
+                if ($attempt -eq 6) { throw "Could not download $Url after 6 attempts: $($_.Exception.Message)" }
+                Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(2, $attempt)))
+              }
+            }
+          }
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" $currentInstaller
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" $currentChecksums
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/TikTokAffiliateReportSetup-v$previousVersion.exe" $previousInstaller
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/SHA256SUMS.txt" $previousChecksums
       - name: Smoke upgrade and data preservation
         shell: pwsh
         run: |
