@@ -309,9 +309,12 @@ def read_update_status(path: Path, current_version: str = APP_VERSION) -> dict[s
     status = _validate_update_status(value)
     if (
         status["target_version"]
-        and status["phase"] in {"waiting_for_exit", "installing", "restarting"}
-        and _parse_version(str(current_version)) == _parse_version(str(status["target_version"]))
+        and status["phase"] in {"waiting_for_exit", "installing", "restarting", "installed"}
+        and _parse_version(str(current_version)) >= _parse_version(str(status["target_version"]))
     ):
+        # Reaching this API from the target (or a newer) version proves that the
+        # relaunched app is healthy. Keep any raw helper timeout on disk for
+        # diagnostics, but do not expose it as an active problem to the UI.
         return {**status, "phase": "installed", "error": None}
     return status
 
@@ -358,6 +361,32 @@ def _validate_update_status(value: Any) -> dict[str, Any]:
         "error": None if error is None else str(error),
         "updated_at": updated_at,
     }
+
+
+def public_update_issue(phase: str, error: str | None) -> tuple[str | None, str | None]:
+    """Return stable user copy without exposing helper internals or local paths."""
+    if not error:
+        return None, None
+    normalized = error.casefold()
+    if phase == "installed":
+        return (
+            "Đã cài bản cập nhật nhưng ứng dụng chưa tự mở lại.",
+            "Mở TikTok Affiliate Report từ Desktop hoặc Start Menu, sau đó kiểm tra lại phiên bản.",
+        )
+    if any(token in normalized for token in ("sha-256", "checksum", "signature", "chữ ký", "tamper", "changed", "kích thước")):
+        return (
+            "Gói cập nhật không vượt qua bước xác minh an toàn.",
+            "Bấm “Thử lại” để tải lại gói. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ.",
+        )
+    if any(token in normalized for token in ("download", "không thể tải", "kết nối", "network", "http ", "timed out", "timeout")):
+        return (
+            "Không thể tải gói cập nhật từ nguồn phát hành.",
+            "Kiểm tra kết nối mạng rồi bấm “Thử lại”.",
+        )
+    return (
+        "Không thể hoàn tất cài đặt bản cập nhật.",
+        "Bấm “Thử lại” để tải lại gói. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ.",
+    )
 
 
 def _utc_now() -> str:
@@ -662,11 +691,12 @@ try {
     # ra hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và
     # antivirus, một trong hai nạp DLL hỏng giữa chừng. Chờ không thấy thì báo thật cho người dùng.
     if (-not (Wait-AppHealthy $InstanceStatePath 90000)) {
-        Write-UpdateLog 'Warning: install succeeded but the app did not report healthy within 45s; leaving it to the user to open.'
+        Write-UpdateLog 'Warning: install succeeded but the app did not report healthy within 90s; leaving it to the user to open.'
         Write-UpdateStatus 'installed' 'Đã cài xong nhưng ứng dụng chưa tự mở lại được. Hãy mở TikTok Affiliate Report từ Desktop hoặc Start Menu.'
         Write-UpdateLog 'Update installed successfully.'
         return
     }
+    Write-UpdateStatus 'installed' $null
     Write-UpdateLog 'Update installed successfully.'
 } catch {
     $failure = $_.Exception.Message

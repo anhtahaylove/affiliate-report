@@ -23,7 +23,6 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -55,6 +54,7 @@ from .reports import (
     overview,
     sheets_output,
 )
+from .static_export import StaticExportFiles, service_worker_response
 from .reset_data import (
     RESET_CONFIRMATION_PHRASE,
     RESTORE_CONFIRMATION_PHRASE,
@@ -69,6 +69,7 @@ from .updater import (
     UpdateError,
     check_for_update,
     download_latest_update,
+    public_update_issue,
     read_update_status,
     schedule_installer,
     write_update_status,
@@ -1093,6 +1094,9 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         downloaded = int(result.get("bytes_downloaded") or 0)
         total = int(result.get("bytes_total") or 0)
+        public_error, error_action = public_update_issue(str(result.get("phase") or ""), result.get("error"))
+        result["error"] = public_error
+        result["error_action"] = error_action
         result["current_version"] = APP_VERSION
         result["percent"] = round(downloaded * 100 / total, 1) if total > 0 else None
         return result
@@ -1350,7 +1354,12 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
 
     static_dir = os.getenv("WEB_STATIC_DIR")
     if static_dir and os.path.isdir(static_dir):
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="web")
+        if os.path.isfile(os.path.join(static_dir, "sw.js")):
+            @app.get("/sw.js", include_in_schema=False)
+            def versioned_service_worker():
+                return service_worker_response(static_dir, APP_VERSION)
+
+        app.mount("/", StaticExportFiles(directory=static_dir, html=True), name="web")
 
     return app
 

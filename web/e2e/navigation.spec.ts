@@ -52,3 +52,26 @@ test("mobile đánh dấu mục Thêm khi route hiện tại nằm trong action 
   await page.getByRole("button", { name: "Thêm" }).click();
   await expect(page.getByRole("dialog", { name: "Thêm mục" }).getByRole("link", { name: /Cập nhật/ })).toHaveAttribute("aria-current", "page");
 });
+
+test("client navigation phục vụ đầy đủ RSC payload và static assets", async ({ page }) => {
+  const assetErrors: string[] = [];
+  page.on("response", (response) => {
+    const { pathname } = new URL(response.url());
+    const isClientPayload = pathname.includes("/__next.") || pathname.startsWith("/_next/static/");
+    if (isClientPayload && response.status() >= 400) {
+      assetErrors.push(`${response.status()} ${pathname}`);
+    }
+  });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+
+  for (const [route] of ROUTES.slice(1)) {
+    await page.locator(`.sidebar nav a[href="${route}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`${route.replaceAll("/", "\\/")}$`));
+    await page.waitForLoadState("networkidle");
+  }
+
+  expect(assetErrors).toEqual([]);
+});

@@ -1,4 +1,7 @@
-const CACHE = "tiktok-affiliate-report-shell-v5";
+const CACHE_PREFIX = "tiktok-affiliate-report-shell-";
+// FastAPI thay token này bằng APP_VERSION trước khi phục vụ bản production.
+// Next dev giữ nguyên token nhưng vẫn dùng một namespace riêng, không ảnh hưởng bản cài.
+const CACHE = `${CACHE_PREFIX}__APP_VERSION__`;
 // Next export chạy trailingSlash: true, nên route thật có dấu gạch chéo cuối. Thiếu nó thì
 // cache phụ thuộc redirect và chỉ một URL hỏng là cả lần cài service worker thất bại.
 const APP_SHELL = [
@@ -8,9 +11,11 @@ const APP_SHELL = [
   "/imports/",
   "/targets/",
   "/accounts/",
+  "/settings/preferences/",
   "/settings/data/",
   "/settings/update/",
   "/settings/users/",
+  "/offline.html",
   "/icon-192.png",
   "/icon-512.png",
   "/manifest.webmanifest",
@@ -35,7 +40,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
+      Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE).map((key) => caches.delete(key))),
     ),
   );
   self.clients.claim();
@@ -55,7 +60,7 @@ self.addEventListener("fetch", (event) => {
       .catch(async () => {
         const cached = await caches.match(event.request);
         if (cached) return cached;
-        if (event.request.mode === "navigate") return (await caches.match("/")) || Response.error();
+        if (event.request.mode === "navigate") return (await caches.match("/offline.html")) || Response.error();
         return Response.error();
       }),
   );

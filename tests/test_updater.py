@@ -316,7 +316,10 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     assert "Wait-AppHealthy $InstanceStatePath 90000" in helper
     restarting_index = helper.index("Write-UpdateStatus 'restarting'")
     first_start_child_index = helper.index("Start-Child $AppExe", restarting_index)
-    assert first_start_child_index < helper.index("Wait-AppHealthy $InstanceStatePath 90000")
+    health_index = helper.index("Wait-AppHealthy $InstanceStatePath 90000")
+    assert first_start_child_index < health_index
+    assert helper.index("Write-UpdateStatus 'installed' $null", health_index) > health_index
+    assert "within 90s" in helper
     # Chỉ mở app đúng MỘT lần sau khi cài. Mở lần hai khi lần đầu chưa phản hồi là thứ đã sinh ra
     # hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và AV.
     assert helper.count("Start-Child $AppExe") == 2  # một lần sau khi cài, một lần khi cài lỗi
@@ -513,6 +516,32 @@ def test_update_status_is_atomic_validated_and_normalizes_installed(tmp_path):
     assert json.loads(status_path.read_text(encoding="utf-8")) == written
     assert updater.read_update_status(status_path, current_version="1.2.0")["phase"] == "waiting_for_exit"
     assert updater.read_update_status(status_path, current_version="1.2.1")["phase"] == "installed"
+
+    updater.write_update_status(
+        status_path,
+        phase="restarting",
+        target_version="1.2.1",
+        bytes_downloaded=9,
+        bytes_total=9,
+    )
+    assert updater.read_update_status(status_path, current_version="1.2.0")["phase"] == "restarting"
+    assert updater.read_update_status(status_path, current_version="1.2.2")["phase"] == "installed"
+    assert json.loads(status_path.read_text(encoding="utf-8"))["phase"] == "restarting"
+
+    updater.write_update_status(
+        status_path,
+        phase="installed",
+        target_version="1.2.1",
+        bytes_downloaded=9,
+        bytes_total=9,
+        error="App did not report healthy within 90s.",
+    )
+    unresolved = updater.read_update_status(status_path, current_version="1.2.0")
+    resolved = updater.read_update_status(status_path, current_version="1.2.1")
+    assert unresolved["error"] == "App did not report healthy within 90s."
+    assert resolved["phase"] == "installed"
+    assert resolved["error"] is None
+    assert json.loads(status_path.read_text(encoding="utf-8"))["error"] == "App did not report healthy within 90s."
 
     status_path.write_text("{}", encoding="utf-8")
     with pytest.raises(updater.UpdateError, match="schema"):

@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const dashboardLayout = {
@@ -5,6 +6,19 @@ const dashboardLayout = {
   order: ["today_pulse", "target_progress", "action_alerts", "trend", "account_contribution", "settlement", "data_freshness", "recent_imports"],
   hidden: [],
 };
+
+function contrastRatio(foreground: number[], background: number[]) {
+  const luminance = (channels: number[]) => {
+    const [red, green, blue] = channels.map((channel) => {
+      const normalized = channel / 255;
+      return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const lighter = Math.max(luminance(foreground), luminance(background));
+  const darker = Math.min(luminance(foreground), luminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+}
 
 test("PostgreSQL/OIDC settings explain unavailable local operations without calling them", async ({ page }) => {
   let backupCalls = 0;
@@ -51,6 +65,20 @@ test("PostgreSQL/OIDC settings explain unavailable local operations without call
   await expect(page.getByRole("button", { name: "Xóa dữ liệu báo cáo" })).toHaveCount(0);
   expect(backupCalls).toBe(0);
 
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), theme);
+    const colors = await page.locator(".capability-facts dt").first().evaluate((element) => {
+      const parse = (value: string) => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+      return {
+        foreground: parse(getComputedStyle(element).color),
+        background: parse(getComputedStyle(element.parentElement as Element).backgroundColor),
+      };
+    });
+    expect(colors.foreground).toHaveLength(3);
+    expect(colors.background).toHaveLength(3);
+    expect(contrastRatio(colors.foreground, colors.background), `capability ${theme}`).toBeGreaterThanOrEqual(4.5);
+  }
+
   await page.goto("/settings/update/");
   await expect(page.getByRole("heading", { name: "Phiên bản được cập nhật tại máy chủ" })).toBeVisible();
   await expect(page.getByText("Không tải hoặc chạy installer Windows")).toBeVisible();
@@ -60,4 +88,8 @@ test("PostgreSQL/OIDC settings explain unavailable local operations without call
   await page.goto("/settings/users/");
   await expect(page.getByRole("heading", { name: "OIDC allowlist được kiểm tra liên tục" })).toBeVisible();
   await expect(page.getByText("Trạng thái “Đang hoạt động” là điều kiện cần", { exact: false })).toBeVisible();
+  const accessibility = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
 });

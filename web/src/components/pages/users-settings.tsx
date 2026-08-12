@@ -47,11 +47,12 @@ export function UsersSettingsPage({ currentUser, accounts, identityPolicy }: { c
           <p>Chủ sở hữu không thể tự hạ quyền hoặc tự ngừng kích hoạt tài khoản của mình.</p>
         </div>
       </div>
-      <div className="settings-summary-row" aria-label="Tổng quan phân quyền">
+      <section className="settings-summary-row" aria-labelledby="permissions-summary-title">
+        <h3 className="sr-only" id="permissions-summary-title">Tổng quan phân quyền</h3>
         <span><strong>{integer.format(activeUsers.length)}</strong> đang hoạt động</span>
         <span><strong>{integer.format(archivedUsers.length)}</strong> đã lưu trữ</span>
         <span><strong>{integer.format(accounts.length)}</strong> tài khoản có thể gán</span>
-      </div>
+      </section>
       {identityPolicy.oidc_allowlist_enforced ? (
         <aside className="identity-policy" aria-labelledby="identity-policy-title">
           <KeyRound size={20} aria-hidden="true" />

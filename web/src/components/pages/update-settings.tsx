@@ -3,15 +3,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, CapabilityState, UpdateProgress, UpdateStatus, checkUpdate, installUpdate, loadUpdateProgress } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
-import { errorMessage, formatBytes, formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
 import { Check, CheckCircle2, CloudCog, Download, ExternalLink, HardDriveDownload, MonitorUp, RefreshCw, RotateCw, ShieldCheck, type LucideIcon } from "lucide-react";
 
-function updateErrorMessage(reason: unknown) {
-  const message = errorMessage(reason, "Không thể kiểm tra cập nhật.");
-  if (reason instanceof ApiError && [401, 403, 404, 502].includes(reason.status)) {
-    return `${message} Nguồn cập nhật công khai có chữ ký không dùng token; hãy kiểm tra URL, chữ ký và kết nối mạng.`;
+const UPDATE_RECONNECT_TIMEOUT_MS = 90_000;
+
+function updateErrorInfo(reason: unknown) {
+  if (reason instanceof ApiError) {
+    if (reason.status === 0) {
+      return {
+        message: "Không thể kết nối với ứng dụng để kiểm tra cập nhật.",
+        action: "Mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.",
+      };
+    }
+    if ([401, 403].includes(reason.status)) {
+      return {
+        message: "Tài khoản hiện tại không có quyền quản lý cập nhật.",
+        action: "Đăng nhập bằng tài khoản Chủ sở hữu hoặc liên hệ người quản trị.",
+      };
+    }
+    if (reason.status === 409) {
+      return {
+        message: "Một phiên cập nhật đang được xử lý hoặc trạng thái chưa sẵn sàng.",
+        action: "Chờ một lát rồi bấm “Kiểm tra lại”.",
+      };
+    }
+    if ([404, 502].includes(reason.status)) {
+      return {
+        message: "Chưa thể kiểm tra nguồn cập nhật an toàn.",
+        action: "Kiểm tra kết nối mạng rồi thử lại. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ.",
+      };
+    }
   }
-  return message;
+  return {
+    message: "Không thể hoàn tất thao tác cập nhật.",
+    action: "Bấm “Kiểm tra lại”. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ.",
+  };
 }
 
 type UpdateUiPhase = UpdateProgress["phase"] | "preparing";
@@ -49,8 +76,9 @@ function updateStageState(stage: (typeof updateStages)[number], phase: UpdateUiP
   return "pending";
 }
 
-function updateStateCopy(status: UpdateStatus | null, phase: UpdateUiPhase, installing: boolean, busy: boolean) {
+function updateStateCopy(status: UpdateStatus | null, phase: UpdateUiPhase, installing: boolean, busy: boolean, hasIssue: boolean) {
   if (phase === "failed") return { tone: "danger", title: "Cập nhật chưa hoàn tất", copy: "Kiểm tra thông báo bên dưới rồi thử lại.", icon: RotateCw };
+  if (hasIssue) return { tone: "warning", title: "Cập nhật cần bạn kiểm tra", copy: "Xem việc cần làm bên dưới để hoàn tất.", icon: RotateCw };
   if (installing) return { tone: "info", title: phaseLabel(phase), copy: "Giữ ứng dụng mở; tiến trình sẽ tự kết nối lại sau khi cài đặt.", icon: Download };
   if (!status && busy) return { tone: "info", title: "Đang kiểm tra phiên bản", copy: "Đang xác minh nguồn cập nhật công khai có chữ ký.", icon: RefreshCw };
   if (status?.available) return { tone: "info", title: `Có bản ${status.latest_version} sẵn sàng`, copy: status.installable && status.automatic_install_supported ? "Bạn có thể tải, xác minh và cài ngay trong ứng dụng." : "Bản mới đã được phát hành nhưng máy này chưa hỗ trợ cài tự động.", icon: Download };
@@ -61,6 +89,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [message, setMessage] = useState("");
+  const [nextAction, setNextAction] = useState("");
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -84,15 +113,23 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
       const [updateStatus, updateProgress] = await Promise.all([checkUpdate(), loadUpdateProgress().catch(() => null)]);
       setStatus(updateStatus);
       rememberProgress(updateProgress);
-      setMessage(updateProgress?.phase === "failed" && updateProgress.error
-        ? updateProgress.error
-        : updateStatus.available
-          ? `Có bản ${updateStatus.latest_version}${updateStatus.installable ? " sẵn sàng cài." : " nhưng chưa cài tự động được."}`
-          : `Đang ở bản mới nhất (${updateStatus.current_version}).`);
+      if (updateProgress?.error) {
+        setMessage(updateProgress.error);
+        setNextAction(updateProgress.error_action || "Bấm “Kiểm tra lại”. Nếu lỗi tiếp diễn, hãy liên hệ người hỗ trợ.");
+      } else {
+        setNextAction("");
+        setMessage(updateProgress?.phase === "installed" && updateProgress.target_version === updateProgress.current_version
+          ? `Đã cài xong bản ${updateProgress.current_version}.`
+          : updateStatus.available
+            ? `Có bản ${updateStatus.latest_version}${updateStatus.installable ? " sẵn sàng cài." : " nhưng chưa cài tự động được."}`
+            : `Đang ở bản mới nhất (${updateStatus.current_version}).`);
+      }
     } catch (reason) {
       setStatus(null);
       rememberProgress(null);
-      setMessage(updateErrorMessage(reason));
+      const issue = updateErrorInfo(reason);
+      setMessage(issue.message);
+      setNextAction(issue.action);
     } finally {
       setBusy(false);
     }
@@ -122,17 +159,25 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           installStartedRef.current = null;
           setInstalling(false);
           setBusy(false);
-          setMessage(data.error || "Cập nhật thất bại. Có thể thử lại sau khi kiểm tra kết nối và gói phát hành.");
+          setMessage(data.error || "Cập nhật chưa hoàn tất.");
+          setNextAction(data.error_action || "Bấm “Thử lại”. Nếu lỗi tiếp diễn, hãy liên hệ người hỗ trợ.");
           return;
         }
         if (data.phase === "installed" && data.target_version && data.current_version === data.target_version) {
           installStartedRef.current = null;
           setInstalling(false);
           setBusy(false);
-          setMessage(`Đã cài xong bản ${data.current_version}.`);
-          void check();
+          if (data.error) {
+            setMessage(data.error);
+            setNextAction(data.error_action || "Mở lại ứng dụng rồi kiểm tra phiên bản.");
+          } else {
+            setMessage(`Đã cài xong bản ${data.current_version}.`);
+            setNextAction("");
+            void check();
+          }
           return;
         }
+        setNextAction("");
         setMessage(`${phaseLabel(data.phase)}${data.target_version ? ` bản ${data.target_version}` : ""}.`);
         timer = setTimeout(poll, 750);
       } catch (reason) {
@@ -142,10 +187,11 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           const startedAt = reconnectStartedRef.current ?? Date.now();
           reconnectStartedRef.current = startedAt;
           setReconnecting(true);
-          if (Date.now() - startedAt > 120_000) {
+          if (Date.now() - startedAt > UPDATE_RECONNECT_TIMEOUT_MS) {
             setInstalling(false);
             setBusy(false);
-            setMessage("Ứng dụng chưa kết nối lại sau 120 giây. Hãy mở lại ứng dụng rồi bấm kiểm tra cập nhật.");
+            setMessage("Ứng dụng chưa kết nối lại sau 90 giây.");
+            setNextAction("Mở TikTok Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.");
             return;
           }
           setMessage("Ứng dụng đang đóng để cài đặt. Đang chờ kết nối lại…");
@@ -154,7 +200,9 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
         }
         setInstalling(false);
         setBusy(false);
-        setMessage(updateErrorMessage(reason));
+        const issue = updateErrorInfo(reason);
+        setMessage(issue.message);
+        setNextAction(issue.action);
       }
     }
 
@@ -175,13 +223,16 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
     installStartedRef.current = Date.now();
     rememberProgress(null);
     setMessage("Đang chuẩn bị cập nhật…");
+    setNextAction("");
     try {
       const result = await installUpdate("CAP NHAT UNG DUNG");
       setMessage(`Đã bắt đầu tải bản ${result.version}. Theo dõi tiến độ bên dưới; không đóng máy trong lúc cài.`);
     } catch (reason) {
       installStartedRef.current = null;
       setInstalling(false);
-      setMessage(updateErrorMessage(reason));
+      const issue = updateErrorInfo(reason);
+      setMessage(issue.message);
+      setNextAction(issue.action);
     } finally {
       setBusy(false);
     }
@@ -191,9 +242,10 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   const downloadValue = progress?.percent != null ? progress.percent : progress?.bytes_total ? (progress.bytes_downloaded / progress.bytes_total) * 100 : undefined;
   const targetVersion = progress?.target_version ?? status?.latest_version ?? null;
   const canInstall = Boolean(installCapability.available && status?.available && status.installable && status.automatic_install_supported && !installing);
-  const stateCopy = updateStateCopy(status, phase, installing || reconnecting, busy);
+  const stateCopy = updateStateCopy(status, phase, installing || reconnecting, busy, Boolean(nextAction));
   const StateIcon = stateCopy.icon;
   const showDownloadProgress = Boolean(installing || reconnecting || progress?.bytes_total || progress?.percent != null || phase === "failed" || phase === "installed");
+  const messageTone = phase === "failed" ? "danger" : nextAction ? "warning" : phase === "installed" ? "success" : "info";
 
   if (!checkCapability.available) {
     return (
@@ -224,11 +276,12 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           <RefreshCw size={17} aria-hidden="true" />{busy ? "Đang kiểm tra…" : "Kiểm tra lại"}
         </button>
       </div>
-      <div className="update-version-grid" aria-label="Thông tin phiên bản">
+      <section className="update-version-grid" aria-labelledby="update-version-title">
+        <h3 className="sr-only" id="update-version-title">Thông tin phiên bản</h3>
         <div><span>Đang dùng</span><strong>{progress?.current_version ?? status?.current_version ?? "—"}</strong></div>
         <div><span>Mới nhất</span><strong>{targetVersion ?? "—"}</strong></div>
         <div><span>Tiến trình</span><strong>{phaseLabel(phase)}</strong></div>
-      </div>
+      </section>
 
       <ol className="update-stages" aria-label="Các bước cập nhật">
         {updateStages.map((stage) => {
@@ -260,9 +313,9 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
 
       <div className="row-actions update-actions">
         {canInstall ? <button className="primary" type="button" onClick={() => setAskInstall(true)}><Download size={17} aria-hidden="true" />Cài bản {status?.latest_version}</button> : null}
-        {phase === "failed" || (!installing && message.includes("kết nối lại")) ? <button type="button" onClick={() => void check()} disabled={busy}><RefreshCw size={17} aria-hidden="true" />Thử lại</button> : null}
+        {phase === "failed" || (!installing && Boolean(nextAction) && phase !== "installed") ? <button type="button" onClick={() => void check()} disabled={busy}><RefreshCw size={17} aria-hidden="true" />Thử lại</button> : null}
       </div>
-      {message ? <p className={phase === "failed" ? "reset-result" : "upload-result"} role="status" aria-live="polite">{message}</p> : null}
+      {message ? <div className="update-message" data-tone={messageTone} role={phase === "failed" || nextAction ? "alert" : "status"} aria-live={phase === "failed" ? "assertive" : "polite"}><p>{message}</p>{nextAction ? <p><strong>Việc cần làm:</strong> {nextAction}</p> : null}</div> : null}
       <ConfirmDialog
         open={askInstall}
         title={`Cài bản ${status?.latest_version ?? ""} ngay?`}

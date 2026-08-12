@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -181,6 +182,28 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     assert progress.json()["phase"] == "verifying"
     assert progress.json()["percent"] == 100.0
     assert duplicate.status_code == 409
+
+
+def test_update_progress_hides_technical_error_and_returns_next_action(tmp_path):
+    client, _ = api(tmp_path)
+    status_path = tmp_path / "update-status.json"
+    technical_error = r"Installer exited with code 5 at C:\Users\Administrator\AppData\Local\Temp\installer.exe"
+    api_module.write_update_status(
+        status_path,
+        phase="failed",
+        target_version="2.0.4",
+        bytes_downloaded=100,
+        bytes_total=100,
+        error=technical_error,
+    )
+
+    response = client.get("/api/v1/admin/update/progress")
+
+    assert response.status_code == 200
+    assert response.json()["error"] == "Không thể hoàn tất cài đặt bản cập nhật."
+    assert response.json()["error_action"] == "Bấm “Thử lại” để tải lại gói. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ."
+    assert technical_error not in response.text
+    assert json.loads(status_path.read_text(encoding="utf-8"))["error"] == technical_error
 
 
 def test_installed_local_owner_can_shutdown_app(tmp_path, monkeypatch):
@@ -635,11 +658,40 @@ def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
     static_dir = tmp_path / "web"
     static_dir.mkdir()
     (static_dir / "index.html").write_text("<h1>Ops Cockpit</h1>", encoding="utf-8")
+    (static_dir / "sw.js").write_text(
+        'const CACHE = "tiktok-affiliate-report-shell-__APP_VERSION__";',
+        encoding="utf-8",
+    )
     monkeypatch.setenv("WEB_STATIC_DIR", str(static_dir))
     client, _ = api(tmp_path)
 
     assert client.get("/health").json() == {"status": "ok"}
     assert "Ops Cockpit" in client.get("/").text
+    service_worker = client.get("/sw.js")
+    assert service_worker.status_code == 200
+    assert "__APP_VERSION__" not in service_worker.text
+    assert f"tiktok-affiliate-report-shell-{APP_VERSION}" in service_worker.text
+    assert service_worker.headers["cache-control"] == "no-cache, no-store, must-revalidate"
+
+
+def test_static_export_mount_resolves_flattened_rsc_payloads_without_open_rewrites(tmp_path, monkeypatch):
+    static_dir = tmp_path / "web"
+    analytics = static_dir / "analytics"
+    settings = static_dir / "settings" / "update"
+    (analytics / "__next.analytics").mkdir(parents=True)
+    (settings / "__next.settings" / "update").mkdir(parents=True)
+    (static_dir / "index.html").write_text("<h1>Ops Cockpit</h1>", encoding="utf-8")
+    (analytics / "__next.analytics" / "__PAGE__.txt").write_text("analytics-page", encoding="utf-8")
+    (settings / "__next.settings" / "update.txt").write_text("settings-update", encoding="utf-8")
+    (settings / "__next.settings" / "update" / "__PAGE__.txt").write_text("settings-update-page", encoding="utf-8")
+    monkeypatch.setenv("WEB_STATIC_DIR", str(static_dir))
+    client, _ = api(tmp_path)
+
+    assert client.get("/analytics/__next.analytics.__PAGE__.txt").text == "analytics-page"
+    assert client.get("/settings/update/__next.settings.update.txt").text == "settings-update"
+    assert client.get("/settings/update/__next.settings.update.__PAGE__.txt").text == "settings-update-page"
+    assert client.get("/analytics/__next.analytics.missing.txt").status_code == 404
+    assert client.get("/analytics/__next.analytics...secret.txt").status_code == 404
 
 
 def test_owner_account_crud_hard_delete_with_backup_and_restore(tmp_path):

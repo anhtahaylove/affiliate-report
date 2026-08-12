@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Eye, EyeOff, SlidersHorizontal } from "lucide-react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, SlidersHorizontal } from "lucide-react";
 import {
   AnalyticsResponse,
   ImportHistoryRow,
@@ -62,6 +62,7 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
     },
     "Không thể tải trung tâm điều hành.",
   );
+  const compactDashboard = useCompactDashboard();
 
   if (error) return <Notice text={error} />;
   if (loading || !data) return <Skeleton rows={4} tall label="Đang tải trung tâm điều hành" />;
@@ -86,11 +87,11 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
   const commissionDelta = previous ? summary.actual_commission - previous.actual_commission : null;
   const alerts = buildAlerts(analytics, filters, targetAchievement);
   const layout = preferences.dashboard_layout;
-  const widgetStyle = (id: DashboardWidget) => ({ order: layout.order.indexOf(id), display: layout.hidden.includes(id) ? "none" : undefined });
+  const widgetStyle = (id: DashboardWidget): CSSProperties => ({ order: layout.order.indexOf(id), display: layout.hidden.includes(id) ? "none" : undefined });
 
   return (
     <div className="momentum-dashboard">
-      <DashboardCustomizer preferences={preferences} onPreferencesChange={onPreferencesChange} />
+      <DashboardCustomizer compact={compactDashboard} preferences={preferences} onPreferencesChange={onPreferencesChange} />
       <section className="today-pulse" style={widgetStyle("today_pulse")} data-widget-id="today_pulse" aria-labelledby="today-pulse-title">
         <div className="pulse-heading">
           <div>
@@ -150,39 +151,77 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
         </div>
       </section>
 
-      <section className="momentum-grid insight-grid" style={widgetStyle("trend")} data-widget-id="trend">
-        <article className="canvas-panel trend-canvas">
-          <div className="panel-heading"><div><p className="section-label">Xu hướng</p><h2>Hoa hồng và tiền đã nhận</h2></div><Link className="text-action" href="/analytics">Phân tích sâu</Link></div>
-          {analytics.trend.length ? <CommissionTrendChart rows={analytics.trend} /> : <p className="empty">Chưa có dữ liệu xu hướng trong phạm vi này.</p>}
-          <TrendFallback rows={analytics.trend.slice(-7)} />
-        </article>
-      </section>
-      <section className="momentum-grid insight-grid single-widget" style={widgetStyle("account_contribution")} data-widget-id="account_contribution">
-        <article className="canvas-panel account-canvas">
-          <div className="panel-heading"><div><p className="section-label">Cơ cấu tài khoản</p><h2>Đóng góp theo tài khoản</h2></div></div>
-          {analytics.account_breakdown.length ? <AccountContributionChart rows={analytics.account_breakdown} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
-        </article>
-      </section>
+      <DashboardDisclosure
+        compact={compactDashboard}
+        label="Xu hướng hoa hồng"
+        hint={`${integer.format(analytics.trend.length)} kỳ trong phạm vi`}
+        style={widgetStyle("trend")}
+        widgetId="trend"
+      >
+        <section className="momentum-grid insight-grid">
+          <article className="canvas-panel trend-canvas">
+            <div className="panel-heading"><div><p className="section-label">Xu hướng</p><h2>Hoa hồng và tiền đã nhận</h2></div><Link className="text-action" href="/analytics">Phân tích sâu</Link></div>
+            {analytics.trend.length ? <CommissionTrendChart rows={analytics.trend} /> : <p className="empty">Chưa có dữ liệu xu hướng trong phạm vi này.</p>}
+            <TrendFallback rows={analytics.trend.slice(-7)} />
+          </article>
+        </section>
+      </DashboardDisclosure>
+      <DashboardDisclosure
+        compact={compactDashboard}
+        label="Đóng góp theo tài khoản"
+        hint={`${integer.format(analytics.account_breakdown.length)} tài khoản`}
+        style={widgetStyle("account_contribution")}
+        widgetId="account_contribution"
+      >
+        <section className="momentum-grid insight-grid single-widget">
+          <article className="canvas-panel account-canvas">
+            <div className="panel-heading"><div><p className="section-label">Cơ cấu tài khoản</p><h2>Đóng góp theo tài khoản</h2></div></div>
+            {analytics.account_breakdown.length ? <AccountContributionChart rows={analytics.account_breakdown} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
+          </article>
+        </section>
+      </DashboardDisclosure>
 
-      <section className="momentum-grid settlement-grid single-widget" style={widgetStyle("settlement")} data-widget-id="settlement">
-        <article className="canvas-panel">
-          <div className="panel-heading"><div><p className="section-label">Đối soát</p><h2>Dòng tiền đối soát</h2></div><Link className="text-action" href="/analytics">Mở đối soát</Link></div>
-          <div className="settlement-metrics">
-            <PulseMetric label="Đã quyết toán" value={integer.format(analytics.settlement.settled_lines)} delta={`Trung vị ${analytics.settlement.median_lag_days ?? "—"} ngày`} />
-            <PulseMetric label="Đang chờ" value={integer.format(analytics.settlement.pending_lines)} delta={agingLabel(analytics.settlement.pending_aging)} tone={analytics.settlement.pending_lines ? "warning" : "success"} />
-            <PulseMetric label="Hoàn/không hợp lệ" value={percent((summary.refund_rate ?? 0) + (summary.ineligible_rate ?? 0))} delta={`Mất ${formatMoney(activeKpi?.ineligible_commission)}`} tone="danger" />
-          </div>
-        </article>
-      </section>
-      <section className="momentum-grid settlement-grid single-widget" style={widgetStyle("data_freshness")} data-widget-id="data_freshness">
-        <article className="canvas-panel freshness-canvas">
-          <div className="panel-heading"><div><p className="section-label">Sức khỏe dữ liệu</p><h2>Độ tin cậy dữ liệu</h2></div><Link className="text-action" href="/imports">Kiểm tra import</Link></div>
-          <QualityList analytics={analytics} filters={filters} />
-        </article>
-      </section>
+      <DashboardDisclosure
+        compact={compactDashboard}
+        label="Dòng tiền đối soát"
+        hint={`${integer.format(analytics.settlement.pending_lines)} dòng đang chờ`}
+        style={widgetStyle("settlement")}
+        widgetId="settlement"
+      >
+        <section className="momentum-grid settlement-grid single-widget">
+          <article className="canvas-panel">
+            <div className="panel-heading"><div><p className="section-label">Đối soát</p><h2>Dòng tiền đối soát</h2></div><Link className="text-action" href="/analytics">Mở đối soát</Link></div>
+            <div className="settlement-metrics">
+              <PulseMetric label="Đã quyết toán" value={integer.format(analytics.settlement.settled_lines)} delta={`Trung vị ${analytics.settlement.median_lag_days ?? "—"} ngày`} />
+              <PulseMetric label="Đang chờ" value={integer.format(analytics.settlement.pending_lines)} delta={agingLabel(analytics.settlement.pending_aging)} tone={analytics.settlement.pending_lines ? "warning" : "success"} />
+              <PulseMetric label="Hoàn/không hợp lệ" value={percent((summary.refund_rate ?? 0) + (summary.ineligible_rate ?? 0))} delta={`Mất ${formatMoney(activeKpi?.ineligible_commission)}`} tone="danger" />
+            </div>
+          </article>
+        </section>
+      </DashboardDisclosure>
+      <DashboardDisclosure
+        compact={compactDashboard}
+        label="Độ tin cậy dữ liệu"
+        hint={qualitySummary(analytics)}
+        style={widgetStyle("data_freshness")}
+        widgetId="data_freshness"
+      >
+        <section className="momentum-grid settlement-grid single-widget">
+          <article className="canvas-panel freshness-canvas">
+            <div className="panel-heading"><div><p className="section-label">Sức khỏe dữ liệu</p><h2>Độ tin cậy dữ liệu</h2></div><Link className="text-action" href="/imports">Kiểm tra import</Link></div>
+            <QualityList analytics={analytics} filters={filters} />
+          </article>
+        </section>
+      </DashboardDisclosure>
 
-      <section style={widgetStyle("recent_imports")} data-widget-id="recent_imports"><RecentImports rows={history} /></section>
-      <div className="dashboard-fixed-footer"><AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} /></div>
+      <DashboardDisclosure compact={compactDashboard} label="Lần nhập gần đây" hint={`${integer.format(history.length)} lần gần nhất`} style={widgetStyle("recent_imports")} widgetId="recent_imports">
+        <RecentImports rows={history} />
+      </DashboardDisclosure>
+      <div className="dashboard-fixed-footer">
+        <DashboardDisclosure compact={compactDashboard} label="Hiệu suất chi tiết" hint={`${integer.format(overview.filter((row) => row.account !== "ALL").length)} tài khoản`}>
+          <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />
+        </DashboardDisclosure>
+      </div>
     </div>
   );
 }
@@ -198,7 +237,7 @@ const WIDGET_LABELS: Record<DashboardWidget, string> = {
   recent_imports: "Lần nhập gần đây",
 };
 
-function DashboardCustomizer({ preferences, onPreferencesChange }: { preferences: UiPreferences; onPreferencesChange: (changes: Partial<Pick<UiPreferences, "dashboard_layout">>) => Promise<void> }) {
+function DashboardCustomizer({ compact, preferences, onPreferencesChange }: { compact: boolean; preferences: UiPreferences; onPreferencesChange: (changes: Partial<Pick<UiPreferences, "dashboard_layout">>) => Promise<void> }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const layout = preferences.dashboard_layout;
@@ -229,7 +268,7 @@ function DashboardCustomizer({ preferences, onPreferencesChange }: { preferences
   }
 
   return (
-    <details className="dashboard-customizer panel">
+    <details className="dashboard-customizer panel" style={compact ? { order: 98 } : undefined}>
       <summary><span><SlidersHorizontal size={17} aria-hidden="true" /><strong>Tùy chỉnh dashboard</strong></span><small>Ẩn, hiện hoặc đổi thứ tự widget</small></summary>
       <div className="dashboard-widget-list" aria-busy={saving}>
         {layout.order.map((id, index) => (
@@ -244,6 +283,57 @@ function DashboardCustomizer({ preferences, onPreferencesChange }: { preferences
         ))}
       </div>
       {error ? <p className="filter-error" role="alert">{error}</p> : null}
+    </details>
+  );
+}
+
+function useCompactDashboard() {
+  const [compact, setCompact] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const sync = () => setCompact(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
+  return compact;
+}
+
+function DashboardDisclosure({
+  children,
+  compact,
+  hint,
+  label,
+  style,
+  widgetId,
+}: {
+  children: ReactNode;
+  compact: boolean;
+  hint: string;
+  label: string;
+  style?: CSSProperties;
+  widgetId?: DashboardWidget;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const open = !compact || expanded;
+
+  return (
+    <details
+      className="mobile-dashboard-disclosure"
+      data-widget-id={widgetId}
+      open={open}
+      style={style}
+      onToggle={(event) => {
+        if (compact) setExpanded(event.currentTarget.open);
+      }}
+    >
+      <summary className="mobile-dashboard-summary" hidden={!compact}>
+        <span><strong>{label}</strong><small>{hint}</small></span>
+        <ChevronDown className="mobile-dashboard-chevron" size={18} aria-hidden="true" />
+      </summary>
+      <div className="mobile-dashboard-content">{children}</div>
     </details>
   );
 }
@@ -327,3 +417,8 @@ function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpi
 function deltaMoney(value: number) { return `${value >= 0 ? "+" : "−"}${formatMoney(Math.abs(value))} so kỳ trước`; }
 function deltaCount(value: number) { return `${value >= 0 ? "+" : "−"}${integer.format(Math.abs(value))} đơn so kỳ trước`; }
 function agingLabel(rows: AnalyticsResponse["settlement"]["pending_aging"]) { return rows.length ? rows.map((row) => `${row.bucket}: ${integer.format(row.count)}`).join(" · ") : "Không có tồn đọng"; }
+function qualitySummary(analytics: AnalyticsResponse) {
+  const quality = analytics.data_quality;
+  const issues = quality.unknown_status_rows + quality.non_vnd_rows + quality.missing_settlement_date_rows + quality.import_rejected;
+  return issues ? `${integer.format(issues)} điểm cần kiểm tra` : "Không có cảnh báo";
+}

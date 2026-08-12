@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Đang chờ ứng dụng kết nối lại</title>
+    <style>
+      :root { color-scheme: light dark; font-family: "Segoe UI", system-ui, sans-serif; }
+      body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: #f3f4f0; color: #14201f; }
+      main { width: min(460px, calc(100% - 32px)); padding: 28px; box-sizing: border-box; border: 1px solid #cad5d1; border-radius: 16px; background: #fff; }
+      h1 { margin: 0 0 10px; font-size: clamp(1.35rem, 5vw, 1.8rem); }
+      p { margin: 0 0 20px; color: #4f5e5b; line-height: 1.6; }
+      button { min-height: 44px; padding: 0 16px; border: 1px solid #007985; border-radius: 10px; background: #007985; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+      button:focus-visible { outline: 3px solid #00a9b7; outline-offset: 3px; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #101817; color: #f4f7f5; }
+        main { border-color: #43524f; background: #1a2423; }
+        p { color: #bdc9c6; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Ứng dụng đang kết nối lại</h1>
+      <p>Quá trình cập nhật hoặc khởi động lại có thể tạm ngắt kết nối. Hãy thử tải lại sau ít giây.</p>
+      <button type="button" onclick="location.reload()">Thử tải lại</button>
+    </main>
+  </body>
+</html>
