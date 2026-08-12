@@ -1,0 +1,8 @@
+# Manifest cập nhật và chữ ký của nó phải giữ nguyên từng byte. Chữ ký Ed25519 phủ đúng chuỗi
+# byte của stable.json, nên chỉ cần git đổi LF thành CRLF một lần là mọi máy từ chối bản cập
+# nhật. Đánh dấu -text để git không bao giờ đụng vào ký tự xuống dòng của hai file này.
+stable.json -text
+stable.json.sig -text
+
+# Bootstrap updater đã ký theo SHA-256 trong manifest; đổi dòng là lệch hash.
+packaging/TikTokAffiliateUpdater-*.ps1 -text
