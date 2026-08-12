@@ -100,7 +100,7 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert "gh release create $tag @assets --repo $repo --draft --latest=false" in workflow
     assert "gh release edit $tag --repo $repo --draft=false --prerelease" in workflow
     assert '$public.isDraft -or !$public.isPrerelease -or $public.tagName -ne $tag' in workflow
-    assert "gh release edit $tag --repo $repo --prerelease=false --latest" in workflow
+    assert "gh release edit $tag --repo $repo --draft=false --prerelease=false --latest" in workflow
     assert "verify_update_manifest_bytes" in workflow
     assert "Public mirror checksum mismatch" in workflow
     assert "Private release $tag is already published" in workflow
@@ -132,12 +132,13 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     anonymous_publish = workflow.index("gh release edit $tag --repo $repo --draft=false", promote)
     anonymous_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/$tag/$asset"', promote)
     feed_push = workflow.index("git push", promote)
-    # Feed và asset nay ở hai repo khác nhau: feed ở repo nguồn ($feedRepo), asset vẫn ở repo
-    # cũ ($repo). Thứ tự các bước vẫn là thứ đáng canh, chỉ đổi biến.
     raw_download = workflow.index('Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$feedRepo/main/stable.json?', promote)
-    private_publish = workflow.index("gh release edit $tag --draft=false", promote)
-    latest = workflow.index("gh release edit $tag --repo $repo --prerelease=false --latest", promote)
-    assert anonymous_publish < anonymous_download < feed_push < raw_download < private_publish < latest
+    # Một repo duy nhất: bản "riêng" và bản "công khai" là cùng một release, nên gỡ nháp, gỡ cờ
+    # tiền phát hành và đánh dấu mới nhất gộp thành một lệnh. Nó phải nằm SAU khi feed đã lên
+    # và đã đối chiếu qua raw — thứ tự đó mới là thứ đáng canh.
+    latest = workflow.index("gh release edit $tag --repo $repo --draft=false --prerelease=false --latest", promote)
+    private_verify = workflow.index("Private release publish verification failed", promote)
+    assert anonymous_publish < anonymous_download < feed_push < raw_download < latest < private_verify
 
 
 def test_all_workflows_have_no_node20_action_versions():
@@ -185,7 +186,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.17"
+    assert APP_VERSION == "2.0.18"
     assert 'default: "2.0.11"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
@@ -272,7 +273,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "-f release_nonce=$releaseNonce" in release
     assert '$_.displayTitle -eq $smokeTitle -and $_.headSha -eq $releaseSha' in release
     assert "Public updater UI gate did not pass 5/5" in release
-    assert release.index("gh workflow run windows-updater-ui-smoke.yml") < release.index("gh release edit $tag --repo $repo --prerelease=false --latest")
+    assert release.index("gh workflow run windows-updater-ui-smoke.yml") < release.index("gh release edit $tag --repo $repo --draft=false --prerelease=false --latest")
     assert "SHA256SUMS must contain exactly the installer and updater bootstrap" in release
     assert "Candidate SHA256SUMS must contain exactly the installer and updater bootstrap" in candidate
     assert "candidate-bootstrap-runtime:" in candidate
@@ -295,7 +296,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.0.17"' in updater_ui
+    assert 'default: "2.0.18"' in updater_ui
     assert 'default: "2.0.11"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui

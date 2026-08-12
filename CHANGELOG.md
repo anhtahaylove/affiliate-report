@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.0.18 - 2026-08-13
+
+Các bản từ 2.0.12 đến 2.0.17 đều không phát hành được nên chưa từng tới máy nào; toàn bộ nội dung của chúng nằm trong bản này.
+
+**Tải gói cập nhật không còn hỏng vì một cú rớt mạng.** Gói cài nặng khoảng 46 MB; trước đây chỉ cần một lần đứt kết nối là cả bản cập nhật dừng lại và bạn phải tự bấm **Thử lại**. Giờ ứng dụng tự tải lại vài lần trước khi báo hỏng. Nếu thật sự không tải được thì vẫn báo như cũ.
+
+**Mọi thứ về một kho duy nhất.** Trước đây bản cài và thông tin cập nhật nằm ở một kho riêng, tách khỏi mã nguồn. Từ bản này chỉ còn một nơi. Bạn không phải làm gì; chữ ký vẫn được kiểm tra y như cũ.
+
+**Tổng quan gọn lại một phần ba.** Những khối gần như luôn im lặng co lại còn một dòng có số tóm tắt, bấm vào mở ra đầy đủ như cũ — trung tâm hành động khi không có cảnh báo, dòng tiền đối soát khi không còn dòng chờ, độ tin cậy dữ liệu khi mọi chỉ số bằng 0, đóng góp theo tài khoản khi bạn chỉ có một tài khoản.
+
+Nhắc thiết lập khi chỉ còn sót một bước nay là một dòng, thay vì cả khung ba bước với hai dấu "Hoàn tất". Biểu đồ xu hướng dùng hết chiều ngang.
+
+Đo trên cùng dữ liệu: trang Tổng quan cao **3.308 điểm ảnh xuống còn 2.166**, giảm 35%.
+
 ## v2.0.17 - 2026-08-13
 
 Các bản từ 2.0.12 đến 2.0.16 đều không phát hành được nên chưa từng tới máy nào; toàn bộ nội dung của chúng nằm trong bản này.
