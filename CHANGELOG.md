@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.5 - 2026-08-12
+
+**Account thân thiện nhưng định danh vẫn ổn định.** Tên hiển thị account giờ là nhãn chính và code bất biến là thông tin phụ trên Dashboard, Analytics, Orders, Imports, Targets và Users. Thêm, đổi tên, lưu trữ, kích hoạt lại hoặc xóa account cập nhật metadata đang hiển thị ngay trong App Shell; nếu đồng bộ lại lỗi, ứng dụng giữ dữ liệu đã xác minh gần nhất và cho phép thử lại thay vì reload mất trạng thái.
+
+**Luồng bắt đầu rõ hơn cho người dùng mới.** Dashboard hướng dẫn theo đúng quyền, account, lịch sử import và target tháng hiện tại. Trang Import khóa thao tác khi chưa có account, giải thích bước cần làm và sau khi upload thành công đưa hành động trực tiếp sang Dashboard hoặc Mục tiêu.
+
+**Release candidate được cài thử trước khi merge.** Pull request cùng repo thay đổi runtime hoặc installer sẽ build đúng PR merge SHA, chỉ lưu installer cùng SHA256SUMS và chạy fresh smoke lẫn nâng cấp `2.0.4 -> 2.0.5` bằng cùng oracle Windows hiện hữu. Fork không được cấp quyền chạy artifact/install và phải chuyển commit đã review sang branch cùng repo trước merge.
+
+**Updater có smoke qua đúng giao diện thật.** Workflow thủ công sau release cài bản cũ, tạo marker, dùng Playwright bấm **Kiểm tra lại** và **Cài bản cập nhật**, chờ ứng dụng reconnect rồi xác minh phiên bản, trạng thái `installed` và dữ liệu marker còn nguyên. Workflow không dùng token ghi feed, không chạy installer mới trực tiếp và chỉ lưu screenshot/summary đã scrub.
+
 ## v2.0.4 - 2026-08-12
 
 **Điều hướng static export và cache sau cập nhật ổn định hơn.** Backend phục vụ đúng các RSC payload do Next.js static export tạo ra thay vì để client nhận `404`; resolver chỉ ánh xạ file hợp lệ trong static root. Service worker dùng cache namespace theo phiên bản ứng dụng, bao phủ đủ route Settings và hiển thị trang kết nối lại riêng khi offline thay vì trả nhầm Dashboard.

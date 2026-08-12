@@ -6,6 +6,7 @@ on:
       - "v*.*.*"
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -28,6 +29,20 @@ jobs:
     env:
       POSTGRES_TEST_URL: postgresql+psycopg://postgres:postgres@localhost:5432/tiktok_affiliate_report_test
     steps:
+      - name: Require successful installer smoke for this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          run_count="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/windows-installer-smoke.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed&per_page=100" \
+            --jq '[.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success")] | length')"
+          if [ "$run_count" -lt 1 ]; then
+            echo "::error::Tag commit $RELEASE_SHA has no successful post-merge Windows installer smoke on main. Wait for that workflow, then rerun this release."
+            exit 1
+          fi
+          echo "Exact commit $RELEASE_SHA has a successful post-merge Windows installer smoke." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
