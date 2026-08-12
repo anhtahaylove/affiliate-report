@@ -576,12 +576,197 @@ def test_schedule_installer_fails_without_helper_handshake(tmp_path, monkeypatch
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     shutdown = threading.Event()
 
-    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: None)
+    class SlowHelper:
+        def __init__(self):
+            self.terminated = False
+            self.waited = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            assert timeout == 5
+            self.waited = True
+            return 0
+
+    helper = SlowHelper()
+    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: helper)
     monkeypatch.setattr(updater, "_wait_for_helper_handshake", lambda *_args: (_ for _ in ()).throw(updater.UpdateError("no handshake")))
 
     with pytest.raises(updater.UpdateError, match="no handshake"):
         updater.schedule_installer(installer, expected, tmp_path / "updater.log", shutdown.set, status_path=tmp_path / "update-status.json", target_version="1.2.1", delay_seconds=0)
     assert not shutdown.is_set()
+    assert helper.terminated
+    assert helper.waited
+
+
+def test_stop_update_helper_escalates_when_terminate_fails():
+    class Helper:
+        killed = False
+        waited = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            raise OSError("terminate denied")
+
+        def kill(self):
+            self.killed = True
+
+        def wait(self, timeout):
+            assert timeout == 5
+            self.waited = True
+            return 0
+
+    helper = Helper()
+
+    assert updater._stop_update_helper(helper) is None
+    assert helper.killed
+    assert helper.waited
+
+
+def test_schedule_installer_preserves_handshake_error_when_helper_cannot_stop(tmp_path, monkeypatch):
+    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer.write_bytes(b"installer")
+    expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
+    log_path = tmp_path / "updater.log"
+
+    class StuckHelper:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout):
+            raise subprocess.TimeoutExpired("powershell.exe", timeout)
+
+        def kill(self):
+            return None
+
+    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: StuckHelper())
+    monkeypatch.setattr(
+        updater,
+        "_wait_for_helper_handshake",
+        lambda *_args: (_ for _ in ()).throw(updater.UpdateError("no handshake")),
+    )
+
+    with pytest.raises(updater.UpdateError, match="no handshake") as caught:
+        updater.schedule_installer(
+            installer,
+            expected,
+            log_path,
+            lambda: None,
+            status_path=tmp_path / "update-status.json",
+            target_version="1.2.1",
+            delay_seconds=0,
+        )
+
+    assert any("không thoát sau khi terminate/kill" in note for note in caught.value.__notes__)
+    assert "không thoát sau khi terminate/kill" in log_path.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
+def test_helper_handshake_tolerates_real_slow_windows_powershell(tmp_path):
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    status_path = tmp_path / "update-status.json"
+    probe = tmp_path / "slow-handshake.ps1"
+    probe.write_text(
+        r'''
+param([string]$StatusPath)
+Start-Sleep -Seconds 8
+$json = '{"schema":"tiktok-affiliate-report.update-status.v1","phase":"waiting_for_exit","target_version":"2.0.6","bytes_downloaded":1,"bytes_total":1,"error":null,"updated_at":"2026-08-12T00:00:00Z"}'
+[System.IO.File]::WriteAllText($StatusPath, $json, [System.Text.UTF8Encoding]::new($false))
+''',
+        encoding="utf-8-sig",
+    )
+    process = subprocess.Popen(
+        [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(status_path)],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    started = time.monotonic()
+    try:
+        updater._wait_for_helper_handshake(status_path, "2.0.6", tmp_path / "bootstrap.log", timeout_seconds=15)
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=5)
+
+    elapsed = time.monotonic() - started
+    assert 8 <= elapsed < 15
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
+def test_stop_update_helper_terminates_real_windows_powershell():
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    process = subprocess.Popen(
+        [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60"],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    try:
+        assert updater._stop_update_helper(process) is None
+        assert process.poll() is not None
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
+def test_helper_handshake_tolerates_slow_powershell_cold_start(tmp_path, monkeypatch):
+    status_path = tmp_path / "update-status.json"
+    clock = {"now": 0.0, "reads": 0}
+
+    def monotonic():
+        return clock["now"]
+
+    def sleep(seconds):
+        clock["now"] += seconds
+
+    def read_status(_path):
+        clock["reads"] += 1
+        phase = "waiting_for_exit" if clock["now"] >= 8.0 else "verifying"
+        return {
+            "schema": updater.UPDATE_STATUS_SCHEMA,
+            "phase": phase,
+            "target_version": "2.0.6",
+            "bytes_downloaded": 1,
+            "bytes_total": 1,
+            "error": None,
+            "updated_at": "2026-08-12T00:00:00Z",
+        }
+
+    monkeypatch.setattr(updater.time, "monotonic", monotonic)
+    monkeypatch.setattr(updater.time, "sleep", sleep)
+    monkeypatch.setattr(updater, "read_update_status", read_status)
+
+    updater._wait_for_helper_handshake(status_path, "2.0.6", tmp_path / "bootstrap.log")
+
+    assert clock["now"] >= 8.0
+    assert clock["reads"] > 50
+
+
+def test_helper_handshake_checks_ready_status_once_at_deadline(tmp_path, monkeypatch):
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(updater.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(updater.time, "sleep", lambda seconds: clock.update(now=clock["now"] + seconds))
+    monkeypatch.setattr(
+        updater,
+        "read_update_status",
+        lambda _path: {
+            "phase": "waiting_for_exit" if clock["now"] >= 1.0 else "verifying",
+            "target_version": "2.0.6",
+            "error": None,
+        },
+    )
+
+    updater._wait_for_helper_handshake(tmp_path / "status.json", "2.0.6", tmp_path / "bootstrap.log", timeout_seconds=1.0)
+
+    assert clock["now"] == pytest.approx(1.0)
 
 
 def test_version_validation():
