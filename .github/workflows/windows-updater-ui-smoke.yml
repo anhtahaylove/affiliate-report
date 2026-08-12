@@ -1,0 +1,81 @@
+name: Windows updater UI smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      previous_version:
+        description: Public version installed before using the in-app updater
+        required: true
+        default: "2.0.4"
+      current_version:
+        description: Public version expected from the signed stable feed
+        required: true
+        default: "2.0.5"
+
+permissions:
+  contents: read
+
+jobs:
+  updater-ui-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report-updates
+      PREVIOUS_VERSION: ${{ inputs.previous_version }}
+      CURRENT_VERSION: ${{ inputs.current_version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Validate public versions and source contract
+        shell: pwsh
+        run: |
+          $previousVersion = $env:PREVIOUS_VERSION
+          $currentVersion = $env:CURRENT_VERSION
+          if ($previousVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid previous_version: $previousVersion" }
+          if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid current_version: $currentVersion" }
+          if ([version]$previousVersion -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
+          $sourceVersion = & python -c "from tiktok_affiliate_report.version import APP_VERSION; print(APP_VERSION)"
+          if ($sourceVersion -ne $currentVersion) { throw "Workflow source version $sourceVersion does not match current_version $currentVersion" }
+      - name: Install Playwright Chromium
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          pnpm --dir web exec playwright install chromium
+      - name: Download public installers and checksums
+        shell: pwsh
+        run: |
+          $repo = $env:PUBLIC_UPDATE_REPO
+          foreach ($version in @($env:PREVIOUS_VERSION, $env:CURRENT_VERSION)) {
+            Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$version/TikTokAffiliateReportSetup-v$version.exe" -OutFile (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$version.exe")
+            Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$version/SHA256SUMS.txt" -OutFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$version.txt")
+          }
+      - name: Run real in-app updater flow
+        shell: pwsh
+        run: |
+          $previousVersion = $env:PREVIOUS_VERSION
+          $currentVersion = $env:CURRENT_VERSION
+          .\scripts\ci\windows_updater_ui_smoke.ps1 `
+            -PreviousInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$previousVersion.exe") `
+            -PreviousVersion $previousVersion `
+            -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$previousVersion.txt") `
+            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentVersion $currentVersion `
+            -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$currentVersion.txt") `
+            -EvidenceDir (Join-Path $env:RUNNER_TEMP "updater-ui-evidence")
+      - name: Upload scrubbed updater UI evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: updater-ui-smoke-evidence
+          path: ${{ runner.temp }}/updater-ui-evidence
+          if-no-files-found: warn
+          retention-days: 7

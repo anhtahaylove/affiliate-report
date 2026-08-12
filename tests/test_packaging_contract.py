@@ -76,7 +76,7 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert 'pystray.MenuItem("Thoát ứng dụng"' in Path("desktop_launcher.py").read_text(encoding="utf-8")
     assert "Flags: nowait postinstall skipifsilent" in installer
     assert 'tags:\n      - "v*.*.*"' in workflow
-    assert "permissions:\n  contents: read" in workflow
+    assert "permissions:\n  actions: read\n  contents: read" in workflow
     assert "windows-installer:\n    needs: verify" in workflow
     assert "windows-installer:\n    needs: verify\n    runs-on: windows-latest\n    permissions:\n      contents: write" in workflow
     assert "POSTGRES_TEST_URL" in workflow
@@ -159,7 +159,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert 'default: "2.0.3"' in workflow
+    assert APP_VERSION == "2.0.5"
+    assert 'default: "2.0.4"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -184,6 +185,85 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "daily_target_commission" in smoke
     assert "@{ target_commission = $Value }" not in smoke
     assert "v$PreviousVersion legacy account is missing" not in smoke
+
+
+def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
+    candidate = Path(".github/workflows/windows-installer-smoke.yml").read_text(encoding="utf-8")
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    updater_ui = Path(".github/workflows/windows-updater-ui-smoke.yml").read_text(encoding="utf-8")
+    updater_smoke = Path("scripts/ci/windows_updater_ui_smoke.ps1").read_text(encoding="utf-8")
+    browser_smoke = Path("web/scripts/windows-updater-ui-smoke.mjs").read_text(encoding="utf-8")
+
+    assert "pull_request:" in candidate
+    assert "push:" in candidate
+    assert "branches: [main]" in candidate
+    for runtime_path in (
+        '"tiktok_affiliate_report/**"',
+        '"web/**"',
+        '"packaging/**"',
+        '"scripts/**"',
+        '"requirements*.txt"',
+        '"web/pnpm-lock.yaml"',
+        '"BUILD_EXE.bat"',
+        '"CHANGELOG.md"',
+    ):
+        assert runtime_path in candidate
+    assert "github.event.pull_request.head.repo.full_name" in candidate
+    assert "Fork pull requests cannot run installer candidates" in candidate
+    assert "pull_request_target" not in candidate
+    assert "workflow_run" not in candidate
+    assert "UPDATE_SIGNING_KEY_B64" not in candidate
+    assert "UPDATE_FEED_TOKEN" not in candidate
+    assert "EXPECTED_SHA: ${{ github.sha }}" in candidate
+    assert "$actualSha = git rev-parse HEAD" in candidate
+    assert "Candidate checkout does not match PR merge SHA" in candidate
+    assert "actions/upload-artifact@v7" in candidate
+    assert "actions/download-artifact@v8" in candidate
+    assert "retention-days: 3" in candidate
+    assert "candidate-release-gate:" in candidate
+    assert "github.event_name == 'push'" in candidate
+    assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Fresh" in candidate
+    assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Upgrade" in candidate
+    assert "TikTokAffiliateReportSetup-v*.exe" in candidate
+    assert "SHA256SUMS.txt" in candidate
+    assert "stable.json" not in candidate
+    assert ".db" not in candidate
+
+    assert "actions: read" in release
+    assert "Require successful installer smoke for this exact main commit" in release
+    assert "head_sha=$RELEASE_SHA&event=push&status=completed" in release
+    assert 'select(.head_branch == "main" and .conclusion == "success")' in release
+    assert "has no successful post-merge Windows installer smoke on main" in release
+
+    assert "workflow_dispatch:" in updater_ui
+    assert "pull_request:" not in updater_ui
+    assert "permissions:\n  contents: read" in updater_ui
+    assert 'default: "2.0.5"' in updater_ui
+    assert 'default: "2.0.4"' in updater_ui
+    assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
+    assert "UPDATE_FEED_TOKEN" not in updater_ui
+    assert "actions/upload-artifact@v7" in updater_ui
+    assert "pnpm --dir web exec playwright install chromium" in updater_ui
+    assert "windows_updater_ui_smoke.ps1" in updater_ui
+
+    assert "This destructive updater UI smoke only runs on an ephemeral GitHub Actions runner." in updater_smoke
+    assert "Assert-Installer $CurrentInstaller $CurrentVersion $CurrentChecksumFile" in updater_smoke
+    assert "Install-App $PreviousInstaller" in updater_smoke
+    assert "Install-App $CurrentInstaller" not in updater_smoke
+    assert "UPDATER_SMOKE" in updater_smoke
+    assert "pnpm --dir web exec node scripts/windows-updater-ui-smoke.mjs" in updater_smoke
+
+    assert 'getByRole("button", { name: "Kiểm tra lại" })' in browser_smoke
+    assert 'getByRole("button", { name: `Cài bản ${currentVersion}` })' in browser_smoke
+    assert 'getByRole("button", { name: "Cài bản cập nhật" })' in browser_smoke
+    assert 'phase !== "installed"' in browser_smoke
+    assert "observeDisconnectAndRecovery" in browser_smoke
+    assert "Updater never produced an observable application disconnect." in browser_smoke
+    assert "disconnect_observed: true" in browser_smoke
+    assert "disconnected_at" in browser_smoke
+    assert "recovered_at" in browser_smoke
+    assert "UPDATER_SMOKE" in browser_smoke
+    assert "screenshot" in browser_smoke
 
 
 def test_settings_data_page_is_not_ignored():
