@@ -5,6 +5,7 @@ import { ApiError, CurrentUser, dailyReportExportUrl, loadCurrentUser, loadMeta,
 import { AppShell, AuthCard } from "@/components/app-shell";
 import { FilterBar, useUrlFilters } from "@/components/filters";
 import { Notice, canWrite, isOwner } from "@/components/ui";
+import { UpdateBanner } from "@/components/update-banner";
 import { DashboardHome } from "@/components/pages/dashboard";
 import { AnalyticsPage } from "@/components/pages/analytics";
 import { OrdersPage } from "@/components/pages/orders";
@@ -90,6 +91,7 @@ export function OperationsPage({ route }: { route: RouteKind }) {
 
   return (
     <AppShell {...shellProps} heading={<div className="page-heading"><h1>{pageMeta.title}</h1><p className="subtle">{pageMeta.copy}</p></div>}>
+      <UpdateBanner capability={metaData.capabilities.update_check} onUpdatePage={route === "update"} />
       {(["dashboard", "analytics", "orders"] as RouteKind[]).includes(route) ? <SavedViews route={route as "dashboard" | "analytics" | "orders"} /> : null}
       {pageMeta.filters ? <FilterBar accounts={metaData.accounts} directory={accountDirectory} statuses={route === "targets" ? [] : metaData.statuses} showSearch={pageMeta.search} actions={route === "dashboard" ? <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a> : null} /> : null}
       {route === "dashboard" ? <DashboardHome user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}

@@ -169,8 +169,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.7"
-    assert 'default: "2.0.6"' in workflow
+    assert APP_VERSION == "2.0.8"
+    assert 'default: "2.0.7"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -271,8 +271,9 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "Release-gated runs require a unique 32-character hexadecimal nonce" in updater_ui
     assert "ref: ${{ inputs.release_sha || github.sha }}" in updater_ui
     assert "Workflow source SHA" in updater_ui
+    # Cặp canary v2.0.8: v2.0.7 tự cài v2.0.8 bằng chính bootstrap độc lập đã ký của nó.
+    assert 'default: "2.0.8"' in updater_ui
     assert 'default: "2.0.7"' in updater_ui
-    assert 'default: "2.0.6"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui
