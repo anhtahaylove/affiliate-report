@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import functools
 import hashlib
 import io
 import json
@@ -1148,3 +1149,51 @@ def test_bootstrap_handshake_rejects_stale_or_mismatched_ack(tmp_path):
 def test_version_validation():
     with pytest.raises(updater.UpdateError, match="Phiên bản"):
         updater._parse_version("1.2")
+
+
+def test_status_write_survives_a_concurrent_reader_holding_the_file(tmp_path):
+    """Giao diện hỏi /progress mỗi 750 ms trong lúc cài, mà endpoint đó đọc đúng file này.
+
+    Trên Windows os.replace ném PermissionError nếu file đích đang mở, kể cả chỉ mở để đọc.
+    Đo trên gate cập nhật thật: 2 trong 5 lần cài hỏng ngay ở lần ghi trạng thái đầu tiên với
+    lỗi "Không thể ghi trạng thái cập nhật." và cả bản cập nhật bị bỏ dở.
+    """
+    status_path = tmp_path / "update-status.json"
+    updater.write_update_status(status_path, phase="downloading", target_version="9.9.9")
+
+    released = threading.Event()
+    opened = threading.Event()
+
+    def hold_open() -> None:
+        with status_path.open("r", encoding="utf-8") as handle:
+            handle.read()
+            opened.set()
+            released.wait(2)
+
+    reader = threading.Thread(target=hold_open, daemon=True)
+    reader.start()
+    assert opened.wait(2)
+    timer = threading.Timer(0.2, released.set)
+    timer.start()
+    try:
+        updater.write_update_status(status_path, phase="installing", target_version="9.9.9")
+    finally:
+        released.set()
+        timer.cancel()
+        reader.join(2)
+
+    assert json.loads(status_path.read_text(encoding="utf-8"))["phase"] == "installing"
+
+
+def test_status_write_still_reports_failure_when_the_file_never_frees_up(tmp_path, monkeypatch):
+    """Thử lại là để vượt qua va chạm khoảnh khắc, không phải để nuốt lỗi thật."""
+    status_path = tmp_path / "update-status.json"
+
+    def always_denied(source, destination):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(updater.os, "replace", always_denied)
+    # Rút cửa sổ thử lại để test không phải chờ hết 2 giây thật.
+    monkeypatch.setattr(updater, "_replace_with_retry", functools.partial(updater._replace_with_retry, timeout=0.05))
+    with pytest.raises(updater.UpdateError, match="Không thể ghi trạng thái cập nhật."):
+        updater.write_update_status(status_path, phase="downloading", target_version="9.9.9")
