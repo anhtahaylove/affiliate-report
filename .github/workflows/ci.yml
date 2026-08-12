@@ -1,8 +1,18 @@
 name: CI
 
 on:
+  # Không lọc nhánh thì mỗi commit trên nhánh PR chạy CI hai lần cho cùng một SHA — đo được
+  # 22/51 run gần nhất là trùng lặp thuần. Lọc nhánh xong: nhánh PR chỉ chạy qua pull_request,
+  # main chỉ chạy qua push.
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+
+# Đẩy liên tiếp thì huỷ run cũ thay vì để hai run cùng chạy tới hết.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
