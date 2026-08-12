@@ -17,6 +17,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
 
 $installDir = Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport'
 $appExe = Join-Path $installDir 'TikTokAffiliateReport.exe'
+$dataDir = Join-Path $installDir 'data'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E729344A-643D-4B99-98B4-455B79060530}_is1'
 $markerCode = 'UPDATER_SMOKE'
 $markerMonth = '2099-11'
@@ -89,6 +90,44 @@ function Stop-App {
     throw 'Installed application processes did not stop.'
 }
 
+function ConvertTo-ScrubbedUpdaterText([string]$Text) {
+    $result = $Text
+    foreach ($replacement in @(
+        @{ Value = $installDir; Label = '[install dir]' },
+        @{ Value = $env:RUNNER_TEMP; Label = '[runner temp]' },
+        @{ Value = $env:LOCALAPPDATA; Label = '[local app data]' }
+    )) {
+        if ($replacement.Value) {
+            $result = $result.Replace([string]$replacement.Value, [string]$replacement.Label, [System.StringComparison]::OrdinalIgnoreCase)
+        }
+    }
+    $result = [regex]::Replace($result, '(?i)(token|secret|authorization)\s*[=:]\s*[^\s&]+', '$1=[redacted]')
+    return $result
+}
+
+function Export-ScrubbedUpdaterDiagnostics {
+    New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
+    $updateDir = Join-Path $dataDir "updates\v$CurrentVersion"
+    $sources = @(
+        @{ Path = (Join-Path $dataDir 'update-status.json'); Name = 'diagnostic-update-status.json' },
+        @{ Path = (Join-Path $dataDir 'updater.log'); Name = 'diagnostic-updater.log' },
+        @{ Path = (Join-Path $updateDir 'updater-bootstrap.log'); Name = 'diagnostic-updater-bootstrap.log' },
+        @{ Path = (Join-Path $updateDir 'installer.log'); Name = 'diagnostic-installer.log' },
+        @{ Path = (Join-Path $dataDir 'launcher.log'); Name = 'diagnostic-launcher.log' }
+    )
+    foreach ($source in $sources) {
+        if (!(Test-Path -LiteralPath $source.Path -PathType Leaf)) { continue }
+        try {
+            $content = Get-Content -LiteralPath $source.Path -Raw -ErrorAction Stop
+            if ($content.Length -gt 65536) { $content = $content.Substring($content.Length - 65536) }
+            $scrubbed = ConvertTo-ScrubbedUpdaterText $content
+            Set-Content -LiteralPath (Join-Path $EvidenceDir $source.Name) -Value $scrubbed -Encoding utf8
+        } catch {
+            Set-Content -LiteralPath (Join-Path $EvidenceDir ($source.Name + '.unavailable.txt')) -Value 'Diagnostic file could not be read.' -Encoding utf8
+        }
+    }
+}
+
 function Set-Marker {
     $meta = Invoke-RestMethod "$baseUrl/api/v1/meta" -TimeoutSec 10
     if ($markerCode -notin @($meta.accounts)) {
@@ -145,6 +184,7 @@ try {
 - Final phase: installed
 "@ >> $env:GITHUB_STEP_SUMMARY
 } finally {
+    Export-ScrubbedUpdaterDiagnostics
     Remove-Item Env:\UPDATER_BASE_URL, Env:\PREVIOUS_VERSION, Env:\CURRENT_VERSION, Env:\UPDATER_EVIDENCE_DIR -ErrorAction SilentlyContinue
     Stop-App
 }

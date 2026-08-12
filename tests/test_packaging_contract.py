@@ -255,12 +255,18 @@ def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "Install-App $CurrentInstaller" not in updater_smoke
     assert "UPDATER_SMOKE" in updater_smoke
     assert "pnpm --dir web exec node scripts/windows-updater-ui-smoke.mjs" in updater_smoke
+    assert "Export-ScrubbedUpdaterDiagnostics" in updater_smoke
+    assert "update-status.json" in updater_smoke
+    assert "updater-bootstrap.log" in updater_smoke
+    assert "installer.log" in updater_smoke
+    assert "[install dir]" in updater_smoke
 
     assert 'getByRole("button", { name: "Kiểm tra lại" })' in browser_smoke
     assert 'getByRole("button", { name: `Cài bản ${currentVersion}` })' in browser_smoke
     assert 'getByRole("button", { name: "Cài bản cập nhật" })' in browser_smoke
     assert 'phase !== "installed"' in browser_smoke
-    assert "observeDisconnectAndRecovery" in browser_smoke
+    assert "observeUpdaterTransition" in browser_smoke
+    assert 'progress.phase === "failed"' in browser_smoke
     assert "Updater never produced an observable application disconnect." in browser_smoke
     assert "disconnect_observed: true" in browser_smoke
     assert "disconnected_at" in browser_smoke

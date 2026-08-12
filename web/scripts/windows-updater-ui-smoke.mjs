@@ -37,7 +37,7 @@ async function getJson(path, timeoutMs = 120_000) {
   throw new Error(`Timed out waiting for ${path}: ${lastError}`);
 }
 
-async function observeDisconnectAndRecovery(timeoutMs = 300_000) {
+async function observeUpdaterTransition(timeoutMs = 300_000) {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
   let disconnectedAt = null;
@@ -54,14 +54,31 @@ async function observeDisconnectAndRecovery(timeoutMs = 300_000) {
       healthy = false;
     }
 
-    if (!healthy && disconnectedAt === null) disconnectedAt = Date.now();
-    if (healthy && disconnectedAt !== null) {
-      const recoveredAt = Date.now();
-      return {
-        disconnected_at: new Date(disconnectedAt).toISOString(),
-        recovered_at: new Date(recoveredAt).toISOString(),
-        outage_ms: recoveredAt - disconnectedAt,
-      };
+    if (!healthy) {
+      if (disconnectedAt === null) disconnectedAt = Date.now();
+    } else {
+      try {
+        const response = await fetch(`${baseUrl}/api/v1/admin/update/progress?updater_smoke=${Date.now()}`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(2_000),
+        });
+        if (response.ok) {
+          const progress = await response.json();
+          if (progress.phase === "failed") {
+            throw new Error(`Updater reported failure: ${progress.error || "unknown error"} ${progress.error_action || ""}`.trim());
+          }
+          if (disconnectedAt !== null && progress.phase === "installed" && progress.current_version === currentVersion) {
+            const recoveredAt = Date.now();
+            return {
+              disconnected_at: new Date(disconnectedAt).toISOString(),
+              recovered_at: new Date(recoveredAt).toISOString(),
+              outage_ms: recoveredAt - disconnectedAt,
+            };
+          }
+        }
+      } catch (reason) {
+        if (reason instanceof Error && reason.message.startsWith("Updater reported failure:")) throw reason;
+      }
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -91,13 +108,11 @@ try {
   await page.getByRole("button", { name: "Cài bản cập nhật" }).click();
 
   step = "wait-for-real-reconnect";
-  const [connectionEvidence] = await Promise.all([
-    observeDisconnectAndRecovery(),
-    page.getByText(`Đã cài xong bản ${currentVersion}.`, { exact: false }).first().waitFor({
-      state: "visible",
-      timeout: 300_000,
-    }),
-  ]);
+  const connectionEvidence = await observeUpdaterTransition();
+  await page.getByText(`Đã cài xong bản ${currentVersion}.`, { exact: false }).first().waitFor({
+    state: "visible",
+    timeout: 90_000,
+  });
   await getJson("/health", 120_000);
 
   step = "verify-installed-state";
