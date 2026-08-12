@@ -240,6 +240,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: anhtahaylove/tiktok-affiliate-report
+          # Workflow này chạy do push TAG, nên actions/checkout mặc định lấy refs/tags/<tag> và
+          # để lại detached HEAD — git push sau đó chết với "You are not currently on a branch".
+          # Mô hình hai kho không gặp vì checkout là kho khác nên tag không áp dụng, nó tự lấy
+          # nhánh mặc định. Cùng một kho thì phải nói rõ nhánh.
+          ref: main
           token: ${{ github.token }}
           path: update-feed
       - name: Promote public stable feed and releases
