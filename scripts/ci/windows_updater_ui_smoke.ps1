@@ -177,9 +177,19 @@ try {
     if ($progress.phase -ne 'installed' -or $progress.current_version -ne $CurrentVersion -or $progress.error) {
         throw 'Updater did not reach a clean installed state.'
     }
-    $orphanBootstraps = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match 'TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1' })
-    if ($orphanBootstraps.Count -ne 0) { throw 'Updater bootstrap process was not cleaned up.' }
+    # Bootstrap ghi trạng thái 'installed' RỒI mới thoát, nên kiểm ngay tại thời điểm ứng dụng
+    # báo installed là kiểm một cuộc đua vừa tự tạo ra: tiến trình gần như chắc chắn còn sống
+    # thêm một nhịp. Quan sát thật: gate 2.0.7 -> 2.0.9 hỏng 1/5 đúng ở đây, dù bản cập nhật đã
+    # cài xong, đúng phiên bản và dữ liệu marker còn nguyên. Đợi có giới hạn — bootstrap treo
+    # hẳn vẫn là lỗi thật và vẫn bị bắt.
+    $orphanWait = [System.Diagnostics.Stopwatch]::StartNew()
+    do {
+        $orphanBootstraps = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+            Where-Object { $_.CommandLine -and $_.CommandLine -match 'TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1' })
+        if ($orphanBootstraps.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 500
+    } while ($orphanWait.ElapsedMilliseconds -lt 30000)
+    if ($orphanBootstraps.Count -ne 0) { throw 'Updater bootstrap process was not cleaned up within 30s.' }
 
     @"
 ## Public updater UI smoke
