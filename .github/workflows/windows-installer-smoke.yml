@@ -168,7 +168,7 @@ jobs:
           retention-days: 3
 
   candidate-fresh-install:
-    if: needs.candidate-build.result == 'success'
+    if: always() && needs.candidate-build.result == 'success'
     needs: candidate-build
     runs-on: windows-latest
     timeout-minutes: 12
@@ -191,7 +191,7 @@ jobs:
           "- Fresh install: PASS" >> $env:GITHUB_STEP_SUMMARY
 
   candidate-upgrade-install:
-    if: needs.candidate-build.result == 'success'
+    if: always() && needs.candidate-build.result == 'success'
     needs: candidate-build
     runs-on: windows-latest
     timeout-minutes: 15
