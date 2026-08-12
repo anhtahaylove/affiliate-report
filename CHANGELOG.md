@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.9 - 2026-08-12
+
+Bản v2.0.8 không phát hành được nên chưa từng tới máy nào — toàn bộ nội dung của nó nằm trong bản này, cộng thêm hai bản sửa bên dưới.
+
+**Sửa lỗi cập nhật thỉnh thoảng hỏng ngay từ đầu.** Cứ 5 lần cài thì khoảng 2 lần dừng lại với thông báo "Không thể hoàn tất cài đặt bản cập nhật", ngay trước khi bắt đầu tải gói. Nguyên nhân: ứng dụng ghi tệp trạng thái cập nhật bằng cách thay nguyên tệp, mà trên Windows thao tác này bị từ chối nếu đúng lúc đó có ai đang mở tệp để đọc — và chính màn hình tiến độ đang đọc tệp đó mỗi 0,75 giây. Giờ ứng dụng thử lại trong 2 giây thay vì bỏ cuộc ngay; nếu thật sự không ghi được thì vẫn báo lỗi như cũ.
+
+Lỗi này có từ các bản trước, không phải mới xuất hiện.
+
+**Kiểm thử sau phát hành chạy đúng cặp phiên bản.** Quy trình phát hành ghim cứng số phiên bản cũ nên bài kiểm tra tự động sau khi phát hành đi qua nhánh cài đặt cũ thay vì nhánh mới. Không có gì phát hiện ra điều đó. Giờ nó lấy số phiên bản từ đúng một nguồn và có kiểm tra chặn việc ghim cứng trở lại.
+
 ## v2.0.8 - 2026-08-12
 
 > Canary: đây là bản đầu tiên được cài bằng **bootstrap độc lập đã ký** của v2.0.7. Bước v2.0.7 → v2.0.8 chứng minh end-to-end rằng logic cài đặt không còn sinh ra từ mã nguồn đang chạy.
