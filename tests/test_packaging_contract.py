@@ -227,6 +227,8 @@ def test_v206_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Upgrade" in candidate
     assert '"- Upgrade $previousVersion -> ${currentVersion}: PASS"' in candidate
     assert "$currentVersion: PASS" not in candidate
+    assert "Run exact-head Windows updater helper runtime tests" in candidate
+    assert "tests/test_updater.py tests/test_updater_diagnostics.py" in candidate
     assert "TikTokAffiliateReportSetup-v*.exe" in candidate
     assert "SHA256SUMS.txt" in candidate
     assert "stable.json" not in candidate

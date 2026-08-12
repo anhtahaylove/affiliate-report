@@ -428,8 +428,17 @@ def schedule_installer(
     helper_process = _launch_update_helper(installer, expected, log, status, target_version, size, state)
     try:
         _wait_for_helper_handshake(status, target_version, installer.parent / "updater-bootstrap.log")
-    except Exception:
-        _stop_update_helper(helper_process)
+    except Exception as exc:
+        cleanup_issue = _stop_update_helper(helper_process)
+        if cleanup_issue:
+            note = f"Không thể xác nhận updater helper đã dừng: {cleanup_issue}"
+            exc.add_note(note)
+            try:
+                log.parent.mkdir(parents=True, exist_ok=True)
+                with log.open("a", encoding="utf-8") as stream:
+                    stream.write(f"{_utc_now()} {note}\n")
+            except OSError:
+                pass
         raise
     timer = threading.Timer(delay_seconds, shutdown)
     timer.daemon = True
@@ -525,20 +534,39 @@ def _launch_update_helper(
         raise UpdateError("Không thể khởi chạy updater helper.") from exc
 
 
-def _stop_update_helper(process: subprocess.Popen[Any] | None) -> None:
+def _stop_update_helper(process: subprocess.Popen[Any] | None) -> str | None:
     if process is None:
-        return
+        return None
     try:
         if process.poll() is not None:
-            return
+            return None
+    except OSError:
+        # The handle may still support terminate/kill even if poll failed.
+        pass
+    try:
         process.terminate()
+    except OSError:
+        # Escalate to kill below; a failed terminate alone is recoverable.
+        pass
+    else:
         try:
             process.wait(timeout=5)
+            return None
         except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
-    except OSError:
-        pass
+            pass
+        except OSError:
+            pass
+    try:
+        process.kill()
+    except OSError as exc:
+        return f"không thể dừng tiến trình helper ({exc})."
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        return "tiến trình helper không thoát sau khi terminate/kill."
+    except OSError as exc:
+        return f"không thể xác nhận tiến trình helper đã thoát ({exc})."
+    return None
 
 
 def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap_log: Path, timeout_seconds: float = 30.0) -> None:

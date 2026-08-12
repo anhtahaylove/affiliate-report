@@ -2,6 +2,11 @@
 
 ## v2.0.6 - 2026-08-12
 
+> Recovery boundary: the v2.0.5 app still owns the bootstrap for the one-time
+> v2.0.5 → v2.0.6 hop. Exact-head Windows tests protect the new helper, while
+> the public transition is verified after release. Manual install remains the
+> fallback if an older helper is delayed by antivirus on an end-user machine.
+
 ### Fixed
 
 - Nới thời gian chờ handshake của updater helper từ 5 lên 30 giây để PowerShell cold-start hoặc antivirus không tạo lỗi giả trước khi helper kịp báo sẵn sàng.

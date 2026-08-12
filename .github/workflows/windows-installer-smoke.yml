@@ -127,6 +127,10 @@ jobs:
           if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid canonical candidate version: $currentVersion" }
           if ([version]$env:PREVIOUS_STABLE_VERSION -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
           "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
+      - name: Run exact-head Windows updater helper runtime tests
+        shell: pwsh
+        run: |
+          .\.venv\Scripts\python.exe -m pytest tests/test_updater.py tests/test_updater_diagnostics.py -q
       - name: Build candidate installer
         shell: pwsh
         run: |

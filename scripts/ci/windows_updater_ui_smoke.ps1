@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'updater_diagnostics.ps1')
 
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'This destructive updater UI smoke only runs on an ephemeral GitHub Actions runner.'
@@ -90,8 +91,8 @@ function Stop-App {
     throw 'Installed application processes did not stop.'
 }
 
-function ConvertTo-ScrubbedUpdaterText([string]$Text) {
-    $result = $Text
+function ConvertTo-UpdaterPathReplacements {
+    $result = @{}
     foreach ($replacement in @(
         @{ Value = $installDir; Label = '[install dir]' },
         @{ Value = $env:GITHUB_WORKSPACE; Label = '[workspace]' },
@@ -100,10 +101,9 @@ function ConvertTo-ScrubbedUpdaterText([string]$Text) {
         @{ Value = $env:USERPROFILE; Label = '[user profile]' }
     )) {
         if ($replacement.Value) {
-            $result = $result.Replace([string]$replacement.Value, [string]$replacement.Label, [System.StringComparison]::OrdinalIgnoreCase)
+            $result[[string]$replacement.Value] = [string]$replacement.Label
         }
     }
-    $result = [regex]::Replace($result, '(?i)(token|secret|authorization)\s*[=:]\s*[^\s&]+', '$1=[redacted]')
     return $result
 }
 
@@ -122,7 +122,7 @@ function Export-ScrubbedUpdaterDiagnostics {
         try {
             $content = Get-Content -LiteralPath $source.Path -Raw -ErrorAction Stop
             if ($content.Length -gt 65536) { $content = $content.Substring($content.Length - 65536) }
-            $scrubbed = ConvertTo-ScrubbedUpdaterText $content
+            $scrubbed = ConvertTo-ScrubbedUpdaterText -Text $content -PathReplacements (ConvertTo-UpdaterPathReplacements)
             Set-Content -LiteralPath (Join-Path $EvidenceDir $source.Name) -Value $scrubbed -Encoding utf8
         } catch {
             Set-Content -LiteralPath (Join-Path $EvidenceDir ($source.Name + '.unavailable.txt')) -Value 'Diagnostic file could not be read.' -Encoding utf8
