@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Phương án B — Việc cần làm trước</title>
+<style>
+:root{
+  --bg:#0e1414; --surface:#151d1d; --surface-soft:#202b2a; --surface-raised:#1b2524;
+  --ink:#f2f6f4; --ink-soft:#aab8b4; --line:#2d3a38; --line-strong:#60726e;
+  --teal:#62d8df; --teal-soft:#17383b; --on-accent:#082326;
+  --warning:#e2b341; --warning-soft:#33290f; --danger:#ff8f83; --success:#b5df66;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-columns:196px 1fr;min-height:100vh}
+.side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:9px;align-items:center;padding:0 4px}
+.mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(140deg,var(--teal),#2a8a90);display:grid;place-items:center;color:var(--on-accent);font-weight:800;font-size:12px}
+.brand b{font-size:13px;display:block}.brand span{font-size:10.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.grp{margin-top:2px}
+.grp p{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);padding:0 8px;margin-bottom:3px;font-weight:700}
+.side a{display:block;padding:6px 8px;border-radius:7px;color:var(--ink);text-decoration:none;font-size:12.5px}
+.side a small{display:block;font-size:10.5px;color:var(--ink-soft)}
+.side a.on{background:var(--teal-soft);color:var(--teal)}
+.side a.on small{color:inherit;opacity:.85}
+
+/* Bố cục: cột trái = việc cần làm + số liệu; cột phải = kệ mọi thứ khác, gấp lại */
+.main{padding:16px 20px 26px;display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:18px;align-items:start;align-content:start}
+.head{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.head h1{font-size:20px;letter-spacing:-.02em}
+.head .scope{font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.seg{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface-soft)}
+.seg button{border:0;background:none;color:var(--ink-soft);font:inherit;font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:6px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--teal);color:var(--on-accent)}
+
+/* Câu mở đầu trả lời thẳng "hôm nay có gì cần tôi không" */
+.verdict{border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:16px 18px;display:flex;gap:14px;align-items:flex-start}
+.verdict .badge{width:34px;height:34px;border-radius:50%;background:rgba(181,223,102,.14);color:var(--success);
+  display:grid;place-items:center;flex:0 0 auto;font-size:17px}
+.verdict h2{font-size:16px;letter-spacing:-.015em;margin-bottom:3px}
+.verdict p{font-size:12.5px;color:var(--ink-soft);line-height:1.55}
+.verdict .cta{margin-left:auto;flex:0 0 auto;border:1px solid var(--line);background:var(--surface-soft);color:var(--ink);
+  border-radius:8px;padding:7px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+
+/* Một việc còn dở -> đây mới là thứ đáng nổi bật */
+.todo{margin-top:12px;border:1px solid #7a6220;border-radius:13px;background:var(--warning-soft);padding:14px 16px;display:flex;gap:12px;align-items:center}
+.todo .n{width:26px;height:26px;border-radius:50%;border:1px solid var(--warning);color:var(--warning);display:grid;place-items:center;font-size:12px;font-weight:700;flex:0 0 auto}
+.todo b{font-size:13.5px;display:block}
+.todo p{font-size:12px;color:#f0cf83;margin-top:1px}
+.todo .go{margin-left:auto;background:var(--warning);color:#2a2205;border:0;border-radius:8px;padding:7px 13px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+
+.figs{margin-top:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+.fig h3{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:6px}
+.fig b{font-size:22px;letter-spacing:-.035em;font-variant-numeric:tabular-nums;display:block;line-height:1.1}
+.fig em{font-style:normal;font-size:11px;color:var(--ink-soft);display:block;margin-top:3px}
+.fig em.up{color:var(--success)}
+
+.chart{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:13px 15px}
+.chart h3{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:9px}
+.chart svg{width:100%;height:120px;display:block}
+
+/* KỆ BÊN PHẢI: mọi khối phụ nằm đây, mặc định gấp, mở khi cần */
+.rail{display:grid;gap:8px;position:sticky;top:16px}
+.rail > p{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;padding:0 3px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+summary{list-style:none;cursor:pointer;padding:9px 12px;display:flex;align-items:center;gap:8px;font-size:12.5px}
+summary::-webkit-details-marker{display:none}
+summary .dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex:0 0 auto}
+summary .val{margin-left:auto;color:var(--ink-soft);font-size:11.5px;font-variant-numeric:tabular-nums}
+details[open] summary{border-bottom:1px solid var(--line)}
+.body{padding:10px 12px;font-size:12px;color:var(--ink-soft);display:grid;gap:5px}
+.body .row{display:flex;justify-content:space-between;gap:10px}
+.body .row b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
+.mono{font-family:var(--mono);font-size:11.5px}
+.note{grid-column:1/-1;margin-top:6px;font-size:11px;color:var(--ink-soft);border-left:2px solid var(--teal);padding-left:9px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><div class="mark">TA</div><div><b>TikTok Affiliate</b><span>v2.0.11</span></div></div>
+    <div class="grp"><p>Báo cáo</p>
+      <a class="on" href="#">Tổng quan<small>Hoa hồng, mục tiêu</small></a>
+      <a href="#">Phân tích<small>Tài chính và xu hướng</small></a>
+      <a href="#">Đơn hàng<small>Tra cứu và xuất Excel</small></a>
+    </div>
+    <div class="grp"><p>Vận hành</p>
+      <a href="#">Nhập dữ liệu<small>Tải tệp TikTok</small></a>
+      <a href="#">Mục tiêu<small>KPI mỗi ngày</small></a>
+      <a href="#">Tài khoản<small>Thêm, sửa, lưu trữ</small></a>
+    </div>
+    <div class="grp"><p>Hệ thống</p>
+      <a href="#">Cài đặt<small>Giao diện, dữ liệu, cập nhật</small></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <h1>Tổng quan</h1>
+      <span class="scope">01/03 – 31/03/2026 · Tất cả tài khoản</span>
+      <div class="seg"><button>7 ngày</button><button aria-pressed="true">30 ngày</button><button>Tháng này</button><button>Tháng trước</button></div>
+    </div>
+
+    <div>
+      <section class="verdict">
+        <div class="badge">✓</div>
+        <div>
+          <h2>Mọi thứ đang ổn</h2>
+          <p>Dữ liệu sạch, không có đơn nào bất thường, không có cảnh báo cần xử lý trong kỳ này.</p>
+        </div>
+        <button class="cta">Xuất báo cáo ngày</button>
+      </section>
+
+      <section class="todo">
+        <div class="n">1</div>
+        <div><b>Chưa đặt mục tiêu tháng</b><p>Có mục tiêu thì hệ thống mới tính được tiến độ, phần còn thiếu và mức cần đạt mỗi ngày.</p></div>
+        <button class="go">Đặt mục tiêu</button>
+      </section>
+
+      <div class="figs">
+        <div class="fig"><h3>Hoa hồng thực tế</h3><b>40.000 ₫</b><em class="up">+40.000 ₫ so kỳ trước</em></div>
+        <div class="fig"><h3>GMV thực tế</h3><b>200.000 ₫</b><em>tỷ lệ HH 20,0%</em></div>
+        <div class="fig"><h3>Đơn hàng</h3><b>2</b><em class="up">+2 so kỳ trước</em></div>
+        <div class="fig"><h3>Đã nhận</h3><b>40.000 ₫</b><em>lệch 0 ₫</em></div>
+      </div>
+
+      <section class="chart">
+        <h3>Hoa hồng theo ngày</h3>
+        <svg viewBox="0 0 620 120" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="30" x2="620" y2="30" stroke="#2d3a38"/><line x1="0" y1="75" x2="620" y2="75" stroke="#2d3a38"/>
+          <path d="M0 112 L140 112 L280 112 L330 22 L390 112 L500 112 L620 112" fill="none" stroke="#62d8df" stroke-width="2.2"/>
+          <circle cx="330" cy="22" r="4.5" fill="#62d8df"/>
+        </svg>
+      </section>
+    </div>
+
+    <aside class="rail">
+      <p>Mở khi cần</p>
+      <details><summary><span class="dot"></span>Đối soát<span class="val">2 xong</span></summary>
+        <div class="body"><div class="row">Đã quyết toán <b>2</b></div><div class="row">Đang chờ <b>0</b></div><div class="row">Hoàn / không hợp lệ <b>0,0%</b></div><div class="row">Trung vị <b>5 ngày</b></div></div></details>
+      <details><summary><span class="dot"></span>Sức khỏe dữ liệu<span class="val">sạch</span></summary>
+        <div class="body"><div class="row">Trạng thái chưa xác định <b>0</b></div><div class="row">Tiền tệ khác VND <b>0</b></div><div class="row">Thiếu ngày quyết toán <b>0</b></div><div class="row">Dòng bị từ chối <b>0</b></div></div></details>
+      <details><summary><span class="dot"></span>Nhập gần nhất<span class="val">17:15</span></summary>
+        <div class="body"><div class="row"><span class="mono">e2e-sample.xlsx</span></div><div class="row">SHOTSHOP <b>+2</b></div><div class="row">Cập nhật / trùng / lỗi <b>0 / 0 / 0</b></div></div></details>
+      <details><summary><span class="dot"></span>Theo tài khoản<span class="val">1</span></summary>
+        <div class="body"><div class="row"><span class="mono">SHOTSHOP</span> <b>40.000 ₫</b></div><div class="row">Đơn <b>2</b></div><div class="row">GMV thực tế <b>200.000 ₫</b></div></div></details>
+    </aside>
+
+    <p class="note"><b>Ý tưởng:</b> trang mở ra trả lời thẳng "hôm nay có cần tôi không". Chỉ việc còn dở mới được tô sáng;
+    mọi khối im lặng bị đẩy sang kệ phải và gấp lại còn một dòng có số tóm tắt. Không xoá thông tin nào, chỉ thôi bắt tất cả hét cùng âm lượng.</p>
+  </main>
+</div>
+</body>
+</html>

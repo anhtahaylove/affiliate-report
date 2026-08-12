@@ -2003,3 +2003,59 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .update-banner { flex-wrap: wrap; }
   .update-banner p { flex: 1 1 100%; margin-right: 0; }
 }
+
+/* ---- Khối "không có gì để nói" thu gọn trên cả desktop ----
+   Than phiền số một của người dùng: "nhiều khối không dùng tới". Những khối này không vô dụng,
+   chúng chỉ im lặng phần lớn thời gian — đối soát khi không còn dòng chờ, sức khỏe dữ liệu khi
+   mọi cảnh báo bằng 0. Trước đây mỗi cái vẫn chiếm nguyên một tấm panel chỉ để nói "0, 0, 0, 0".
+   Giờ chúng co lại thành một dòng có số tóm tắt, dùng lại đúng giao diện tóm tắt vốn đã làm cho
+   mobile — không đổi chỗ khối nào, không thêm ngôn ngữ thị giác mới. Bấm là mở ra như cũ. */
+.mobile-dashboard-disclosure[data-quiet="true"] {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.mobile-dashboard-disclosure[data-quiet="true"] > .mobile-dashboard-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 9px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.mobile-dashboard-disclosure[data-quiet="true"] > .mobile-dashboard-summary::-webkit-details-marker { display: none; }
+.mobile-dashboard-disclosure[data-quiet="true"] > .mobile-dashboard-summary strong { font-size: 0.94rem; font-weight: 600; }
+.mobile-dashboard-disclosure[data-quiet="true"] > .mobile-dashboard-summary small { color: var(--ink-soft); font-size: 0.84rem; }
+.mobile-dashboard-disclosure[data-quiet="true"] > .mobile-dashboard-summary span { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.mobile-dashboard-disclosure[data-quiet="true"] > .mobile-dashboard-summary:hover { background: var(--surface-soft); }
+.mobile-dashboard-disclosure[data-quiet="true"][open] > .mobile-dashboard-summary { border-bottom: 1px solid var(--line); }
+.mobile-dashboard-disclosure[data-quiet="true"] .mobile-dashboard-chevron { transition: transform .15s ease; flex: 0 0 auto; color: var(--ink-soft); }
+.mobile-dashboard-disclosure[data-quiet="true"][open] .mobile-dashboard-chevron { transform: rotate(180deg); }
+
+/* Không có cảnh báo thì đây là một dòng thông tin, không phải một trung tâm chỉ huy rỗng. */
+.action-center[data-quiet="true"] { padding: 9px 14px; }
+.action-center[data-quiet="true"] .panel-heading { margin-bottom: 0; align-items: center; }
+.action-center[data-quiet="true"] .panel-heading .section-label { display: none; }
+.action-center[data-quiet="true"] .panel-heading h2 { font-size: 0.94rem; font-weight: 600; letter-spacing: 0; }
+.action-center[data-quiet="true"] .alert-grid { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-dashboard-disclosure[data-quiet="true"] .mobile-dashboard-chevron { transition: none; }
+}
+
+/* Nhắc bước còn sót giữa dashboard: một dòng, không phải checklist ba bước khoe hai dấu tick. */
+.first-run.is-compact {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+.first-run.is-compact > div { margin-right: auto; min-width: 0; }
+.first-run.is-compact strong { display: block; font-size: 0.94rem; font-weight: 600; }
+.first-run.is-compact p { margin: 1px 0 0; color: var(--ink-soft); font-size: 0.84rem; }
+.first-run.is-compact .step-index { flex: 0 0 auto; }

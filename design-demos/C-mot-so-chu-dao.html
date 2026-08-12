@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Phương án C — Một số chủ đạo</title>
+<style>
+:root{
+  --bg:#0e1414; --surface:#151d1d; --surface-soft:#202b2a; --surface-raised:#1b2524;
+  --ink:#f2f6f4; --ink-soft:#aab8b4; --line:#2d3a38; --line-strong:#60726e;
+  --teal:#62d8df; --teal-soft:#17383b; --on-accent:#082326;
+  --warning:#e2b341; --danger:#ff8f83; --success:#b5df66;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-columns:196px 1fr;min-height:100vh}
+.side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:9px;align-items:center;padding:0 4px}
+.mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(140deg,var(--teal),#2a8a90);display:grid;place-items:center;color:var(--on-accent);font-weight:800;font-size:12px}
+.brand b{font-size:13px;display:block}.brand span{font-size:10.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.grp{margin-top:2px}
+.grp p{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);padding:0 8px;margin-bottom:3px;font-weight:700}
+.side a{display:block;padding:6px 8px;border-radius:7px;color:var(--ink);text-decoration:none;font-size:12.5px}
+.side a small{display:block;font-size:10.5px;color:var(--ink-soft)}
+.side a.on{background:var(--teal-soft);color:var(--teal)}
+.side a.on small{color:inherit;opacity:.85}
+
+.main{padding:18px 26px 28px;min-width:0}
+.head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.head h1{font-size:20px;letter-spacing:-.02em}
+.head .scope{font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.seg{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface-soft)}
+.seg button{border:0;background:none;color:var(--ink-soft);font:inherit;font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:6px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--teal);color:var(--on-accent)}
+
+/* HERO: một con số lớn, đọc từ xa được, kèm biểu đồ nền */
+.hero{position:relative;border:1px solid var(--line);border-radius:16px;background:var(--surface);
+  padding:26px 28px 0;overflow:hidden;margin-bottom:12px}
+.hero .label{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
+.hero .big{font-size:62px;line-height:1;letter-spacing:-.045em;font-variant-numeric:tabular-nums;margin:8px 0 6px}
+.hero .sub{font-size:13px;color:var(--ink-soft)}
+.hero .sub b{color:var(--success);font-weight:600}
+.hero .chips{display:flex;gap:7px;margin-top:14px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface-soft);border-radius:999px;padding:5px 11px;font-size:11.5px;color:var(--ink-soft)}
+.chip b{color:var(--ink);font-variant-numeric:tabular-nums;font-weight:600}
+.hero svg{display:block;width:calc(100% + 56px);margin:16px -28px 0;height:110px}
+
+/* KỆ NGANG: cuộn ngang, mỗi thẻ một chủ đề, người dùng tự chọn ghim */
+.shelfhead{display:flex;align-items:center;gap:9px;margin:16px 0 8px}
+.shelfhead p{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
+.shelfhead a{margin-left:auto;font-size:11.5px;color:var(--teal);text-decoration:none}
+.shelf{display:grid;grid-auto-flow:column;grid-auto-columns:216px;gap:9px;overflow-x:auto;padding-bottom:5px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.tile h3{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.tile h3 .dot{width:6px;height:6px;border-radius:50%;background:var(--success)}
+.tile b{font-size:20px;letter-spacing:-.03em;font-variant-numeric:tabular-nums;display:block;line-height:1.15}
+.tile em{font-style:normal;font-size:11px;color:var(--ink-soft);display:block;margin-top:4px;line-height:1.45}
+.tile.calm b{color:var(--ink-soft);font-size:15px;font-weight:600}
+.tile .mono{font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+
+.split{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px;margin-top:16px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:13px 15px}
+.panel h3{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:9px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);text-align:right;padding:5px 8px;border-bottom:1px solid var(--line);font-weight:700}
+th:first-child,td:first-child{text-align:left}
+td{padding:8px;font-size:12.5px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+.acct{font-family:var(--mono);font-size:11.5px}
+.goal{display:flex;flex-direction:column;gap:9px}
+.goalrow{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft)}
+.goalrow b{color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:999px;background:var(--surface-soft);overflow:hidden}
+.bar i{display:block;height:100%;width:0%;background:var(--teal)}
+.setgoal{margin-top:4px;border:1px dashed var(--line-strong);border-radius:9px;padding:10px;text-align:center;font-size:12px;color:var(--ink-soft)}
+.setgoal a{color:var(--teal);text-decoration:none;font-weight:600}
+.note{margin-top:14px;font-size:11px;color:var(--ink-soft);border-left:2px solid var(--teal);padding-left:9px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><div class="mark">TA</div><div><b>TikTok Affiliate</b><span>v2.0.11</span></div></div>
+    <div class="grp"><p>Báo cáo</p>
+      <a class="on" href="#">Tổng quan<small>Hoa hồng, mục tiêu</small></a>
+      <a href="#">Phân tích<small>Tài chính và xu hướng</small></a>
+      <a href="#">Đơn hàng<small>Tra cứu và xuất Excel</small></a>
+    </div>
+    <div class="grp"><p>Vận hành</p>
+      <a href="#">Nhập dữ liệu<small>Tải tệp TikTok</small></a>
+      <a href="#">Mục tiêu<small>KPI mỗi ngày</small></a>
+      <a href="#">Tài khoản<small>Thêm, sửa, lưu trữ</small></a>
+    </div>
+    <div class="grp"><p>Hệ thống</p>
+      <a href="#">Cài đặt<small>Giao diện, dữ liệu, cập nhật</small></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <h1>Tổng quan</h1>
+      <span class="scope">01/03 – 31/03/2026 · Tất cả tài khoản</span>
+      <div class="seg"><button>7 ngày</button><button aria-pressed="true">30 ngày</button><button>Tháng này</button><button>Tháng trước</button></div>
+    </div>
+
+    <section class="hero">
+      <p class="label">Hoa hồng thực tế · 30 ngày</p>
+      <p class="big">40.000 ₫</p>
+      <p class="sub"><b>+40.000 ₫</b> so với kỳ liền trước cùng độ dài</p>
+      <div class="chips">
+        <span class="chip">GMV thực tế <b>200.000 ₫</b></span>
+        <span class="chip">Đơn <b>2</b></span>
+        <span class="chip">Tỷ lệ HH <b>20,0%</b></span>
+        <span class="chip">Đã nhận <b>40.000 ₫</b></span>
+      </div>
+      <svg viewBox="0 0 900 110" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#62d8df" stop-opacity=".28"/><stop offset="100%" stop-color="#62d8df" stop-opacity="0"/>
+        </linearGradient></defs>
+        <path d="M0 104 L200 104 L400 104 L470 26 L540 104 L720 104 L900 104 L900 110 L0 110 Z" fill="url(#g)"/>
+        <path d="M0 104 L200 104 L400 104 L470 26 L540 104 L720 104 L900 104" fill="none" stroke="#62d8df" stroke-width="2.2"/>
+        <circle cx="470" cy="26" r="4.5" fill="#62d8df"/>
+      </svg>
+    </section>
+
+    <div class="shelfhead"><p>Kệ theo dõi</p><a href="#">Chọn thẻ hiển thị</a></div>
+    <div class="shelf">
+      <div class="tile calm"><h3><span class="dot"></span>Cảnh báo</h3><b>Không có</b><em>Dữ liệu sạch, mục tiêu chưa phát sinh rủi ro</em></div>
+      <div class="tile calm"><h3><span class="dot"></span>Sức khỏe dữ liệu</h3><b>Sạch</b><em>0 chưa xác định · 0 khác VND · 0 thiếu ngày · 0 bị từ chối</em></div>
+      <div class="tile"><h3><span class="dot"></span>Đối soát</h3><b>2 đơn</b><em>đã quyết toán · trung vị 5 ngày · 0 đang chờ</em></div>
+      <div class="tile"><h3><span class="dot"></span>Nhập gần nhất</h3><b class="mono">e2e-sample.xlsx</b><em>SHOTSHOP · +2 dòng · 17:15 12/08</em></div>
+      <div class="tile calm"><h3><span class="dot"></span>Hoàn tiền</h3><b>0,0%</b><em>không đủ điều kiện 0,0%</em></div>
+    </div>
+
+    <div class="split">
+      <section class="panel">
+        <h3>Hiệu suất theo tài khoản</h3>
+        <table>
+          <thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Đã đạt</th></tr></thead>
+          <tbody><tr><td class="acct">SHOTSHOP</td><td>2</td><td>200.000 ₫</td><td>40.000 ₫</td><td>—</td></tr></tbody>
+        </table>
+      </section>
+      <section class="panel">
+        <h3>Mục tiêu tháng</h3>
+        <div class="goal">
+          <div class="goalrow"><span>Đã đạt</span><b>40.000 ₫</b></div>
+          <div class="bar"><i></i></div>
+          <div class="goalrow"><span>Mục tiêu</span><b>chưa đặt</b></div>
+          <div class="setgoal">Đặt KPI mỗi ngày để hệ thống tính tiến độ và dự báo — <a href="#">đặt ngay</a></div>
+        </div>
+      </section>
+    </div>
+
+    <p class="note"><b>Ý tưởng:</b> một con số chủ đạo đọc được từ xa, các chỉ số phụ thu thành viên nhỏ ngay dưới nó.
+    Mọi khối còn lại nằm trên một kệ cuộn ngang, và bạn tự chọn thẻ nào muốn thấy — khối không dùng tới thì tắt hẳn, không phải chịu đựng nó mãi.</p>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Phương án A — Bảng điều khiển một màn</title>
+<style>
+:root{
+  --bg:#0e1414; --surface:#151d1d; --surface-soft:#202b2a; --surface-raised:#1b2524;
+  --ink:#f2f6f4; --ink-soft:#aab8b4; --line:#2d3a38; --line-strong:#60726e;
+  --teal:#62d8df; --teal-soft:#17383b; --on-accent:#082326;
+  --warning:#e2b341; --danger:#ff8f83; --success:#b5df66;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-columns:196px 1fr;min-height:100vh}
+
+/* ---- thanh bên: giữ nguyên, đây không phải chỗ có vấn đề ---- */
+.side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:9px;align-items:center;padding:0 4px}
+.mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(140deg,var(--teal),#2a8a90);
+  display:grid;place-items:center;color:var(--on-accent);font-weight:800;font-size:12px}
+.brand b{font-size:13px;display:block}.brand span{font-size:10.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.grp{margin-top:2px}
+.grp p{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);padding:0 8px;margin-bottom:3px;font-weight:700}
+.side a{display:block;padding:6px 8px;border-radius:7px;color:var(--ink);text-decoration:none;font-size:12.5px}
+.side a small{display:block;font-size:10.5px;color:var(--ink-soft)}
+.side a.on{background:var(--teal-soft);color:var(--teal)}
+.side a.on small{color:inherit;opacity:.85}
+
+/* ---- vùng chính ---- */
+.main{padding:14px 18px 24px;min-width:0}
+.top{display:flex;align-items:baseline;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+.top h1{font-size:19px;letter-spacing:-.02em}
+.scope{font-size:12px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.seg{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface-soft)}
+.seg button{border:0;background:none;color:var(--ink-soft);font:inherit;font-size:11.5px;font-weight:600;
+  padding:4px 9px;border-radius:6px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--teal);color:var(--on-accent)}
+
+/* KHỐI CHÍNH: lưới 12 cột, mọi thứ nằm trong một màn */
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:9px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:11px 13px;min-width:0}
+.card h2{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;margin-bottom:7px}
+.kpi{grid-column:span 3}
+.kpi b{display:block;font-size:25px;line-height:1.1;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
+.kpi em{display:block;font-style:normal;font-size:11px;color:var(--ink-soft);margin-top:3px}
+.kpi em.up{color:var(--success)}
+
+.target{grid-column:span 5;display:flex;gap:14px;align-items:center}
+.ring{width:76px;height:76px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(var(--teal) 0deg, var(--surface-soft) 0deg);position:relative}
+.ring::after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--surface)}
+.ring span{position:relative;z-index:1;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+.target-body b{font-size:21px;letter-spacing:-.03em;font-variant-numeric:tabular-nums;display:block}
+.target-body p{font-size:11.5px;color:var(--ink-soft);margin-top:2px}
+.need{margin-top:7px;display:flex;gap:16px}
+.need div{font-size:11px;color:var(--ink-soft)}
+.need b{display:block;font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+
+.trend{grid-column:span 7}
+.spark{height:96px;width:100%;display:block}
+
+/* Ý TƯỞNG CỐT LÕI: khối không có gì để nói co lại đúng MỘT DÒNG */
+.quiet{grid-column:span 12;display:flex;align-items:center;gap:9px;padding:7px 13px;
+  background:var(--surface);border:1px solid var(--line);border-radius:9px;font-size:12px;color:var(--ink-soft)}
+.quiet b{color:var(--ink);font-weight:600;font-size:12px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex:0 0 auto}
+.quiet .more{margin-left:auto;color:var(--teal);font-size:11.5px;text-decoration:none}
+.quiet .sep{color:var(--line-strong)}
+
+.tbl{grid-column:span 12}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft);text-align:right;
+  padding:5px 9px;border-bottom:1px solid var(--line);font-weight:700}
+th:first-child,td:first-child{text-align:left}
+td{padding:7px 9px;font-size:12.5px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+.acct{font-family:var(--mono);font-size:11.5px}
+.note{margin-top:12px;font-size:11px;color:var(--ink-soft);border-left:2px solid var(--teal);padding-left:9px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><div class="mark">TA</div><div><b>TikTok Affiliate</b><span>v2.0.11</span></div></div>
+    <div class="grp"><p>Báo cáo</p>
+      <a class="on" href="#">Tổng quan<small>Hoa hồng, mục tiêu</small></a>
+      <a href="#">Phân tích<small>Tài chính và xu hướng</small></a>
+      <a href="#">Đơn hàng<small>Tra cứu và xuất Excel</small></a>
+    </div>
+    <div class="grp"><p>Vận hành</p>
+      <a href="#">Nhập dữ liệu<small>Tải tệp TikTok</small></a>
+      <a href="#">Mục tiêu<small>KPI mỗi ngày</small></a>
+      <a href="#">Tài khoản<small>Thêm, sửa, lưu trữ</small></a>
+    </div>
+    <div class="grp"><p>Hệ thống</p>
+      <a href="#">Cài đặt<small>Giao diện, dữ liệu, cập nhật</small></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <h1>Tổng quan</h1>
+      <span class="scope">01/03 – 31/03/2026 · Tất cả tài khoản</span>
+      <div class="seg">
+        <button>7 ngày</button><button aria-pressed="true">30 ngày</button>
+        <button>Tháng này</button><button>Tháng trước</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card kpi"><h2>Hoa hồng thực tế</h2><b>40.000 ₫</b><em class="up">+40.000 ₫ so kỳ trước</em></section>
+      <section class="card kpi"><h2>GMV thực tế</h2><b>200.000 ₫</b><em>tỷ lệ hoa hồng 20,0%</em></section>
+      <section class="card kpi"><h2>Đơn hàng</h2><b>2</b><em class="up">+2 so kỳ trước</em></section>
+      <section class="card kpi"><h2>Đã nhận cuối cùng</h2><b>40.000 ₫</b><em>lệch 0 ₫</em></section>
+
+      <section class="card target">
+        <div class="ring"><span>0%</span></div>
+        <div class="target-body">
+          <b>40.000 ₫</b>
+          <p>trên mục tiêu tháng — chưa đặt</p>
+          <div class="need">
+            <div>Cần mỗi ngày<b>—</b></div>
+            <div>Còn thiếu<b>—</b></div>
+            <div>Ngày còn lại<b>0</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card trend">
+        <h2>Hoa hồng theo ngày</h2>
+        <svg class="spark" viewBox="0 0 560 96" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="24" x2="560" y2="24" stroke="#2d3a38" stroke-width="1"/>
+          <line x1="0" y1="60" x2="560" y2="60" stroke="#2d3a38" stroke-width="1"/>
+          <path d="M0 88 L120 88 L240 88 L300 20 L360 88 L440 88 L560 88" fill="none" stroke="#62d8df" stroke-width="2"/>
+          <circle cx="300" cy="20" r="4" fill="#62d8df"/>
+        </svg>
+      </section>
+
+      <!-- Khối rỗng KHÔNG còn chiếm nguyên thẻ: mỗi cái đúng một dòng -->
+      <div class="quiet"><span class="dot"></span><b>Không có cảnh báo cần xử lý</b>
+        <span class="sep">·</span>dữ liệu sạch, mục tiêu chưa phát sinh rủi ro
+        <a class="more" href="#">Xem phân tích</a></div>
+
+      <div class="quiet"><span class="dot"></span><b>Dữ liệu tin cậy</b>
+        <span class="sep">·</span>0 trạng thái chưa xác định<span class="sep">·</span>0 tiền tệ khác VND<span class="sep">·</span>0 thiếu ngày quyết toán<span class="sep">·</span>0 dòng bị từ chối
+        <a class="more" href="#">Kiểm tra import</a></div>
+
+      <div class="quiet"><span class="dot"></span><b>Đối soát</b>
+        <span class="sep">·</span>2 đơn đã quyết toán, trung vị 5 ngày<span class="sep">·</span>0 đang chờ<span class="sep">·</span>0 hoàn/không hợp lệ
+        <a class="more" href="#">Mở đối soát</a></div>
+
+      <div class="quiet"><span class="dot"></span><b>Nhập gần nhất</b>
+        <span class="sep">·</span><span class="acct">e2e-sample.xlsx</span> → SHOTSHOP<span class="sep">·</span>thêm 2, cập nhật 0, lỗi 0<span class="sep">·</span>17:15 12/08
+        <a class="more" href="#">Lịch sử nhập</a></div>
+
+      <section class="card tbl">
+        <h2>Hiệu suất theo tài khoản</h2>
+        <table>
+          <thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead>
+          <tbody><tr><td class="acct">SHOTSHOP</td><td>2</td><td>200.000 ₫</td><td>40.000 ₫</td><td>—</td><td>—</td></tr></tbody>
+        </table>
+      </section>
+    </div>
+
+    <p class="note"><b>Ý tưởng:</b> giữ đủ mọi thông tin, nhưng khối nào không có gì để nói thì co lại đúng một dòng
+    thay vì chiếm nguyên một thẻ. Bốn khối vốn ngốn hơn 900px giờ còn 4 dòng. Có sự cố thì chính dòng đó nở ra thành thẻ đầy đủ.</p>
+  </main>
+</div>
+</body>
+</html>

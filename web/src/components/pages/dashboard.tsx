@@ -95,12 +95,18 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
   const orderDelta = previous ? summary.orders - previous.orders : null;
   const commissionDelta = previous ? summary.actual_commission - previous.actual_commission : null;
   const alerts = buildAlerts(analytics, filters, targetAchievement);
+  // "Không có gì để nói" = mọi con số của khối đều bằng 0, chứ không phải thiếu dữ liệu.
+  const qualityIssues = analytics.data_quality.unknown_status_rows + analytics.data_quality.non_vnd_rows
+    + analytics.data_quality.missing_settlement_date_rows + analytics.data_quality.import_rejected;
+  const settlementQuiet = analytics.settlement.pending_lines === 0
+    && !(summary.refund_rate ?? 0) && !(summary.ineligible_rate ?? 0);
+  const allClear = alerts.length === 1 && alerts[0].tone === "success";
   const layout = preferences.dashboard_layout;
   const widgetStyle = (id: DashboardWidget): CSSProperties => ({ order: layout.order.indexOf(id), display: layout.hidden.includes(id) ? "none" : undefined });
 
   return (
     <div className="momentum-dashboard">
-      {wholeScope && !setup.hasTarget ? <FirstRun user={user} setup={setup} /> : null}
+      {wholeScope && !setup.hasTarget ? <FirstRun user={user} setup={setup} compact /> : null}
       <DashboardCustomizer compact={compactDashboard} preferences={preferences} onPreferencesChange={onPreferencesChange} />
       <section className="today-pulse" style={widgetStyle("today_pulse")} data-widget-id="today_pulse" aria-labelledby="today-pulse-title">
         <div className="pulse-heading">
@@ -145,10 +151,10 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
         </article>
       </section>
 
-      <section className="canvas-panel action-center" style={widgetStyle("action_alerts")} data-widget-id="action_alerts" aria-labelledby="action-center-title">
+      <section className="canvas-panel action-center" data-quiet={allClear ? "true" : undefined} style={widgetStyle("action_alerts")} data-widget-id="action_alerts" aria-labelledby="action-center-title">
         <div className="panel-heading">
-          <div><p className="section-label">Trung tâm hành động</p><h2 id="action-center-title">Việc cần xử lý tiếp theo</h2></div>
-          <span>{alerts.length} tín hiệu</span>
+          <div><p className="section-label">Trung tâm hành động</p><h2 id="action-center-title">{allClear ? "Không có việc cần xử lý" : "Việc cần xử lý tiếp theo"}</h2></div>
+          <span>{allClear ? "Đã kiểm tra" : `${alerts.length} tín hiệu`}</span>
         </div>
         <div className="alert-grid">
           {alerts.map((alert) => (
@@ -168,7 +174,7 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
         style={widgetStyle("trend")}
         widgetId="trend"
       >
-        <section className="momentum-grid insight-grid">
+        <section className="momentum-grid insight-grid single-widget">
           <article className="canvas-panel trend-canvas">
             <div className="panel-heading"><div><p className="section-label">Xu hướng</p><h2>Hoa hồng và tiền đã nhận</h2></div><Link className="text-action" href="/analytics">Phân tích sâu</Link></div>
             {analytics.trend.length ? <CommissionTrendChart rows={analytics.trend} /> : <p className="empty">Chưa có dữ liệu xu hướng trong phạm vi này.</p>}
@@ -179,7 +185,8 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
       <DashboardDisclosure
         compact={compactDashboard}
         label="Đóng góp theo tài khoản"
-        hint={`${integer.format(analytics.account_breakdown.length)} tài khoản`}
+        hint={analytics.account_breakdown.length <= 1 ? `${directory.label(analytics.account_breakdown[0]?.account ?? "ALL")} chiếm toàn bộ` : `${integer.format(analytics.account_breakdown.length)} tài khoản`}
+        quiet={analytics.account_breakdown.length <= 1}
         style={widgetStyle("account_contribution")}
         widgetId="account_contribution"
       >
@@ -194,7 +201,8 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
       <DashboardDisclosure
         compact={compactDashboard}
         label="Dòng tiền đối soát"
-        hint={`${integer.format(analytics.settlement.pending_lines)} dòng đang chờ`}
+        hint={settlementQuiet ? `${integer.format(analytics.settlement.settled_lines)} đơn đã quyết toán, không có dòng chờ` : `${integer.format(analytics.settlement.pending_lines)} dòng đang chờ`}
+        quiet={settlementQuiet}
         style={widgetStyle("settlement")}
         widgetId="settlement"
       >
@@ -213,6 +221,7 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
         compact={compactDashboard}
         label="Độ tin cậy dữ liệu"
         hint={qualitySummary(analytics)}
+        quiet={qualityIssues === 0}
         style={widgetStyle("data_freshness")}
         widgetId="data_freshness"
       >
@@ -311,11 +320,18 @@ function useCompactDashboard() {
   return compact;
 }
 
+/**
+ * Thu gọn theo hai lý do độc lập: màn hình hẹp (`compact`), và khối không có gì để nói
+ * (`quiet`). Lý do thứ hai dùng lại đúng giao diện tóm tắt đã có cho mobile, nên khối không
+ * đổi chỗ và không sinh thêm ngôn ngữ thị giác — chỉ thôi chiếm nguyên một thẻ để nói rằng
+ * mọi thứ đều bằng 0. Bấm vào là mở ra như cũ.
+ */
 function DashboardDisclosure({
   children,
   compact,
   hint,
   label,
+  quiet = false,
   style,
   widgetId,
 }: {
@@ -323,23 +339,26 @@ function DashboardDisclosure({
   compact: boolean;
   hint: string;
   label: string;
+  quiet?: boolean;
   style?: CSSProperties;
   widgetId?: DashboardWidget;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const open = !compact || expanded;
+  const collapsible = compact || quiet;
+  const open = !collapsible || expanded;
 
   return (
     <details
       className="mobile-dashboard-disclosure"
       data-widget-id={widgetId}
+      data-quiet={quiet && !compact ? "true" : undefined}
       open={open}
       style={style}
       onToggle={(event) => {
-        if (compact) setExpanded(event.currentTarget.open);
+        if (collapsible) setExpanded(event.currentTarget.open);
       }}
     >
-      <summary className="mobile-dashboard-summary" hidden={!compact}>
+      <summary className="mobile-dashboard-summary" hidden={!collapsible}>
         <span><strong>{label}</strong><small>{hint}</small></span>
         <ChevronDown className="mobile-dashboard-chevron" size={18} aria-hidden="true" />
       </summary>
@@ -402,7 +421,15 @@ function TrendFallback({ rows }: { rows: AnalyticsResponse["trend"] }) {
   return <div className="sr-chart-table"><table><caption>Dữ liệu xu hướng bảy kỳ gần nhất</caption><thead><tr><th>Kỳ</th><th>Hoa hồng</th><th>Đã nhận</th></tr></thead><tbody>{rows.map((row) => <tr key={row.period}><td>{row.period}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(row.final_received)}</td></tr>)}</tbody></table></div>;
 }
 
-function FirstRun({ user, setup }: { user: CurrentUser; setup: { hasAccounts: boolean; hasImports: boolean; hasTarget: boolean } }) {
+/**
+ * Hai ngữ cảnh khác hẳn nhau dùng chung component này:
+ *  - `compact=false`: thật sự lần đầu, chưa có account hoặc chưa nhập gì. Checklist ba bước là
+ *    toàn bộ nội dung trang, xứng đáng chiếm chỗ.
+ *  - `compact=true`: đã chạy được rồi, chỉ còn sót một bước. Trước đây vẫn dựng nguyên checklist
+ *    ba bước giữa dashboard, trong đó hai bước chỉ để khoe dấu "Hoàn tất" — 290px để nói một câu.
+ *    Giờ còn một dòng nhắc đúng việc chưa xong.
+ */
+function FirstRun({ user, setup, compact = false }: { user: CurrentUser; setup: { hasAccounts: boolean; hasImports: boolean; hasTarget: boolean }; compact?: boolean }) {
   const owner = isOwner(user);
   const writer = canWrite(user);
   if (!setup.hasAccounts && !owner) {
@@ -413,6 +440,20 @@ function FirstRun({ user, setup }: { user: CurrentUser; setup: { hasAccounts: bo
     { done: setup.hasImports, href: writer && setup.hasAccounts ? "/imports" : null, title: "Nhập tệp Excel đầu tiên", copy: setup.hasImports ? "Đã có lịch sử import để dựng báo cáo." : "Chọn account, xem hàng đợi rồi nhập tệp TikTok." },
     { done: setup.hasTarget, href: writer && setup.hasAccounts ? "/targets" : null, title: "Đặt mục tiêu tháng", copy: setup.hasTarget ? "Đã có mục tiêu cho tháng hiện tại." : "Mở planner để hệ thống tính pace và dự báo." },
   ];
+  const pending = steps.filter((step) => !step.done);
+  if (compact && pending.length) {
+    const next = pending[0];
+    return (
+      <section className="canvas-panel first-run is-compact" aria-labelledby="first-run-title">
+        <span className="step-index" aria-hidden="true">{steps.length - pending.length + 1}</span>
+        <div>
+          <strong id="first-run-title">{next.title}</strong>
+          <p>{next.copy}</p>
+        </div>
+        {next.href ? <Link className="text-action" href={next.href}>Mở ngay</Link> : <span className="step-state">Chưa khả dụng</span>}
+      </section>
+    );
+  }
   return <section className="canvas-panel first-run" aria-labelledby="first-run-title"><div className="panel-heading"><div><p className="section-label">Khởi động có hướng dẫn</p><h2 id="first-run-title">Hoàn tất thiết lập vận hành</h2><p>Các bước được cập nhật tự động từ dữ liệu và quyền hiện tại.</p></div></div><ol className="first-run-steps">{steps.map((step, index) => <li key={step.title} data-state={step.done ? "done" : step.href ? "current" : "blocked"}><span className="step-index" aria-hidden="true">{step.done ? "✓" : index + 1}</span><div>{step.href ? <Link href={step.href}><strong>{step.title}</strong></Link> : <strong>{step.title}</strong>}<p>{step.copy}</p></div><span className="step-state">{step.done ? "Hoàn tất" : step.href ? "Cần làm" : "Chưa khả dụng"}</span></li>)}</ol></section>;
 }
 

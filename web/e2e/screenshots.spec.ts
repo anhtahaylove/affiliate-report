@@ -57,7 +57,9 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/${SCOPE}`);
   await expect(page.locator("article.pulse-metric").first()).toBeVisible();
-  await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
+  // Ở 390px các khối phân tích phụ nằm trong disclosure thu gọn (v2.0.4), nên biểu đồ chưa được
+  // dựng. Đòi .recharts-wrapper ở đây là đòi thứ mà chính thiết kế mobile cố tình giấu đi — ảnh
+  // phải chụp đúng trạng thái mặc định người dùng thấy, không phải trạng thái đã mở sẵn.
   await page.screenshot({ path: "e2e/shots/dashboard-mobile-390.png", fullPage: true });
 
   await page.goto(`/orders/${SCOPE}`);
