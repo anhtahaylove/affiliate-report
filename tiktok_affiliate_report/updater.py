@@ -425,8 +425,12 @@ def schedule_installer(
         bytes_downloaded=size,
         bytes_total=size,
     )
-    _launch_update_helper(installer, expected, log, status, target_version, size, state)
-    _wait_for_helper_handshake(status, target_version, installer.parent / "updater-bootstrap.log")
+    helper_process = _launch_update_helper(installer, expected, log, status, target_version, size, state)
+    try:
+        _wait_for_helper_handshake(status, target_version, installer.parent / "updater-bootstrap.log")
+    except Exception:
+        _stop_update_helper(helper_process)
+        raise
     timer = threading.Timer(delay_seconds, shutdown)
     timer.daemon = True
     timer.start()
@@ -440,7 +444,7 @@ def _launch_update_helper(
     target_version: str,
     installer_size: int,
     instance_state_path: Path,
-) -> None:
+) -> subprocess.Popen[Any]:
     if not _windows_frozen():
         raise UpdateError("Cập nhật tự động chỉ chạy trong bản cài Windows.")
     if not installer_path.is_file() or not re.fullmatch(
@@ -478,7 +482,7 @@ def _launch_update_helper(
     flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         with bootstrap_log.open("ab") as bootstrap:
-            subprocess.Popen(
+            return subprocess.Popen(
                 [
                     str(powershell),
                     "-NoLogo",
@@ -521,9 +525,25 @@ def _launch_update_helper(
         raise UpdateError("Không thể khởi chạy updater helper.") from exc
 
 
-def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap_log: Path, timeout_seconds: float = 5.0) -> None:
+def _stop_update_helper(process: subprocess.Popen[Any] | None) -> None:
+    if process is None:
+        return
+    try:
+        if process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+    except OSError:
+        pass
+
+
+def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap_log: Path, timeout_seconds: float = 30.0) -> None:
     deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
+    while True:
         try:
             status = read_update_status(status_path)
         except UpdateError:
@@ -533,7 +553,10 @@ def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap
                 return
             if status["phase"] == "failed":
                 raise UpdateError(str(status["error"] or "Updater helper khởi động thất bại."))
-        time.sleep(0.1)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(0.1, remaining))
     detail = ""
     try:
         if bootstrap_log.is_file() and bootstrap_log.stat().st_size <= 64 * 1024:

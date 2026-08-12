@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.6 - 2026-08-12
+
+### Fixed
+
+- Nới thời gian chờ handshake của updater helper từ 5 lên 30 giây để PowerShell cold-start hoặc antivirus không tạo lỗi giả trước khi helper kịp báo sẵn sàng.
+- Dừng helper an toàn nếu handshake thật sự thất bại, tránh để tiến trình nền cũ tiếp tục chờ và tranh chấp với lần thử sau.
+- Smoke updater qua UI giờ phát hiện backend `failed` ngay, đồng thời lưu trạng thái và log helper/installer đã scrub để chẩn đoán lỗi Windows mà không lộ đường dẫn máy runner.
+
 ## v2.0.5 - 2026-08-12
 
 **Account thân thiện nhưng định danh vẫn ổn định.** Tên hiển thị account giờ là nhãn chính và code bất biến là thông tin phụ trên Dashboard, Analytics, Orders, Imports, Targets và Users. Thêm, đổi tên, lưu trữ, kích hoạt lại hoặc xóa account cập nhật metadata đang hiển thị ngay trong App Shell; nếu đồng bộ lại lỗi, ứng dụng giữ dữ liệu đã xác minh gần nhất và cho phép thử lại thay vì reload mất trạng thái.

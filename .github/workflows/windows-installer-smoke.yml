@@ -6,11 +6,11 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.5"
+        default: "2.0.6"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
-        default: "2.0.4"
+        default: "2.0.5"
   pull_request:
     branches: [main]
     paths:
@@ -52,8 +52,8 @@ permissions:
 
 env:
   PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report-updates
-  PREVIOUS_STABLE_VERSION: "2.0.4"
-  CANDIDATE_ARTIFACT_NAME: v205-candidate-installer
+  PREVIOUS_STABLE_VERSION: "2.0.5"
+  CANDIDATE_ARTIFACT_NAME: v206-candidate-installer
 
 jobs:
   contract-checks:

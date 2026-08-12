@@ -576,12 +576,84 @@ def test_schedule_installer_fails_without_helper_handshake(tmp_path, monkeypatch
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     shutdown = threading.Event()
 
-    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: None)
+    class SlowHelper:
+        def __init__(self):
+            self.terminated = False
+            self.waited = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            assert timeout == 5
+            self.waited = True
+            return 0
+
+    helper = SlowHelper()
+    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: helper)
     monkeypatch.setattr(updater, "_wait_for_helper_handshake", lambda *_args: (_ for _ in ()).throw(updater.UpdateError("no handshake")))
 
     with pytest.raises(updater.UpdateError, match="no handshake"):
         updater.schedule_installer(installer, expected, tmp_path / "updater.log", shutdown.set, status_path=tmp_path / "update-status.json", target_version="1.2.1", delay_seconds=0)
     assert not shutdown.is_set()
+    assert helper.terminated
+    assert helper.waited
+
+
+def test_helper_handshake_tolerates_slow_powershell_cold_start(tmp_path, monkeypatch):
+    status_path = tmp_path / "update-status.json"
+    clock = {"now": 0.0, "reads": 0}
+
+    def monotonic():
+        return clock["now"]
+
+    def sleep(seconds):
+        clock["now"] += seconds
+
+    def read_status(_path):
+        clock["reads"] += 1
+        phase = "waiting_for_exit" if clock["now"] >= 8.0 else "verifying"
+        return {
+            "schema": updater.UPDATE_STATUS_SCHEMA,
+            "phase": phase,
+            "target_version": "2.0.6",
+            "bytes_downloaded": 1,
+            "bytes_total": 1,
+            "error": None,
+            "updated_at": "2026-08-12T00:00:00Z",
+        }
+
+    monkeypatch.setattr(updater.time, "monotonic", monotonic)
+    monkeypatch.setattr(updater.time, "sleep", sleep)
+    monkeypatch.setattr(updater, "read_update_status", read_status)
+
+    updater._wait_for_helper_handshake(status_path, "2.0.6", tmp_path / "bootstrap.log")
+
+    assert clock["now"] >= 8.0
+    assert clock["reads"] > 50
+
+
+def test_helper_handshake_checks_ready_status_once_at_deadline(tmp_path, monkeypatch):
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(updater.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(updater.time, "sleep", lambda seconds: clock.update(now=clock["now"] + seconds))
+    monkeypatch.setattr(
+        updater,
+        "read_update_status",
+        lambda _path: {
+            "phase": "waiting_for_exit" if clock["now"] >= 1.0 else "verifying",
+            "target_version": "2.0.6",
+            "error": None,
+        },
+    )
+
+    updater._wait_for_helper_handshake(tmp_path / "status.json", "2.0.6", tmp_path / "bootstrap.log", timeout_seconds=1.0)
+
+    assert clock["now"] == pytest.approx(1.0)
 
 
 def test_version_validation():

@@ -94,8 +94,10 @@ function ConvertTo-ScrubbedUpdaterText([string]$Text) {
     $result = $Text
     foreach ($replacement in @(
         @{ Value = $installDir; Label = '[install dir]' },
+        @{ Value = $env:GITHUB_WORKSPACE; Label = '[workspace]' },
         @{ Value = $env:RUNNER_TEMP; Label = '[runner temp]' },
-        @{ Value = $env:LOCALAPPDATA; Label = '[local app data]' }
+        @{ Value = $env:LOCALAPPDATA; Label = '[local app data]' },
+        @{ Value = $env:USERPROFILE; Label = '[user profile]' }
     )) {
         if ($replacement.Value) {
             $result = $result.Replace([string]$replacement.Value, [string]$replacement.Label, [System.StringComparison]::OrdinalIgnoreCase)

@@ -159,8 +159,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.5"
-    assert 'default: "2.0.4"' in workflow
+    assert APP_VERSION == "2.0.6"
+    assert 'default: "2.0.5"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -187,7 +187,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "v$PreviousVersion legacy account is missing" not in smoke
 
 
-def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
+def test_v206_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
     candidate = Path(".github/workflows/windows-installer-smoke.yml").read_text(encoding="utf-8")
     release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     updater_ui = Path(".github/workflows/windows-updater-ui-smoke.yml").read_text(encoding="utf-8")
@@ -241,8 +241,8 @@ def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "workflow_dispatch:" in updater_ui
     assert "pull_request:" not in updater_ui
     assert "permissions:\n  contents: read" in updater_ui
+    assert 'default: "2.0.6"' in updater_ui
     assert 'default: "2.0.5"' in updater_ui
-    assert 'default: "2.0.4"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui
@@ -260,6 +260,8 @@ def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "updater-bootstrap.log" in updater_smoke
     assert "installer.log" in updater_smoke
     assert "[install dir]" in updater_smoke
+    assert "[workspace]" in updater_smoke
+    assert "[user profile]" in updater_smoke
 
     assert 'getByRole("button", { name: "Kiểm tra lại" })' in browser_smoke
     assert 'getByRole("button", { name: `Cài bản ${currentVersion}` })' in browser_smoke
