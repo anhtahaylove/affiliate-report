@@ -729,8 +729,8 @@ export async function installUpdate(confirmation: string) {
   });
 }
 
-export async function loadUpdateProgress() {
-  return request<UpdateProgress>("/api/v1/admin/update/progress");
+export async function loadUpdateProgress(signal?: AbortSignal) {
+  return request<UpdateProgress>("/api/v1/admin/update/progress", { signal });
 }
 
 export async function loadUsers() {

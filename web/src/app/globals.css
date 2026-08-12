@@ -1965,3 +1965,41 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .target-edit-row, .account-create-panel, .user-permission-grid, .account-meta { grid-template-columns: 1fr; }
   .target-edit-row > button, .account-create-panel > button, .user-permission-grid .row-actions button { width: 100%; }
 }
+
+/* Nhắc cập nhật ở mọi trang: trước đây chỉ trang Cài đặt > Cập nhật mới biết có bản mới, nên
+   người dùng phải tự nhớ đi tìm. Giữ tông trung tính — đây là lời mời, không phải cảnh báo. */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  background: var(--teal-soft);
+  color: var(--ink);
+}
+
+.update-banner > svg { flex: 0 0 auto; color: var(--teal); }
+.update-banner p { display: grid; gap: 2px; margin: 0; margin-right: auto; min-width: 0; }
+.update-banner strong { font-size: 0.95rem; }
+.update-banner span { color: var(--ink-soft); font-size: 0.86rem; }
+
+.update-banner-dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.update-banner-dismiss:hover { border-color: var(--line); color: var(--ink); }
+
+@media (max-width: 720px) {
+  .update-banner { flex-wrap: wrap; }
+  .update-banner p { flex: 1 1 100%; margin-right: 0; }
+}

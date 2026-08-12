@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.0.8 - 2026-08-12
+
+> Canary: đây là bản đầu tiên được cài bằng **bootstrap độc lập đã ký** của v2.0.7. Bước v2.0.7 → v2.0.8 chứng minh end-to-end rằng logic cài đặt không còn sinh ra từ mã nguồn đang chạy.
+
+**Mở ứng dụng là biết ngay có bản mới.** Trước đây chỉ trang **Cài đặt → Cập nhật** mới biết, nên bạn phải tự nhớ đi tìm. Giờ mọi trang đều hiện một dòng nhắc khi có bản mới, kèm hai lựa chọn: **Cập nhật ngay** hoặc **Để sau**.
+
+**Cập nhật ngay** đưa thẳng tới hộp xác nhận, không phải tự tìm lại nút Cài. **Để sau** thì im hẳn cho tới khi có bản mới hơn nữa — không nhắc lại cùng một bản.
+
+Ứng dụng chỉ hỏi nguồn cập nhật **một lần cho mỗi lần mở**; chuyển trang qua lại không gọi lại. Không có mạng thì dòng nhắc lặng lẽ không hiện, không chen ngang việc bạn đang làm.
+
+**Cài xong thì giao diện tự tải lại.** Trước đây sau khi cài xong, tab trình duyệt vẫn đang chạy giao diện của bản cũ — mọi thay đổi của bản mới nằm im cho tới khi bạn tự bấm tải lại trang, mà không có gì nói cho bạn biết. Không API nào thay được phần giao diện đã tải; chỉ nạp lại trang mới làm được, và lúc đó ứng dụng vừa khởi động lại bên dưới nên cũng không còn gì để mất.
+
+**Kết nối lại sau khi cài nhanh hơn khoảng 2–4,5 giây.** Đo trên Windows: gọi tới cổng đã đóng mất **~2,03 giây** mới báo lỗi chứ không báo ngay, nên phần lớn thời gian mỗi vòng chờ là chờ mạng chứ không phải khoảng nghỉ. Từ bản này mỗi lần hỏi bị cắt sau 1,5 giây và khoảng nghỉ rút xuống 0,5–1 giây.
+
+Thời gian chết tệ nhất giữa lúc ứng dụng sống lại và lúc màn hình nhận ra: **4,03 → 2,00 giây** khi mở ấm, **7,03 → 2,50 giây** khi mở nguội.
+
 ## v2.0.7 - 2026-08-12
 
 **Tách updater bootstrap khỏi phiên bản source đang chạy.** Public signed feed bổ sung asset `TikTokAffiliateUpdater-v1.0.0.ps1`; ứng dụng xác minh Ed25519 manifest, filename, protocol, kích thước và SHA-256 trước khi tải và kiểm tra lại hash ngay trước khi chạy. Logic đợi app thoát, cài Inno, khởi động lại và health handshake từ đây được phân phối độc lập theo release thay vì sinh từ Python source cũ.

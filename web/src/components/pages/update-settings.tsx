@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, CapabilityState, UpdateProgress, UpdateStatus, checkUpdate, installUpdate, loadUpdateProgress } from "@/lib/api";
+import { forgetPostponedUpdate } from "@/components/update-banner";
 import { ConfirmDialog } from "@/components/ui";
 import { formatBytes, formatDateTime } from "@/lib/format";
 import { Check, CheckCircle2, CloudCog, Download, ExternalLink, HardDriveDownload, MonitorUp, RefreshCw, RotateCw, ShieldCheck, type LucideIcon } from "lucide-react";
 
 const UPDATE_RECONNECT_TIMEOUT_MS = 90_000;
+// Đo trên Windows: gọi tới cổng loopback đã đóng mất ~2,03 giây mới báo ConnectionRefused, chứ
+// không trả lỗi ngay. Trong lúc chờ app sống lại, phần lớn thời gian mỗi vòng là chờ TCP chứ
+// không phải khoảng nghỉ giữa hai lần hỏi. Cắt sớm là cách duy nhất rút ngắn được vòng đó. Khi
+// app đã lên, endpoint này chỉ đọc một file JSON qua loopback nên 1,5 giây là thừa sức.
+const UPDATE_PROBE_TIMEOUT_MS = 1_500;
 
 function updateErrorInfo(reason: unknown) {
   if (reason instanceof ApiError) {
@@ -93,7 +99,10 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [askInstall, setAskInstall] = useState(false);
+  // Banner "Cập nhật ngay" trỏ tới /settings/update#install để mở thẳng hộp xác nhận, thay vì
+  // bắt người dùng tự tìm lại nút Cài. Đọc bằng initialiser chứ không setState trong effect
+  // (React 19 cấm); `open` chỉ điều khiển showModal() nên markup không đổi, không lệch hydration.
+  const [askInstall, setAskInstall] = useState(() => typeof window !== "undefined" && window.location.hash === "#install");
   const progressRef = useRef<UpdateProgress | null>(null);
   const reconnectStartedRef = useRef<number | null>(null);
   const installStartedRef = useRef<number | null>(null);
@@ -136,6 +145,12 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   }, [checkCapability.available, rememberProgress]);
 
   useEffect(() => {
+    if (window.location.hash === "#install") {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!checkCapability.available) return;
     async function load() {
       await check();
@@ -150,7 +165,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
 
     async function poll() {
       try {
-        const data = await loadUpdateProgress();
+        const data = await loadUpdateProgress(AbortSignal.timeout(UPDATE_PROBE_TIMEOUT_MS));
         if (stopped) return;
         rememberProgress(data);
         setReconnecting(false);
@@ -171,9 +186,10 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
             setMessage(data.error);
             setNextAction(data.error_action || "Mở lại ứng dụng rồi kiểm tra phiên bản.");
           } else {
-            setMessage(`Đã cài xong bản ${data.current_version}.`);
+            setMessage(`Đã cài xong bản ${data.current_version}. Đang tải lại giao diện…`);
             setNextAction("");
-            void check();
+            forgetPostponedUpdate();
+            window.setTimeout(() => window.location.reload(), 1_200);
           }
           return;
         }
@@ -195,7 +211,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
             return;
           }
           setMessage("Ứng dụng đang đóng để cài đặt. Đang chờ kết nối lại…");
-          timer = setTimeout(poll, Date.now() - startedAt < 30_000 ? 2_000 : 5_000);
+          timer = setTimeout(poll, Date.now() - startedAt < 10_000 ? 500 : 1_000);
           return;
         }
         setInstalling(false);
@@ -317,7 +333,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
       </div>
       {message ? <div className="update-message" data-tone={messageTone} role={phase === "failed" || nextAction ? "alert" : "status"} aria-live={phase === "failed" ? "assertive" : "polite"}><p>{message}</p>{nextAction ? <p><strong>Việc cần làm:</strong> {nextAction}</p> : null}</div> : null}
       <ConfirmDialog
-        open={askInstall}
+        open={askInstall && canInstall}
         title={`Cài bản ${status?.latest_version ?? ""} ngay?`}
         confirmLabel="Cài bản cập nhật"
         busy={busy}

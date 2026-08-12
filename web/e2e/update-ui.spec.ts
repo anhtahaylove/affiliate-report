@@ -77,3 +77,68 @@ test("lỗi updater chỉ hiện hướng xử lý tiếng Việt, không lộ c
   await expect(page.getByRole("button", { name: "Thử lại" })).toBeVisible();
   await expect(page.getByText(/Installer exited|C:\\Users|updater-bootstrap/i)).toHaveCount(0);
 });
+
+async function offerUpdate(page: import("@playwright/test").Page) {
+  await page.route("**/api/v1/admin/update", async (route) => {
+    await route.fulfill({
+      json: {
+        current_version: "2.0.7",
+        latest_version: "2.0.8",
+        available: true,
+        installable: true,
+        automatic_install_supported: true,
+        release_name: "v2.0.8",
+        release_url: "https://example.test/releases/v2.0.8",
+        published_at: "2026-08-12T00:00:00Z",
+        notes: null,
+        source_repo: "example/updates",
+      },
+    });
+  });
+}
+
+test("có bản mới thì mọi trang đều nhắc, và hoãn thì im cho tới bản kế tiếp", async ({ page }) => {
+  await offerUpdate(page);
+
+  await page.goto("/");
+  const banner = page.locator(".update-banner");
+  await expect(banner).toContainText("Có bản 2.0.8");
+
+  // Nhắc ở mọi trang chứ không riêng Tổng quan — đó là cả lý do banner tồn tại.
+  await page.goto("/orders/");
+  await expect(page.locator(".update-banner")).toContainText("Có bản 2.0.8");
+
+  // Trang Cập nhật đã nói đủ rồi, nhắc lại là thừa.
+  await page.goto("/settings/update/");
+  await expect(page.locator(".update-banner")).toHaveCount(0);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: /Để sau/ }).click();
+  await expect(page.locator(".update-banner")).toHaveCount(0);
+  await page.goto("/orders/");
+  await expect(page.locator(".update-banner")).toHaveCount(0);
+
+  // Hoãn được ghi theo đúng phiên bản, nên bản kế tiếp vẫn phải nhắc lại.
+  await page.evaluate(() => window.localStorage.setItem("tiktok-affiliate-update-postponed", "2.0.7"));
+  await page.goto("/");
+  await expect(page.locator(".update-banner")).toContainText("Có bản 2.0.8");
+});
+
+test("Cập nhật ngay mở thẳng hộp xác nhận và dọn hash khỏi địa chỉ", async ({ page }) => {
+  await offerUpdate(page);
+  // Cài tự động chỉ bật trên bản Windows đã đóng gói, nên môi trường test phải mượn capability
+  // đó thì mới có nút Cài để hộp xác nhận bám vào.
+  await page.route("**/api/v1/meta", async (route) => {
+    const response = await route.fetch();
+    const meta = await response.json();
+    meta.capabilities.update_install = { available: true, reason: null };
+    await route.fulfill({ json: meta });
+  });
+
+  await page.goto("/");
+  await page.getByRole("link", { name: "Cập nhật ngay" }).click();
+
+  await expect(page.locator("dialog.confirm-dialog[open]")).toContainText("Cài bản 2.0.8 ngay?");
+  // Hash đã dùng xong thì phải dọn, không thì tải lại trang là hộp xác nhận bật lên lần nữa.
+  expect(page.url()).not.toContain("#install");
+});
