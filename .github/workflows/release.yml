@@ -184,7 +184,7 @@ jobs:
       - name: Create and verify public update release
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
@@ -241,7 +241,7 @@ jobs:
         shell: pwsh
         env:
           PRIVATE_GH_TOKEN: ${{ github.token }}
-          PUBLIC_GH_TOKEN: ${{ secrets.UPDATE_FEED_TOKEN }}
+          PUBLIC_GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"

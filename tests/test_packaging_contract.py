@@ -83,7 +83,11 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert "POSTGRES_TEST_URL" in workflow
     assert '"artifacts\\installer\\SHA256SUMS.txt"' in workflow
     assert "UPDATE_SIGNING_KEY_B64" in workflow
-    assert "UPDATE_FEED_TOKEN" in workflow
+    # Một repo duy nhất nên không còn PAT chéo repo: mọi thao tác release và ghi feed dùng
+    # token của chính workflow, và job phải tự khai quyền ghi. PAT chéo repo từng làm v2.0.12
+    # và v2.0.13 chết vì 403 trên repo nguồn.
+    assert "UPDATE_FEED_TOKEN" not in workflow
+    assert "permissions:\n      actions: write\n      contents: write" in workflow
     assert "-m scripts.sign_update_feed" in workflow
     assert r'--bootstrap "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1"' in workflow
     assert r'--bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1"' in workflow
@@ -175,7 +179,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.13"
+    assert APP_VERSION == "2.0.14"
     assert 'default: "2.0.11"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
@@ -285,7 +289,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.0.13"' in updater_ui
+    assert 'default: "2.0.14"' in updater_ui
     assert 'default: "2.0.11"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui

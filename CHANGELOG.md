@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.0.14 - 2026-08-13
+
+Các bản v2.0.12 và v2.0.13 không phát hành được nên chưa từng tới máy nào; toàn bộ nội dung của chúng nằm trong bản này.
+
+**Mọi thứ về một kho duy nhất.** Trước đây bản cài và thông tin cập nhật nằm ở một kho riêng, tách khỏi mã nguồn. Từ bản này chỉ còn một nơi. Bạn không phải làm gì — bấm cập nhật như thường lệ, chữ ký vẫn được kiểm tra y như cũ.
+
+Hai bản trước dừng lại vì cùng một lý do: quy trình phát hành còn dùng khoá truy cập của kho cũ, nên mọi thao tác trên kho mới đều bị từ chối. Nay không còn khoá chéo nào; quy trình dùng khoá của chính nó và tự khai quyền ghi.
+
+**Tổng quan gọn lại một phần ba.** Những khối gần như luôn im lặng co lại còn một dòng có số tóm tắt, bấm vào mở ra đầy đủ như cũ — trung tâm hành động khi không có cảnh báo, dòng tiền đối soát khi không còn dòng chờ, độ tin cậy dữ liệu khi mọi chỉ số bằng 0, đóng góp theo tài khoản khi bạn chỉ có một tài khoản.
+
+Nhắc thiết lập khi chỉ còn sót một bước nay là một dòng, thay vì cả khung ba bước với hai dấu "Hoàn tất". Biểu đồ xu hướng dùng hết chiều ngang.
+
+Đo trên cùng dữ liệu: trang Tổng quan cao **3.308 điểm ảnh xuống còn 2.166**, giảm 35%. Không thông tin nào bị xoá, không khối nào đổi chỗ, màu sắc giữ nguyên.
+
 ## v2.0.13 - 2026-08-13
 
 Bản v2.0.12 không phát hành được nên chưa từng tới máy nào; toàn bộ nội dung của nó nằm trong bản này.
