@@ -185,7 +185,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.16"
+    assert APP_VERSION == "2.0.17"
     assert 'default: "2.0.11"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
@@ -295,7 +295,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.0.16"' in updater_ui
+    assert 'default: "2.0.17"' in updater_ui
     assert 'default: "2.0.11"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui

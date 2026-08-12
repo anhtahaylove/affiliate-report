@@ -33,6 +33,10 @@ UPDATE_CHANNEL = "stable"
 UPDATE_STATUS_SCHEMA = "tiktok-affiliate-report.update-status.v1"
 UPDATE_STATUS_PHASES = {"idle", "downloading", "verifying", "waiting_for_exit", "installing", "restarting", "installed", "failed"}
 INSTALL_CONFIRMATION_PHRASE = "CAP NHAT UNG DUNG"
+# Tải lại vài lần trước khi báo hỏng: gói ~46 MB, một cú rớt mạng không đáng làm hỏng cả bản
+# cập nhật. Ba lần là đủ vượt qua sự cố thoáng qua mà không bắt người dùng chờ vô hạn.
+_DOWNLOAD_ATTEMPTS = 3
+_DOWNLOAD_RETRY_DELAYS = (2.0, 5.0)
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
 MAX_BOOTSTRAP_BYTES = 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
@@ -299,28 +303,49 @@ def _download_file(
     if expected_size <= 0 or expected_size > max_bytes:
         raise UpdateError("Kích thước update asset không hợp lệ.")
     temporary = destination.with_suffix(destination.suffix + ".download")
-    temporary.unlink(missing_ok=True)
+    safe_url = _require_https_url(url, "Update asset URL không hợp lệ.")
     digest = hashlib.sha256()
     written = 0
-    try:
-        with urlopen(Request(_require_https_url(url, "Update asset URL không hợp lệ."), headers=_headers(None, "application/octet-stream")), timeout=60) as response, temporary.open("wb") as handle:
-            while chunk := response.read(1024 * 1024):
-                written += len(chunk)
-                if written > max_bytes:
-                    raise UpdateError("Update asset vượt giới hạn tải xuống.")
-                digest.update(chunk)
-                handle.write(chunk)
-                if progress_callback:
-                    progress_callback(written, expected_size)
-    except UpdateError:
+    # Gói cài nặng ~46 MB. Một cú rớt mạng hay một lần GitHub trả 503 là cả bản cập nhật hỏng và
+    # người dùng phải tự bấm "Thử lại" — đo được trên gate cập nhật thật: máy báo đúng lỗi này
+    # trong khi các máy khác cùng lúc tải xong bình thường. Thử lại vài lần trước khi bỏ cuộc.
+    # Chỉ thử lại lỗi mạng; sai kích thước hay vượt giới hạn là lỗi toàn vẹn, phải nổi ngay.
+    last_network_error: Exception | None = None
+    for attempt in range(_DOWNLOAD_ATTEMPTS):
         temporary.unlink(missing_ok=True)
-        raise
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        digest = hashlib.sha256()
+        written = 0
+        try:
+            with urlopen(Request(safe_url, headers=_headers(None, "application/octet-stream")), timeout=60) as response, temporary.open("wb") as handle:
+                while chunk := response.read(1024 * 1024):
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise UpdateError("Update asset vượt giới hạn tải xuống.")
+                    digest.update(chunk)
+                    handle.write(chunk)
+                    if progress_callback:
+                        progress_callback(written, expected_size)
+        except UpdateError:
+            temporary.unlink(missing_ok=True)
+            raise
+        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            last_network_error = exc
+            if attempt == _DOWNLOAD_ATTEMPTS - 1:
+                temporary.unlink(missing_ok=True)
+                raise UpdateError("Không thể tải update asset.") from exc
+            time.sleep(_DOWNLOAD_RETRY_DELAYS[attempt])
+            continue
+        # Tải xong mà thiếu byte cũng là đứt giữa chừng, không phải gói hỏng — thử lại được.
+        if written != expected_size:
+            if attempt == _DOWNLOAD_ATTEMPTS - 1:
+                temporary.unlink(missing_ok=True)
+                raise UpdateError("Kích thước update asset không khớp.")
+            time.sleep(_DOWNLOAD_RETRY_DELAYS[attempt])
+            continue
+        break
+    else:  # pragma: no cover - vòng lặp luôn thoát bằng break hoặc raise
         temporary.unlink(missing_ok=True)
-        raise UpdateError("Không thể tải update asset.") from exc
-    if written != expected_size:
-        temporary.unlink(missing_ok=True)
-        raise UpdateError("Kích thước update asset không khớp.")
+        raise UpdateError("Không thể tải update asset.") from last_network_error
     os.replace(temporary, destination)
     return digest.hexdigest().upper()
 

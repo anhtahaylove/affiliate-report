@@ -1,6 +1,6 @@
 param(
     [switch]$SkipAppBuild,
-    [string]$AppVersion = '2.0.16'
+    [string]$AppVersion = '2.0.17'
 )
 
 $ErrorActionPreference = 'Stop'

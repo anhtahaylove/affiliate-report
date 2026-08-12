@@ -11,7 +11,7 @@ on:
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.0.16"
+        default: "2.0.17"
       release_sha:
         description: Exact trusted source commit for release-gated runs
         required: false
@@ -75,9 +75,25 @@ jobs:
         shell: pwsh
         run: |
           $repo = $env:PUBLIC_UPDATE_REPO
+          # Năm máy của gate chạy song song và cùng kéo một tệp 46 MB từ cùng một release, nên
+          # GitHub trả 503 cho vài máy là chuyện bình thường. Tải một phát không thử lại biến
+          # chuyện bình thường đó thành gate đỏ: đo được 3/5 máy hỏng cùng lúc ở đúng bước này.
+          # Đây là chỗ yếu của bộ kiểm thử, không phải của sản phẩm — nên thử lại có giới hạn.
+          function Get-PublicAsset([string]$Url, [string]$OutFile) {
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing $Url -OutFile $OutFile
+                if ((Get-Item -LiteralPath $OutFile).Length -gt 0) { return }
+                throw "Empty download"
+              } catch {
+                if ($attempt -eq 6) { throw "Could not download $Url after 6 attempts: $($_.Exception.Message)" }
+                Start-Sleep -Seconds ([Math]::Min(30, [Math]::Pow(2, $attempt)))
+              }
+            }
+          }
           foreach ($version in @($env:PREVIOUS_VERSION, $env:CURRENT_VERSION)) {
-            Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$version/TikTokAffiliateReportSetup-v$version.exe" -OutFile (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$version.exe")
-            Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/v$version/SHA256SUMS.txt" -OutFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$version.txt")
+            Get-PublicAsset "https://github.com/$repo/releases/download/v$version/TikTokAffiliateReportSetup-v$version.exe" (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$version.exe")
+            Get-PublicAsset "https://github.com/$repo/releases/download/v$version/SHA256SUMS.txt" (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$version.txt")
           }
       - name: Run real in-app updater flow
         shell: pwsh

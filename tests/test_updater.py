@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -1197,3 +1198,56 @@ def test_status_write_still_reports_failure_when_the_file_never_frees_up(tmp_pat
     monkeypatch.setattr(updater, "_replace_with_retry", functools.partial(updater._replace_with_retry, timeout=0.05))
     with pytest.raises(updater.UpdateError, match="Không thể ghi trạng thái cập nhật."):
         updater.write_update_status(status_path, phase="downloading", target_version="9.9.9")
+
+
+def test_download_retries_a_transient_network_drop_then_succeeds(tmp_path, monkeypatch):
+    """Gói cài ~46 MB; một cú rớt mạng không đáng làm hỏng cả bản cập nhật.
+
+    Đo trên gate cập nhật thật: có máy báo "Không thể tải gói cập nhật từ nguồn phát hành"
+    trong khi các máy khác cùng lúc tải xong bình thường, và GitHub trả 503 cho vài máy khi
+    năm máy song song cùng kéo một tệp.
+    """
+    payload = b"x" * 4096
+    attempts = []
+
+    class _Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def flaky_urlopen(request, timeout=None):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise URLError("connection reset")
+        return _Response(payload)
+
+    monkeypatch.setattr(updater, "urlopen", flaky_urlopen)
+    monkeypatch.setattr(updater.time, "sleep", lambda _seconds: None)
+    destination = tmp_path / "asset.bin"
+
+    digest = updater._download_file("https://example.test/a.bin", destination, len(payload), 1 << 20)
+
+    assert len(attempts) == 3
+    assert destination.read_bytes() == payload
+    assert digest == hashlib.sha256(payload).hexdigest().upper()
+    assert not list(tmp_path.glob("*.download"))
+
+
+def test_download_gives_up_after_the_retry_budget(tmp_path, monkeypatch):
+    """Thử lại là để vượt sự cố thoáng qua, không phải để treo mãi hay nuốt lỗi thật."""
+    attempts = []
+
+    def always_down(request, timeout=None):
+        attempts.append(1)
+        raise URLError("connection reset")
+
+    monkeypatch.setattr(updater, "urlopen", always_down)
+    monkeypatch.setattr(updater.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(updater.UpdateError, match="Không thể tải update asset."):
+        updater._download_file("https://example.test/a.bin", tmp_path / "asset.bin", 10, 1 << 20)
+
+    assert len(attempts) == updater._DOWNLOAD_ATTEMPTS
+    assert not list(tmp_path.glob("*"))
