@@ -1,1 +1,1 @@
-{"key_id":"tiktok-report-updates-2026-08","signature":"HlN9TMINC3mOxXELqjoXk5B2v1hQML9zbcmOvk9iEfOmh6c8Zh6VPhHvkkMSGpCY4BbHo4L7aNWqCtd2bS0kBQ=="}
+{"key_id":"tiktok-report-updates-2026-08","signature":"ufAkVy9cMqOEuCmCppUeE7LmlUGZQ1i6u0Ao054dqJhQRIXyfnL027GEylYJBns+tJvFYh+Iq5ljsu5dss1oDw=="}
