@@ -183,7 +183,7 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     assert set(json.loads(manifest)) == {"schema", "app_id", "channel", "version", "published_at", "release_url", "installer", "bootstrap"}
     assert checked["available"] is True
     assert checked["installable"] is True
-    assert checked["source_repo"] == "anhtahaylove/tiktok-affiliate-report-updates"
+    assert checked["source_repo"] == "anhtahaylove/tiktok-affiliate-report"
     assert downloaded["sha256"] == hashlib.sha256(installer).hexdigest().upper()
     assert Path(downloaded["installer_path"]).read_bytes() == installer
     assert downloaded["bootstrap_protocol"] == 1

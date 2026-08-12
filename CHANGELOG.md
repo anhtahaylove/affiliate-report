@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.11 - 2026-08-13
+
+**Nguồn cập nhật chuyển về kho mã nguồn chính.** Trước đây ứng dụng đọc thông tin bản mới từ một kho lưu trữ riêng; nay kho mã nguồn đã công khai nên gộp về một chỗ, bớt một nơi phải trông coi.
+
+Bản này là bước chuyển tiếp: nó vẫn được phát hành qua nguồn cũ để máy đang chạy 2.0.10 nhận được, nhưng bản thân nó đọc nguồn mới. Bạn không phải làm gì — bấm cập nhật như mọi lần.
+
+Chữ ký Ed25519 và khoá xác thực **không đổi**, nên cách kiểm tra an toàn của bản cập nhật vẫn y như cũ.
+
 ## v2.0.10 - 2026-08-12
 
 Bản v2.0.8 và v2.0.9 đều không phát hành được nên chưa từng tới máy nào. Toàn bộ nội dung của chúng nằm trong bản này.

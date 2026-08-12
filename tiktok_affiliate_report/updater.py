@@ -23,8 +23,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .version import APP_VERSION
 
-DEFAULT_UPDATE_FEED_URL = "https://raw.githubusercontent.com/anhtahaylove/tiktok-affiliate-report-updates/main/stable.json"
-DEFAULT_UPDATE_REPO = "anhtahaylove/tiktok-affiliate-report-updates"
+# Feed chuyển về chính repo nguồn (nay đã public) để bỏ bớt một repo phải trông.
+# Bản 2.0.10 trở về trước ghim URL cũ, nên repo cũ phải sống tới khi mọi máy đã lên >= 2.0.11.
+DEFAULT_UPDATE_FEED_URL = "https://raw.githubusercontent.com/anhtahaylove/tiktok-affiliate-report/main/stable.json"
+DEFAULT_UPDATE_REPO = "anhtahaylove/tiktok-affiliate-report"
 UPDATE_SCHEMA = "tiktok-affiliate-report.update.v1"
 UPDATE_APP_ID = "tiktok-affiliate-report"
 UPDATE_CHANNEL = "stable"
