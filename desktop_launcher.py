@@ -14,6 +14,8 @@ from typing import Callable
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
+from tiktok_affiliate_report.version import APP_VERSION
+
 
 HOST = "127.0.0.1"
 MUTEX_NAME = r"Local\TikTokAffiliateReport.SingleInstance"
@@ -132,7 +134,10 @@ def _open_existing_instance(state_path: Path) -> bool:
 
 def _write_instance_state(state_path: Path, url: str, *, running: bool = True) -> None:
     temp_path = state_path.with_suffix(".tmp")
-    temp_path.write_text(json.dumps({"pid": os.getpid() if running else None, "url": url}), encoding="utf-8")
+    temp_path.write_text(
+        json.dumps({"pid": os.getpid() if running else None, "url": url, "app_version": APP_VERSION}),
+        encoding="utf-8",
+    )
     os.replace(temp_path, state_path)
 
 

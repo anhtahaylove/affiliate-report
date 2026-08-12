@@ -11,14 +11,23 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
-from tiktok_affiliate_report.updater import UPDATE_APP_ID, UPDATE_CHANNEL, UPDATE_SCHEMA
+from tiktok_affiliate_report.updater import (
+    UPDATE_APP_ID,
+    UPDATE_BOOTSTRAP_NAME,
+    UPDATE_BOOTSTRAP_PROTOCOL,
+    UPDATE_BOOTSTRAP_VERSION,
+    UPDATE_CHANNEL,
+    UPDATE_SCHEMA,
+)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create signed public update feed files.")
     parser.add_argument("--version", required=True)
     parser.add_argument("--installer", required=True, type=Path)
+    parser.add_argument("--bootstrap", required=True, type=Path)
     parser.add_argument("--asset-url", required=True)
+    parser.add_argument("--bootstrap-url", required=True)
     parser.add_argument("--release-url", required=True)
     parser.add_argument("--key-id", required=True)
     parser.add_argument("--output-dir", default="artifacts/installer", type=Path)
@@ -43,6 +52,12 @@ def main() -> int:
         raise SystemExit(f"Installer must be named {expected_name}")
 
     digest = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
+    bootstrap = args.bootstrap.resolve()
+    if not bootstrap.is_file():
+        raise SystemExit(f"Missing updater bootstrap: {bootstrap}")
+    if bootstrap.name != UPDATE_BOOTSTRAP_NAME:
+        raise SystemExit(f"Updater bootstrap must be named {UPDATE_BOOTSTRAP_NAME}")
+    bootstrap_digest = hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()
     manifest = {
         "schema": UPDATE_SCHEMA,
         "app_id": UPDATE_APP_ID,
@@ -55,6 +70,14 @@ def main() -> int:
             "url": args.asset_url,
             "size": installer.stat().st_size,
             "sha256": digest,
+        },
+        "bootstrap": {
+            "protocol": UPDATE_BOOTSTRAP_PROTOCOL,
+            "version": UPDATE_BOOTSTRAP_VERSION,
+            "name": bootstrap.name,
+            "url": args.bootstrap_url,
+            "size": bootstrap.stat().st_size,
+            "sha256": bootstrap_digest,
         },
     }
     payload = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")

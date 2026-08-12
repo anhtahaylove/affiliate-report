@@ -529,7 +529,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     def health() -> dict[str, str]:
         with _engine(app).connect() as conn:
             conn.execute(select(1))
-        return {"status": "ok"}
+        return {"status": "ok", "app_version": APP_VERSION}
 
     @app.get("/auth/login")
     async def login() -> RedirectResponse:
@@ -1164,6 +1164,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
                         shutdown,
                         status_path=status_path,
                         target_version=downloaded_version,
+                        bootstrap_path=Path(downloaded["bootstrap_path"]),
+                        bootstrap_sha256=str(downloaded["bootstrap_sha256"]),
+                        bootstrap_protocol=int(downloaded["bootstrap_protocol"]),
+                        bootstrap_version=str(downloaded["bootstrap_version"]),
                         installer_size=installer_path.stat().st_size,
                         instance_state_path=data_dir / "instance.json",
                     )

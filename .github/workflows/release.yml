@@ -9,6 +9,10 @@ permissions:
   actions: read
   contents: read
 
+concurrency:
+  group: signed-public-update-release
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -71,6 +75,7 @@ jobs:
     needs: verify
     runs-on: windows-latest
     permissions:
+      actions: write
       contents: write
     steps:
       - uses: actions/checkout@v7
@@ -118,7 +123,7 @@ jobs:
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
           $keyId = "tiktok-report-updates-2026-08"
-          $publicKey = .\.venv\Scripts\python.exe -m scripts.sign_update_feed --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
+          $publicKey = .\.venv\Scripts\python.exe -m scripts.sign_update_feed --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --bootstrap "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
           $pinned = .\.venv\Scripts\python.exe -c "from tiktok_affiliate_report.updater import TRUSTED_UPDATE_KEYS; print(TRUSTED_UPDATE_KEYS['$keyId'])"
           if ($publicKey -ne $pinned) { throw "UPDATE_SIGNING_KEY_B64 does not match pinned updater public key" }
       - name: Create verified private release
@@ -137,7 +142,7 @@ jobs:
             gh release delete $tag --yes
             if ($LASTEXITCODE -ne 0) { throw "Could not replace existing private draft release" }
           }
-          gh release create $tag $installer "artifacts\installer\SHA256SUMS.txt" "artifacts\installer\stable.json" "artifacts\installer\stable.json.sig" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag
+          gh release create $tag $installer "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1" "artifacts\installer\SHA256SUMS.txt" "artifacts\installer\stable.json" "artifacts\installer\stable.json.sig" --draft --generate-notes --title "TikTok Affiliate Report $tag" --verify-tag
           if ($LASTEXITCODE -ne 0) { throw "Could not create private draft release" }
           $draft = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Private release draft verification failed" }
@@ -154,11 +159,26 @@ jobs:
           gh release download $tag --dir $verify
           if ($LASTEXITCODE -ne 0) { throw "Could not download private draft release" }
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
-          if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer, SHA256SUMS.txt, stable.json and stable.json.sig" }
-          $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
-          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig") | Sort-Object
+          if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer, updater bootstrap, SHA256SUMS.txt, stable.json and stable.json.sig" }
+          $installerName = "TikTokAffiliateReportSetup-v$version.exe"
+          $checksumLines = @(Get-Content (Join-Path $verify "SHA256SUMS.txt"))
+          $checksumNames = @($checksumLines | ForEach-Object {
+            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (TikTokAffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+            if (!$match.Success) { throw "SHA256SUMS contains a malformed or unexpected entry" }
+            $match.Groups[2].Value
+          } | Sort-Object)
+          $expectedChecksumNames = @($installerName, "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+          if ($checksumLines.Count -ne 2 -or (Compare-Object $checksumNames $expectedChecksumNames)) { throw "SHA256SUMS must contain exactly the installer and updater bootstrap" }
+          $installerEntry = @($checksumLines | Where-Object { $_ -match ([regex]::Escape($installerName) + '$') })
+          $bootstrapEntry = @($checksumLines | Where-Object { $_ -match 'TikTokAffiliateUpdater-v1\.0\.0\.ps1$' })
+          if ($installerEntry.Count -ne 1 -or $bootstrapEntry.Count -ne 1) { throw "SHA256SUMS must contain exactly one installer and one updater bootstrap entry" }
+          $expected = ([regex]::Match($installerEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify $installerName)).Hash
           if ($actual -ne $expected) { throw "Downloaded release checksum mismatch" }
+          $bootstrapExpected = ([regex]::Match($bootstrapEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+          $bootstrapActual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateUpdater-v1.0.0.ps1")).Hash
+          if ($bootstrapActual -ne $bootstrapExpected) { throw "Downloaded updater bootstrap checksum mismatch" }
           $draft = gh release view $tag --json isDraft,isPrerelease,tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Private release verification failed" }
       - name: Create and verify public update release
@@ -170,7 +190,7 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
-          $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
+          $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
           $existingJson = gh release view $tag --repo $repo --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
             $existing = $existingJson | ConvertFrom-Json
@@ -185,12 +205,27 @@ jobs:
           gh release download $tag --repo $repo --dir $verify
           if ($LASTEXITCODE -ne 0) { throw "Could not download public draft release" }
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig") | Sort-Object
-          if (Compare-Object $actualFiles $expectedFiles) { throw "Public mirror must contain exactly four verified assets" }
-          $expected = ((Get-Content (Join-Path $verify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
-          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig") | Sort-Object
+          if (Compare-Object $actualFiles $expectedFiles) { throw "Public mirror must contain exactly five verified assets" }
+          $installerName = "TikTokAffiliateReportSetup-v$version.exe"
+          $checksumLines = @(Get-Content (Join-Path $verify "SHA256SUMS.txt"))
+          $checksumNames = @($checksumLines | ForEach-Object {
+            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (TikTokAffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+            if (!$match.Success) { throw "SHA256SUMS contains a malformed or unexpected entry" }
+            $match.Groups[2].Value
+          } | Sort-Object)
+          $expectedChecksumNames = @($installerName, "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+          if ($checksumLines.Count -ne 2 -or (Compare-Object $checksumNames $expectedChecksumNames)) { throw "SHA256SUMS must contain exactly the installer and updater bootstrap" }
+          $installerEntry = @($checksumLines | Where-Object { $_ -match ([regex]::Escape($installerName) + '$') })
+          $bootstrapEntry = @($checksumLines | Where-Object { $_ -match 'TikTokAffiliateUpdater-v1\.0\.0\.ps1$' })
+          if ($installerEntry.Count -ne 1 -or $bootstrapEntry.Count -ne 1) { throw "SHA256SUMS must contain exactly one installer and one updater bootstrap entry" }
+          $expected = ([regex]::Match($installerEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify $installerName)).Hash
           if ($actual -ne $expected) { throw "Public mirror checksum mismatch" }
-          .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+          $bootstrapExpected = ([regex]::Match($bootstrapEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+          $bootstrapActual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateUpdater-v1.0.0.ps1")).Hash
+          if ($bootstrapActual -ne $bootstrapExpected) { throw "Public mirror updater bootstrap checksum mismatch" }
+          .\.venv\Scripts\python.exe -c "from pathlib import Path; import hashlib; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); bootstrap=Path(r'$verify\TikTokAffiliateUpdater-v1.0.0.ps1'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'; assert m['bootstrap']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1'; assert m['bootstrap']['name'] == bootstrap.name; assert m['bootstrap']['size'] == bootstrap.stat().st_size; assert m['bootstrap']['sha256'] == hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()"
           if ($LASTEXITCODE -ne 0) { throw "Public draft manifest verification failed" }
           $draft = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
@@ -209,11 +244,31 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report-updates"
-          $assetNames = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "stable.json", "stable.json.sig")
+          $assetNames = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig")
           $stableCommitted = $false
           $stableCommit = ""
           $publicPublished = $false
           $privatePublished = $false
+          $rollbackFeed = Join-Path $env:RUNNER_TEMP "previous-stable-feed"
+          New-Item -ItemType Directory -Path $rollbackFeed -Force | Out-Null
+
+          # Snapshot the last public latest release before mutating either the feed or release state.
+          # These signed bytes are the fail-closed rollback source even when this workflow is rerun.
+          $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
+          $publicBefore = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest,isPrerelease,publishedAt | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "Could not resolve the previous public latest release" }
+          $previousLatest = @($publicBefore | Where-Object { !$_.isDraft -and !$_.isPrerelease -and $_.tagName -ne $tag } | Sort-Object publishedAt -Descending | Select-Object -First 1)
+          if ($previousLatest.Count -ne 1) { throw "Expected exactly one previous stable public release before $tag" }
+          $previousLatestTag = $previousLatest[0].tagName
+          gh release download $previousLatestTag --repo $repo --pattern stable.json --pattern stable.json.sig --dir $rollbackFeed
+          if ($LASTEXITCODE -ne 0) { throw "Could not snapshot the previous signed stable feed from $previousLatestTag" }
+          $previousManifest = Join-Path $rollbackFeed "stable.json"
+          $previousSignature = Join-Path $rollbackFeed "stable.json.sig"
+          $previousManifestHash = (Get-FileHash -Algorithm SHA256 $previousManifest).Hash
+          $previousSignatureHash = (Get-FileHash -Algorithm SHA256 $previousSignature).Hash
+          $previousVersion = $previousLatestTag.TrimStart("v")
+          .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$previousManifest').read_bytes(), Path(r'$previousSignature').read_bytes()); assert m['version'] == '$previousVersion'"
+          if ($LASTEXITCODE -ne 0) { throw "Previous latest release does not contain a valid signed rollback feed" }
           try {
             $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
             gh release edit $tag --repo $repo --draft=false --prerelease
@@ -287,11 +342,53 @@ jobs:
               if (!$rawReady) { Start-Sleep -Seconds 5 }
             }
             if (!$rawReady) { throw "Live raw feed does not match signed build artifacts" }
-            $expected = ((Get-Content (Join-Path $releaseVerify "SHA256SUMS.txt") -Raw) -split '\s+')[0].ToUpperInvariant()
-            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $releaseVerify "TikTokAffiliateReportSetup-v$version.exe")).Hash
+            $installerName = "TikTokAffiliateReportSetup-v$version.exe"
+            $checksumLines = @(Get-Content (Join-Path $releaseVerify "SHA256SUMS.txt"))
+            $checksumNames = @($checksumLines | ForEach-Object {
+              $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (TikTokAffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+              if (!$match.Success) { throw "SHA256SUMS contains a malformed or unexpected entry" }
+              $match.Groups[2].Value
+            } | Sort-Object)
+            $expectedChecksumNames = @($installerName, "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+            if ($checksumLines.Count -ne 2 -or (Compare-Object $checksumNames $expectedChecksumNames)) { throw "SHA256SUMS must contain exactly the installer and updater bootstrap" }
+            $installerEntry = @($checksumLines | Where-Object { $_ -match ([regex]::Escape($installerName) + '$') })
+            $bootstrapEntry = @($checksumLines | Where-Object { $_ -match 'TikTokAffiliateUpdater-v1\.0\.0\.ps1$' })
+            if ($installerEntry.Count -ne 1 -or $bootstrapEntry.Count -ne 1) { throw "SHA256SUMS must contain exactly one installer and one updater bootstrap entry" }
+            $expected = ([regex]::Match($installerEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+            $actual = (Get-FileHash -Algorithm SHA256 (Join-Path $releaseVerify $installerName)).Hash
             if ($actual -ne $expected) { throw "Live release checksum mismatch" }
-            .\.venv\Scripts\python.exe -c "from pathlib import Path; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$releaseVerify\TikTokAffiliateReportSetup-v$version.exe'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'"
+            $bootstrapExpected = ([regex]::Match($bootstrapEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+            $bootstrapActual = (Get-FileHash -Algorithm SHA256 (Join-Path $releaseVerify "TikTokAffiliateUpdater-v1.0.0.ps1")).Hash
+            if ($bootstrapActual -ne $bootstrapExpected) { throw "Live updater bootstrap checksum mismatch" }
+            .\.venv\Scripts\python.exe -c "from pathlib import Path; import hashlib; from tiktok_affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$releaseVerify\TikTokAffiliateReportSetup-v$version.exe'); bootstrap=Path(r'$releaseVerify\TikTokAffiliateUpdater-v1.0.0.ps1'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'; assert m['bootstrap']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1'; assert m['bootstrap']['name'] == bootstrap.name; assert m['bootstrap']['size'] == bootstrap.stat().st_size; assert m['bootstrap']['sha256'] == hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()"
             if ($LASTEXITCODE -ne 0) { throw "Live public updater verification failed" }
+
+            # The feed is live and the public release is still a non-latest prerelease. Run five
+            # independent, secretless Windows clients through the real in-app Update Now flow.
+            $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
+            $releaseSha = "${{ github.sha }}"
+            $releaseNonce = [guid]::NewGuid().ToString("N")
+            $smokeTitle = "Public updater UI smoke 2.0.6 -> $version ($releaseSha) [$releaseNonce]"
+            gh workflow run windows-updater-ui-smoke.yml --ref $tag -f previous_version=2.0.6 -f current_version=$version -f release_sha=$releaseSha -f release_nonce=$releaseNonce
+            if ($LASTEXITCODE -ne 0) { throw "Could not dispatch the five-run public updater UI gate" }
+            $smokeRun = $null
+            for ($attempt = 1; $attempt -le 30 -and !$smokeRun; $attempt++) {
+              Start-Sleep -Seconds 5
+              $runs = gh run list --workflow windows-updater-ui-smoke.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle,status,conclusion,headSha | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { throw "Could not query public updater UI gate" }
+              $smokeRun = @($runs | Where-Object { $_.displayTitle -eq $smokeTitle -and $_.headSha -eq $releaseSha } | Select-Object -First 1)
+            }
+            if (!$smokeRun) { throw "Could not locate the dispatched public updater UI gate" }
+            $deadline = [DateTimeOffset]::UtcNow.AddMinutes(35)
+            do {
+              Start-Sleep -Seconds 15
+              $smokeRun = gh run view $smokeRun[0].databaseId --json databaseId,status,conclusion,url | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { throw "Could not monitor public updater UI gate" }
+            } while ($smokeRun.status -ne "completed" -and [DateTimeOffset]::UtcNow -lt $deadline)
+            if ($smokeRun.status -ne "completed" -or $smokeRun.conclusion -ne "success") {
+              throw "Public updater UI gate did not pass 5/5: $($smokeRun.url)"
+            }
+            "Five independent v2.0.6 -> $version Update Now runs passed: $($smokeRun.url)" >> $env:GITHUB_STEP_SUMMARY
 
             $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
             gh release edit $tag --draft=false
@@ -308,23 +405,88 @@ jobs:
           } catch {
             $failure = $_
             if ((Split-Path -Leaf (Get-Location)) -eq "update-feed") { Pop-Location }
-            if ($stableCommitted) {
+            $rollbackErrors = [System.Collections.Generic.List[string]]::new()
+            try {
               Push-Location update-feed
-              git revert --no-edit $stableCommit
-              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not revert public stable feed commit $stableCommit" }
+              git fetch origin main
+              if ($LASTEXITCODE -ne 0) { throw "Could not fetch the public feed before rollback" }
+              git reset --hard origin/main
+              if ($LASTEXITCODE -ne 0) { throw "Could not reset the public feed checkout before rollback" }
+              Copy-Item $previousManifest, $previousSignature . -Force
+              git add stable.json stable.json.sig
+              if ($LASTEXITCODE -ne 0) { throw "Could not stage the previous signed feed" }
+              git diff --cached --quiet
+              if ($LASTEXITCODE -eq 1) {
+                git commit -m "Rollback stable feed from $tag to $previousLatestTag"
+                if ($LASTEXITCODE -ne 0) { throw "Could not commit the previous signed feed" }
+              } elseif ($LASTEXITCODE -ne 0) {
+                throw "Could not inspect the feed rollback"
+              }
               git push
-              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not push public stable feed rollback" }
+              if ($LASTEXITCODE -ne 0) { throw "Could not push the public stable feed rollback" }
+              $rollbackCommit = (git rev-parse HEAD).Trim()
+              if ($LASTEXITCODE -ne 0) { throw "Could not resolve the public feed rollback commit" }
               Pop-Location
+            } catch {
+              if ((Split-Path -Leaf (Get-Location)) -eq "update-feed") { Pop-Location }
+              $rollbackErrors.Add("feed restore: $($_.Exception.Message)")
             }
-            if ($privatePublished) {
+
+            try {
               $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
-              gh release edit $tag --draft=true
-              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not return private release to draft" }
+              $privateRollback = gh release view $tag --json isDraft 2>$null | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { throw "Could not read private release state during rollback" }
+              if (!$privateRollback.isDraft) {
+                gh release edit $tag --draft=true
+                if ($LASTEXITCODE -ne 0) { throw "Could not return private release to draft" }
+              }
+              $privateRollback = gh release view $tag --json isDraft | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0 -or !$privateRollback.isDraft) { throw "Private release rollback verification failed" }
+            } catch {
+              $rollbackErrors.Add("private release: $($_.Exception.Message)")
             }
-            if ($publicPublished) {
+
+            try {
               $env:GH_TOKEN = $env:PUBLIC_GH_TOKEN
-              gh release edit $tag --repo $repo --draft=true --prerelease=false
-              if ($LASTEXITCODE -ne 0) { Write-Warning "Could not return public release to draft" }
+              $publicRollback = gh release view $tag --repo $repo --json isDraft 2>$null | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { throw "Could not read public release state during rollback" }
+              if (!$publicRollback.isDraft) {
+                gh release edit $tag --repo $repo --draft=true --prerelease=false
+                if ($LASTEXITCODE -ne 0) { throw "Could not return public release to draft" }
+              }
+              $publicRollback = gh release view $tag --repo $repo --json isDraft | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0 -or !$publicRollback.isDraft) { throw "Public release rollback verification failed" }
+              gh release edit $previousLatestTag --repo $repo --latest
+              if ($LASTEXITCODE -ne 0) { throw "Could not restore the previous public latest release" }
+              $publicAfterRollback = gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest,isPrerelease | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0) { throw "Could not verify the previous public latest release after rollback" }
+              $latestAfterRollback = @($publicAfterRollback | Where-Object { $_.isLatest -and !$_.isDraft })
+              if ($latestAfterRollback.Count -ne 1 -or $latestAfterRollback[0].tagName -ne $previousLatestTag) { throw "Previous public latest release was not restored" }
+            } catch {
+              $rollbackErrors.Add("public release: $($_.Exception.Message)")
+            }
+
+            try {
+              $rollbackVerify = Join-Path $env:RUNNER_TEMP "rollback-feed-verify"
+              New-Item -ItemType Directory -Path $rollbackVerify -Force | Out-Null
+              $rollbackReady = $false
+              for ($attempt = 1; $attempt -le 12 -and !$rollbackReady; $attempt++) {
+                try {
+                  Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json?rollback=$rollbackCommit&attempt=$attempt" -OutFile (Join-Path $rollbackVerify "stable.json")
+                  Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/$repo/main/stable.json.sig?rollback=$rollbackCommit&attempt=$attempt" -OutFile (Join-Path $rollbackVerify "stable.json.sig")
+                  $rollbackReady = ((Get-FileHash -Algorithm SHA256 (Join-Path $rollbackVerify "stable.json")).Hash -eq $previousManifestHash) -and ((Get-FileHash -Algorithm SHA256 (Join-Path $rollbackVerify "stable.json.sig")).Hash -eq $previousSignatureHash)
+                } catch {
+                  $rollbackReady = $false
+                }
+                if (!$rollbackReady) { Start-Sleep -Seconds 5 }
+              }
+              if (!$rollbackReady) { throw "Live raw feed rollback verification failed" }
+            } catch {
+              $rollbackErrors.Add("live feed verification: $($_.Exception.Message)")
+            }
+
+            if ($rollbackErrors.Count -gt 0) {
+              throw "Release failed: $($failure.Exception.Message). Rollback also failed: $($rollbackErrors -join '; ')"
             }
             throw $failure
           }

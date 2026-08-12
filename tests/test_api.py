@@ -77,7 +77,7 @@ def test_health_and_meta(tmp_path):
     client, _ = api(tmp_path)
 
     assert client.app.version == APP_VERSION
-    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/health").json() == {"status": "ok", "app_version": APP_VERSION}
     meta = client.get("/api/v1/meta").json()
 
     assert meta["accounts"] == ["CHIISTORE", "EMLINHNOIY", "THAOBRA"]
@@ -106,6 +106,8 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     client, _ = api(tmp_path)
     installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"verified")
+    bootstrap = tmp_path / "TikTokAffiliateUpdater-v1.0.0.ps1"
+    bootstrap.write_bytes(b"bootstrap")
     scheduled = {}
     pending_workers = []
 
@@ -128,20 +130,21 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
             "version": "1.2.1",
             "installer_path": str(installer),
             "sha256": "A" * 64,
+            "bootstrap_path": str(bootstrap),
+            "bootstrap_sha256": "B" * 64,
+            "bootstrap_protocol": 1,
+            "bootstrap_version": "1.0.0",
             "release_url": "https://github.com/example/release",
         },
     )
 
-    def capture_schedule(path, sha256, log_path, shutdown, *, status_path, target_version, installer_size, instance_state_path=None):
+    def capture_schedule(path, sha256, log_path, shutdown, **kwargs):
         scheduled.update(
             path=path,
             sha256=sha256,
             log_path=log_path,
             shutdown=shutdown,
-            status_path=status_path,
-            target_version=target_version,
-            installer_size=installer_size,
-            instance_state_path=instance_state_path,
+            **kwargs,
         )
 
     monkeypatch.setattr(api_module, "schedule_installer", capture_schedule)
@@ -175,6 +178,10 @@ def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatc
     assert scheduled["log_path"].name == "updater.log"
     assert scheduled["status_path"].name == "update-status.json"
     assert scheduled["target_version"] == "1.2.1"
+    assert scheduled["bootstrap_path"] == bootstrap
+    assert scheduled["bootstrap_sha256"] == "B" * 64
+    assert scheduled["bootstrap_protocol"] == 1
+    assert scheduled["bootstrap_version"] == "1.0.0"
     assert scheduled["installer_size"] == installer.stat().st_size
     assert scheduled["instance_state_path"].name == "instance.json"
     progress = client.get("/api/v1/admin/update/progress")
@@ -665,7 +672,7 @@ def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
     monkeypatch.setenv("WEB_STATIC_DIR", str(static_dir))
     client, _ = api(tmp_path)
 
-    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/health").json() == {"status": "ok", "app_version": APP_VERSION}
     assert "Ops Cockpit" in client.get("/").text
     service_worker = client.get("/sw.js")
     assert service_worker.status_code == 200

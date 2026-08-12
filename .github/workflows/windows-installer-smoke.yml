@@ -6,11 +6,11 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.6"
+        default: "2.0.7"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
-        default: "2.0.5"
+        default: "2.0.6"
   pull_request:
     branches: [main]
     paths:
@@ -52,8 +52,8 @@ permissions:
 
 env:
   PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report-updates
-  PREVIOUS_STABLE_VERSION: "2.0.5"
-  CANDIDATE_ARTIFACT_NAME: v206-candidate-installer
+  PREVIOUS_STABLE_VERSION: "2.0.6"
+  CANDIDATE_ARTIFACT_NAME: v207-candidate-installer
 
 jobs:
   contract-checks:
@@ -143,12 +143,28 @@ jobs:
           $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$currentVersion.exe"
           $checksum = "artifacts\installer\SHA256SUMS.txt"
           .\packaging\assert_no_embedded_database.ps1 -Path "build\installer-app\TikTokAffiliateReport"
+          $bootstrap = "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1"
           $actualFiles = @(Get-ChildItem -LiteralPath "artifacts\installer" -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$currentVersion.exe") | Sort-Object
-          if (Compare-Object $actualFiles $expectedFiles) { throw "Candidate artifact directory must contain only installer and SHA256SUMS.txt" }
-          $expectedHash = ((Get-Content -LiteralPath $checksum -Raw) -split '\s+')[0].ToUpperInvariant()
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+          if (Compare-Object $actualFiles $expectedFiles) { throw "Candidate artifact directory must contain only installer, updater bootstrap and SHA256SUMS.txt" }
+          $checksumLines = @(Get-Content -LiteralPath $checksum | Where-Object { $_.Trim() })
+          $checksumNames = @($checksumLines | ForEach-Object {
+            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (TikTokAffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+            if (!$match.Success) { throw "Candidate SHA256SUMS contains a malformed or unexpected entry" }
+            $match.Groups[2].Value
+          } | Sort-Object)
+          $expectedChecksumNames = @("TikTokAffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+          if ($checksumLines.Count -ne 2 -or (Compare-Object $checksumNames $expectedChecksumNames)) { throw "Candidate SHA256SUMS must contain exactly the installer and updater bootstrap" }
+          $installerLine = @(Get-Content -LiteralPath $checksum | Where-Object { $_ -match ([regex]::Escape("TikTokAffiliateReportSetup-v$currentVersion.exe") + '$') })
+          if ($installerLine.Count -ne 1) { throw "Candidate installer checksum entry is missing" }
+          $expectedHash = ([regex]::Match($installerLine[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
           $actualHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
           if ($actualHash -ne $expectedHash) { throw "Candidate installer checksum mismatch" }
+          $bootstrapLine = @(Get-Content -LiteralPath $checksum | Where-Object { $_ -match 'TikTokAffiliateUpdater-v1\.0\.0\.ps1$' })
+          if ($bootstrapLine.Count -ne 1) { throw "Candidate bootstrap checksum entry is missing" }
+          $bootstrapExpected = ([regex]::Match($bootstrapLine[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+          $bootstrapActual = (Get-FileHash -LiteralPath $bootstrap -Algorithm SHA256).Hash
+          if ($bootstrapActual -ne $bootstrapExpected) { throw "Candidate bootstrap checksum mismatch" }
           $size = (Get-Item -LiteralPath $installer).Length
           $mergeSha = git rev-parse HEAD
           "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
@@ -167,6 +183,7 @@ jobs:
           name: ${{ env.CANDIDATE_ARTIFACT_NAME }}
           path: |
             artifacts/installer/TikTokAffiliateReportSetup-v*.exe
+            artifacts/installer/TikTokAffiliateUpdater-v1.0.0.ps1
             artifacts/installer/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 3
@@ -229,9 +246,33 @@ jobs:
             -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt")
           "- Upgrade $previousVersion -> ${currentVersion}: PASS" >> $env:GITHUB_STEP_SUMMARY
 
+  candidate-bootstrap-runtime:
+    if: always() && needs.candidate-build.result == 'success'
+    needs: candidate-build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.CANDIDATE_ARTIFACT_NAME }}
+          path: candidate
+      - name: Smoke packaged independent bootstrap success path
+        shell: pwsh
+        run: |
+          $currentVersion = "${{ needs.candidate-build.outputs.current_version }}"
+          .\scripts\ci\windows_installer_smoke.ps1 -Mode Bootstrap `
+            -CurrentInstaller (Join-Path $PWD "candidate\TikTokAffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentVersion $currentVersion `
+            -CurrentChecksumFile (Join-Path $PWD "candidate\SHA256SUMS.txt") `
+            -BootstrapPath (Join-Path $PWD "candidate\TikTokAffiliateUpdater-v1.0.0.ps1")
+          "- Packaged bootstrap runtime: PASS" >> $env:GITHUB_STEP_SUMMARY
+
   candidate-release-gate:
     if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
-    needs: [candidate-build, candidate-fresh-install, candidate-upgrade-install]
+    needs: [candidate-build, candidate-fresh-install, candidate-upgrade-install, candidate-bootstrap-runtime]
     runs-on: ubuntu-latest
     steps:
       - name: Require build, fresh and upgrade evidence
@@ -239,13 +280,14 @@ jobs:
           BUILD_RESULT: ${{ needs.candidate-build.result }}
           FRESH_RESULT: ${{ needs.candidate-fresh-install.result }}
           UPGRADE_RESULT: ${{ needs.candidate-upgrade-install.result }}
+          BOOTSTRAP_RESULT: ${{ needs.candidate-bootstrap-runtime.result }}
           VERSION: ${{ needs.candidate-build.outputs.current_version }}
           MERGE_SHA: ${{ needs.candidate-build.outputs.merge_sha }}
           INSTALLER_SIZE: ${{ needs.candidate-build.outputs.installer_size }}
           INSTALLER_SHA256: ${{ needs.candidate-build.outputs.installer_sha256 }}
         run: |
-          if [ "$BUILD_RESULT" != "success" ] || [ "$FRESH_RESULT" != "success" ] || [ "$UPGRADE_RESULT" != "success" ]; then
-            echo "::error::Candidate build, fresh smoke and upgrade smoke must all pass before merge."
+          if [ "$BUILD_RESULT" != "success" ] || [ "$FRESH_RESULT" != "success" ] || [ "$UPGRADE_RESULT" != "success" ] || [ "$BOOTSTRAP_RESULT" != "success" ]; then
+            echo "::error::Candidate build, fresh, upgrade and packaged bootstrap runtime smokes must all pass before merge."
             exit 1
           fi
           {
@@ -256,6 +298,7 @@ jobs:
             echo "- SHA-256: $INSTALLER_SHA256"
             echo "- Fresh: PASS"
             echo "- Upgrade: PASS"
+            echo "- Packaged bootstrap runtime: PASS"
           } >> "$GITHUB_STEP_SUMMARY"
 
   fresh-install:

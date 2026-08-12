@@ -113,6 +113,7 @@ function Export-ScrubbedUpdaterDiagnostics {
     $sources = @(
         @{ Path = (Join-Path $dataDir 'update-status.json'); Name = 'diagnostic-update-status.json' },
         @{ Path = (Join-Path $dataDir 'updater.log'); Name = 'diagnostic-updater.log' },
+        @{ Path = (Join-Path $updateDir 'bootstrap-ack.json'); Name = 'diagnostic-bootstrap-ack.json' },
         @{ Path = (Join-Path $updateDir 'updater-bootstrap.log'); Name = 'diagnostic-updater-bootstrap.log' },
         @{ Path = (Join-Path $updateDir 'installer.log'); Name = 'diagnostic-installer.log' },
         @{ Path = (Join-Path $dataDir 'launcher.log'); Name = 'diagnostic-launcher.log' }
@@ -176,6 +177,9 @@ try {
     if ($progress.phase -ne 'installed' -or $progress.current_version -ne $CurrentVersion -or $progress.error) {
         throw 'Updater did not reach a clean installed state.'
     }
+    $orphanBootstraps = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+        Where-Object { $_.CommandLine -and $_.CommandLine -match 'TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1' })
+    if ($orphanBootstraps.Count -ne 0) { throw 'Updater bootstrap process was not cleaned up.' }
 
     @"
 ## Public updater UI smoke

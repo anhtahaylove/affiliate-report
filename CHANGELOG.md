@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.7 - 2026-08-12
+
+**Tách updater bootstrap khỏi phiên bản source đang chạy.** Public signed feed bổ sung asset `TikTokAffiliateUpdater-v1.0.0.ps1`; ứng dụng xác minh Ed25519 manifest, filename, protocol, kích thước và SHA-256 trước khi tải và kiểm tra lại hash ngay trước khi chạy. Logic đợi app thoát, cài Inno, khởi động lại và health handshake từ đây được phân phối độc lập theo release thay vì sinh từ Python source cũ.
+
+- Thêm handshake theo `attempt_id`, protocol, bootstrap version và target version; status cũ hoặc ACK của lần thử khác không thể làm app đóng nhầm.
+- `instance.json` ghi `app_version`; bootstrap chỉ báo thành công khi đúng target version phản hồi `/health`.
+- Giữ nguyên feed schema v1, Ed25519 key, AppId, installer filename, data path và restart contract để v2.0.6 vẫn nâng cấp được lên v2.0.7 bằng helper legacy.
+- Candidate/release allowlist, `SHA256SUMS.txt` và anonymous release verification bao gồm cả bootstrap độc lập.
+- Thêm tài liệu threat model, protocol và release gates tại `docs/V2.0.7-INDEPENDENT-UPDATER.md`.
+
 ## v2.0.6 - 2026-08-12
 
 > Recovery boundary: the v2.0.5 app still owns the bootstrap for the one-time
