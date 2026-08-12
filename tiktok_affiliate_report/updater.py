@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -31,10 +32,16 @@ UPDATE_STATUS_SCHEMA = "tiktok-affiliate-report.update-status.v1"
 UPDATE_STATUS_PHASES = {"idle", "downloading", "verifying", "waiting_for_exit", "installing", "restarting", "installed", "failed"}
 INSTALL_CONFIRMATION_PHRASE = "CAP NHAT UNG DUNG"
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
+MAX_BOOTSTRAP_BYTES = 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_CHECKSUM_BYTES = MAX_MANIFEST_BYTES
 VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 INSTALLER_RE = re.compile(r"^TikTokAffiliateReportSetup-v(\d+\.\d+\.\d+)\.exe$")
+UPDATE_BOOTSTRAP_PROTOCOL = 1
+UPDATE_BOOTSTRAP_VERSION = "1.0.0"
+UPDATE_BOOTSTRAP_NAME = f"TikTokAffiliateUpdater-v{UPDATE_BOOTSTRAP_VERSION}.ps1"
+BOOTSTRAP_RE = re.compile(r"^TikTokAffiliateUpdater-v(\d+\.\d+\.\d+)\.ps1$")
+BOOTSTRAP_ACK_SCHEMA = "tiktok-affiliate-report.update-bootstrap-ack.v1"
 SHA256_RE = re.compile(r"^[0-9A-Fa-f]{64}$")
 TRUSTED_UPDATE_KEYS = {
     "tiktok-report-updates-2026-08": "hA5aOGFJdfDjtm9ME52d/2lBMlAPLao+bg5wlPM4Tm0=",
@@ -71,13 +78,14 @@ def check_for_update(*, current_version: str = APP_VERSION, token: str | None = 
     latest_version = _parse_version(str(manifest["version"]))
     current = _parse_version(current_version)
     installer = manifest["installer"]
+    bootstrap = manifest.get("bootstrap")
     tag_name = f"v{manifest['version']}"
-    return {
+    result = {
         "current_version": current_version,
         "latest_version": ".".join(map(str, latest_version)),
         "tag_name": tag_name,
         "available": latest_version > current,
-        "installable": True,
+        "installable": bootstrap is not None,
         "release_name": tag_name,
         "release_url": str(manifest["release_url"]),
         "published_at": manifest.get("published_at"),
@@ -86,6 +94,10 @@ def check_for_update(*, current_version: str = APP_VERSION, token: str | None = 
         "feed_url": configured_feed_url(),
         "installer_name": str(installer["name"]),
     }
+    if bootstrap is not None:
+        result["bootstrap_protocol"] = int(bootstrap["protocol"])
+        result["bootstrap_version"] = str(bootstrap["version"])
+    return result
 
 
 def download_latest_update(
@@ -102,19 +114,56 @@ def download_latest_update(
 
     version = ".".join(map(str, latest))
     installer = manifest["installer"]
+    bootstrap = manifest.get("bootstrap")
+    if not isinstance(bootstrap, dict):
+        raise UpdateError("Update manifest thiếu updater bootstrap; không thể cài tự động.")
     installer_name = str(installer["name"])
     target_dir = Path(data_dir).resolve() / "updates" / f"v{version}"
     target_dir.mkdir(parents=True, exist_ok=True)
     installer_path = target_dir / installer_name
-    actual_hash = _download_file(str(installer["url"]), installer_path, int(installer["size"]), MAX_INSTALLER_BYTES, progress_callback)
+    bootstrap_path = target_dir / str(bootstrap["name"])
+    installer_size = int(installer["size"])
+    bootstrap_size = int(bootstrap["size"])
+    total_size = installer_size + bootstrap_size
+
+    def report_installer(done: int, _total: int) -> None:
+        if progress_callback:
+            progress_callback(done, total_size)
+
+    def report_bootstrap(done: int, _total: int) -> None:
+        if progress_callback:
+            progress_callback(installer_size + done, total_size)
+
+    actual_hash = _download_file(str(installer["url"]), installer_path, installer_size, MAX_INSTALLER_BYTES, report_installer)
     expected_hash = str(installer["sha256"]).upper()
     if actual_hash != expected_hash:
         installer_path.unlink(missing_ok=True)
         raise UpdateError("SHA-256 của installer không khớp; đã hủy cập nhật.")
+    try:
+        actual_bootstrap_hash = _download_file(
+            str(bootstrap["url"]),
+            bootstrap_path,
+            bootstrap_size,
+            MAX_BOOTSTRAP_BYTES,
+            report_bootstrap,
+        )
+    except Exception:
+        bootstrap_path.unlink(missing_ok=True)
+        installer_path.unlink(missing_ok=True)
+        raise
+    expected_bootstrap_hash = str(bootstrap["sha256"]).upper()
+    if actual_bootstrap_hash != expected_bootstrap_hash:
+        bootstrap_path.unlink(missing_ok=True)
+        installer_path.unlink(missing_ok=True)
+        raise UpdateError("SHA-256 của updater bootstrap không khớp; đã hủy cập nhật.")
     return {
         "version": version,
         "installer_path": str(installer_path),
         "sha256": actual_hash,
+        "bootstrap_path": str(bootstrap_path),
+        "bootstrap_sha256": actual_bootstrap_hash,
+        "bootstrap_protocol": int(bootstrap["protocol"]),
+        "bootstrap_version": str(bootstrap["version"]),
         "release_url": str(manifest["release_url"]),
     }
 
@@ -184,7 +233,40 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
     url = _require_https_url(str(installer.get("url") or ""), "Installer URL trong update manifest không hợp lệ.")
     if Path(urlparse(url).path).name != name:
         raise UpdateError("Installer URL không khớp tên file trong update manifest.")
-    return {
+    bootstrap = value.get("bootstrap")
+    if bootstrap is None:
+        bootstrap_value = None
+    elif not isinstance(bootstrap, dict):
+        raise UpdateError("Updater bootstrap trong update manifest không hợp lệ.")
+    else:
+        bootstrap_value = bootstrap
+    if bootstrap_value is not None:
+        bootstrap = bootstrap_value
+        protocol = bootstrap.get("protocol")
+        if protocol != UPDATE_BOOTSTRAP_PROTOCOL:
+            raise UpdateError("Updater bootstrap dùng protocol không được hỗ trợ.")
+        bootstrap_version = str(bootstrap.get("version") or "")
+        bootstrap_name = str(bootstrap.get("name") or "")
+        bootstrap_match = BOOTSTRAP_RE.fullmatch(bootstrap_name)
+        try:
+            _parse_version(bootstrap_version)
+        except UpdateError as exc:
+            raise UpdateError("Tên hoặc phiên bản updater bootstrap không hợp lệ.") from exc
+        if not bootstrap_match or bootstrap_match.group(1) != bootstrap_version:
+            raise UpdateError("Tên hoặc phiên bản updater bootstrap không hợp lệ.")
+        bootstrap_size = bootstrap.get("size")
+        if not isinstance(bootstrap_size, int) or bootstrap_size <= 0 or bootstrap_size > MAX_BOOTSTRAP_BYTES:
+            raise UpdateError("Kích thước updater bootstrap không hợp lệ.")
+        bootstrap_sha256 = str(bootstrap.get("sha256") or "").upper()
+        if not SHA256_RE.fullmatch(bootstrap_sha256):
+            raise UpdateError("SHA-256 updater bootstrap không hợp lệ.")
+        bootstrap_url = _require_https_url(
+            str(bootstrap.get("url") or ""),
+            "Updater bootstrap URL không hợp lệ.",
+        )
+        if Path(urlparse(bootstrap_url).path).name != bootstrap_name:
+            raise UpdateError("Updater bootstrap URL không khớp tên file.")
+    result = {
         "schema": UPDATE_SCHEMA,
         "app_id": UPDATE_APP_ID,
         "channel": UPDATE_CHANNEL,
@@ -193,6 +275,16 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
         "published_at": value.get("published_at"),
         "installer": {"name": name, "url": url, "size": size, "sha256": sha256},
     }
+    if bootstrap_value is not None:
+        result["bootstrap"] = {
+            "protocol": protocol,
+            "version": bootstrap_version,
+            "name": bootstrap_name,
+            "url": bootstrap_url,
+            "size": bootstrap_size,
+            "sha256": bootstrap_sha256,
+        }
+    return result
 
 
 def _download_file(
@@ -401,6 +493,10 @@ def schedule_installer(
     *,
     status_path: Path,
     target_version: str,
+    bootstrap_path: Path,
+    bootstrap_sha256: str,
+    bootstrap_protocol: int,
+    bootstrap_version: str,
     installer_size: int | None = None,
     delay_seconds: float = 1.0,
     instance_state_path: Path | None = None,
@@ -418,6 +514,10 @@ def schedule_installer(
     # points at a different location explicitly.
     state = Path(instance_state_path).resolve() if instance_state_path else installer.parent.parent.parent / "instance.json"
     size = installer_size or installer.stat().st_size
+    bootstrap = Path(bootstrap_path).resolve()
+    attempt_id = secrets.token_hex(16)
+    ack_path = installer.parent / "bootstrap-ack.json"
+    ack_path.unlink(missing_ok=True)
     write_update_status(
         status,
         phase="verifying",
@@ -425,9 +525,30 @@ def schedule_installer(
         bytes_downloaded=size,
         bytes_total=size,
     )
-    helper_process = _launch_update_helper(installer, expected, log, status, target_version, size, state)
+    helper_process = _launch_update_bootstrap(
+        installer_path=installer,
+        expected_sha256=expected,
+        bootstrap_path=bootstrap,
+        expected_bootstrap_sha256=bootstrap_sha256,
+        bootstrap_protocol=bootstrap_protocol,
+        bootstrap_version=bootstrap_version,
+        log_path=log,
+        status_path=status,
+        target_version=target_version,
+        installer_size=size,
+        instance_state_path=state,
+        attempt_id=attempt_id,
+        ack_path=ack_path,
+    )
     try:
-        _wait_for_helper_handshake(status, target_version, installer.parent / "updater-bootstrap.log")
+        _wait_for_bootstrap_handshake(
+            ack_path,
+            attempt_id=attempt_id,
+            target_version=target_version,
+            bootstrap_protocol=bootstrap_protocol,
+            bootstrap_version=bootstrap_version,
+            bootstrap_log=installer.parent / "updater-bootstrap.log",
+        )
     except Exception as exc:
         cleanup_issue = _stop_update_helper(helper_process)
         if cleanup_issue:
@@ -445,14 +566,21 @@ def schedule_installer(
     timer.start()
 
 
-def _launch_update_helper(
+def _launch_update_bootstrap(
+    *,
     installer_path: Path,
     expected_sha256: str,
+    bootstrap_path: Path,
+    expected_bootstrap_sha256: str,
+    bootstrap_protocol: int,
+    bootstrap_version: str,
     log_path: Path,
     status_path: Path,
     target_version: str,
     installer_size: int,
     instance_state_path: Path,
+    attempt_id: str,
+    ack_path: Path,
 ) -> subprocess.Popen[Any]:
     if not _windows_frozen():
         raise UpdateError("Cập nhật tự động chỉ chạy trong bản cài Windows.")
@@ -467,6 +595,25 @@ def _launch_update_helper(
         raise UpdateError("Không thể đọc installer cập nhật.") from exc
     if actual_sha256 != expected_sha256:
         raise UpdateError("Installer cập nhật đã thay đổi sau khi tải; đã hủy cập nhật.")
+    bootstrap_match = BOOTSTRAP_RE.fullmatch(bootstrap_path.name)
+    if (
+        bootstrap_protocol != UPDATE_BOOTSTRAP_PROTOCOL
+        or not bootstrap_match
+        or bootstrap_match.group(1) != bootstrap_version
+        or not bootstrap_path.is_file()
+    ):
+        raise UpdateError("Updater bootstrap không hợp lệ.")
+    expected_bootstrap = expected_bootstrap_sha256.strip().upper()
+    if not SHA256_RE.fullmatch(expected_bootstrap):
+        raise UpdateError("SHA-256 updater bootstrap không hợp lệ.")
+    try:
+        actual_bootstrap_sha256 = _file_sha256(bootstrap_path)
+    except OSError as exc:
+        raise UpdateError("Không thể đọc updater bootstrap.") from exc
+    if actual_bootstrap_sha256 != expected_bootstrap:
+        raise UpdateError("Updater bootstrap đã thay đổi sau khi tải; đã hủy cập nhật.")
+    if not re.fullmatch(r"[A-Fa-f0-9]{32}", attempt_id):
+        raise UpdateError("Mã lần cập nhật không hợp lệ.")
 
     app_path = Path(sys.executable).resolve()
     powershell = (
@@ -479,15 +626,14 @@ def _launch_update_helper(
     if not app_path.is_file() or not powershell.is_file():
         raise UpdateError("Không tìm thấy Windows app hoặc updater helper.")
 
-    helper_path = installer_path.parent / "install-update.ps1"
     installer_log = installer_path.parent / "installer.log"
     bootstrap_log = installer_path.parent / "updater-bootstrap.log"
     try:
-        helper_path.write_text(_powershell_helper_script(), encoding="utf-8-sig")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         status_path.parent.mkdir(parents=True, exist_ok=True)
+        ack_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        raise UpdateError("Không thể tạo updater helper.") from exc
+        raise UpdateError("Không thể chuẩn bị updater bootstrap.") from exc
     flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
         with bootstrap_log.open("ab") as bootstrap:
@@ -502,7 +648,7 @@ def _launch_update_helper(
                     "-WindowStyle",
                     "Hidden",
                     "-File",
-                    str(helper_path),
+                    str(bootstrap_path),
                     "-ParentPid",
                     str(os.getpid()),
                     "-Installer",
@@ -523,6 +669,14 @@ def _launch_update_helper(
                     str(installer_size),
                     "-InstanceStatePath",
                     str(instance_state_path),
+                    "-BootstrapProtocol",
+                    str(bootstrap_protocol),
+                    "-BootstrapVersion",
+                    bootstrap_version,
+                    "-AttemptId",
+                    attempt_id,
+                    "-AckPath",
+                    str(ack_path),
                 ],
                 cwd=installer_path.parent,
                 close_fds=True,
@@ -531,7 +685,7 @@ def _launch_update_helper(
                 stderr=bootstrap,
             )
     except OSError as exc:
-        raise UpdateError("Không thể khởi chạy updater helper.") from exc
+        raise UpdateError("Không thể khởi chạy updater bootstrap.") from exc
 
 
 def _stop_update_helper(process: subprocess.Popen[Any] | None) -> str | None:
@@ -569,18 +723,32 @@ def _stop_update_helper(process: subprocess.Popen[Any] | None) -> str | None:
     return None
 
 
-def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap_log: Path, timeout_seconds: float = 30.0) -> None:
+def _wait_for_bootstrap_handshake(
+    ack_path: Path,
+    *,
+    attempt_id: str,
+    target_version: str,
+    bootstrap_protocol: int,
+    bootstrap_version: str,
+    bootstrap_log: Path,
+    timeout_seconds: float = 30.0,
+) -> None:
     deadline = time.monotonic() + timeout_seconds
     while True:
         try:
-            status = read_update_status(status_path)
-        except UpdateError:
-            status = None
-        if status and status["target_version"] == target_version:
-            if status["phase"] in {"waiting_for_exit", "installing", "restarting", "installed"}:
+            value = json.loads(ack_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            value = None
+        if isinstance(value, dict) and value.get("attempt_id") == attempt_id:
+            if (
+                value.get("schema") == BOOTSTRAP_ACK_SCHEMA
+                and value.get("phase") == "ready"
+                and value.get("protocol") == bootstrap_protocol
+                and value.get("bootstrap_version") == bootstrap_version
+                and value.get("target_version") == target_version
+            ):
                 return
-            if status["phase"] == "failed":
-                raise UpdateError(str(status["error"] or "Updater helper khởi động thất bại."))
+            raise UpdateError("Updater bootstrap trả về handshake không hợp lệ.")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
@@ -591,180 +759,7 @@ def _wait_for_helper_handshake(status_path: Path, target_version: str, bootstrap
             detail = bootstrap_log.read_text(encoding="utf-8", errors="replace").strip()
     except OSError:
         detail = ""
-    raise UpdateError("Updater helper không xác nhận khởi động." + (f" {detail}" if detail else ""))
-
-
-def _powershell_helper_script() -> str:
-    return r'''
-param(
-    [Parameter(Mandatory=$true)][int]$ParentPid,
-    [Parameter(Mandatory=$true)][string]$Installer,
-    [Parameter(Mandatory=$true)][string]$ExpectedSha256,
-    [Parameter(Mandatory=$true)][string]$AppExe,
-    [Parameter(Mandatory=$true)][string]$LogPath,
-    [Parameter(Mandatory=$true)][string]$InstallerLog,
-    [Parameter(Mandatory=$true)][string]$StatusPath,
-    [Parameter(Mandatory=$true)][string]$TargetVersion,
-    [Parameter(Mandatory=$true)][int64]$InstallerSize,
-    [Parameter(Mandatory=$true)][string]$InstanceStatePath
-)
-$ErrorActionPreference = 'Stop'
-$Utf8 = [System.Text.UTF8Encoding]::new($false)
-function Escape-Json([string]$Value) {
-    if ($null -eq $Value) { return '' }
-    return $Value.Replace('\', '\\').Replace('"', '\"').Replace("`r", '\r').Replace("`n", '\n')
-}
-function Ensure-Directory([string]$FilePath) {
-    $directory = [System.IO.Path]::GetDirectoryName($FilePath)
-    if ($directory) { [System.IO.Directory]::CreateDirectory($directory) > $null }
-}
-function Write-UpdateLog([string]$Message) {
-    Ensure-Directory $LogPath
-    [System.IO.File]::AppendAllText($LogPath, ([System.DateTimeOffset]::UtcNow.ToString('o') + ' ' + $Message + [System.Environment]::NewLine), $Utf8)
-}
-function Write-UpdateStatus([string]$Phase, [string]$ErrorText) {
-    Ensure-Directory $StatusPath
-    $errorJson = 'null'
-    if ($ErrorText) { $errorJson = '"' + (Escape-Json $ErrorText) + '"' }
-    $json = '{"bytes_downloaded":' + $InstallerSize + ',"bytes_total":' + $InstallerSize + ',"error":' + $errorJson + ',"phase":"' + $Phase + '","schema":"tiktok-affiliate-report.update-status.v1","target_version":"' + (Escape-Json $TargetVersion) + '","updated_at":"' + [System.DateTimeOffset]::UtcNow.ToString('o') + '"}'
-    $tmp = $StatusPath + '.' + $PID + '.tmp'
-    [System.IO.File]::WriteAllText($tmp, $json + [System.Environment]::NewLine, $Utf8)
-    if ([System.IO.File]::Exists($StatusPath)) {
-        $backup = $StatusPath + '.' + $PID + '.bak'
-        try {
-            if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) }
-            [System.IO.File]::Replace($tmp, $StatusPath, $backup, $true)
-        } finally {
-            try { if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) } } catch {}
-        }
-    } else {
-        [System.IO.File]::Move($tmp, $StatusPath)
-    }
-}
-function Get-Sha256Hex([string]$Path) {
-    $stream = [System.IO.File]::OpenRead($Path)
-    try {
-        $sha = [System.Security.Cryptography.SHA256]::Create()
-        try { return ([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToUpperInvariant() }
-        finally { $sha.Dispose() }
-    } finally { $stream.Dispose() }
-}
-function Start-Child([string]$FilePath, [string]$Arguments, [string]$WorkingDirectory, [bool]$Wait) {
-    $psi = [System.Diagnostics.ProcessStartInfo]::new()
-    $psi.FileName = $FilePath
-    $psi.Arguments = $Arguments
-    $psi.WorkingDirectory = $WorkingDirectory
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $process = [System.Diagnostics.Process]::Start($psi)
-    if ($Wait) { $process.WaitForExit(); return $process.ExitCode }
-    return 0
-}
-function Wait-FileUnlocked([string]$Path, [int]$TimeoutMs) {
-    # $ParentPid is only the PyInstaller onefile *child* process. Its bootloader parent keeps
-    # $AppExe open a little longer while it unpacks/cleans up its _MEI temp directory, so
-    # WaitForExit($ParentPid) alone can return before the file is actually unlocked. If the
-    # installer's /CLOSEAPPLICATIONS still finds it in use it defaults to Abort (exit code 5)
-    # instead of prompting, since Setup runs /SUPPRESSMSGBOXES. Poll the file handle itself
-    # (deliberately not enumerating processes — see forbidden cmdlets in test_updater.py) so we
-    # cover any lingering process, not just the one PID we happen to know about.
-    $deadline = [System.Diagnostics.Stopwatch]::StartNew()
-    while ($deadline.ElapsedMilliseconds -lt $TimeoutMs) {
-        if (-not [System.IO.File]::Exists($Path)) { return $true }
-        try {
-            $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
-            $stream.Close()
-            return $true
-        } catch [System.IO.IOException] {
-            Start-Sleep -Milliseconds 200
-        }
-    }
-    return $false
-}
-function Test-Health([string]$Url) {
-    try {
-        $client = [System.Net.WebClient]::new()
-        try {
-            $client.DownloadString($Url + '/health') | Out-Null
-            return $true
-        } finally { $client.Dispose() }
-    } catch {
-        return $false
-    }
-}
-function Wait-AppHealthy([string]$StatePath, [int]$TimeoutMs) {
-    # The relaunched app writes instance.json (with its /health URL) once its window-station-
-    # bound startup (single-instance mutex, then the system tray icon) clears — that step has
-    # been observed to stall for several seconds right after a fresh install, likely antivirus
-    # scanning the newly-written exe. Poll for a real response instead of assuming Start-Child
-    # succeeding means the app is actually usable yet.
-    $deadline = [System.Diagnostics.Stopwatch]::StartNew()
-    while ($deadline.ElapsedMilliseconds -lt $TimeoutMs) {
-        if ([System.IO.File]::Exists($StatePath)) {
-            try {
-                $raw = [System.IO.File]::ReadAllText($StatePath)
-                $match = [System.Text.RegularExpressions.Regex]::Match($raw, '"url"\s*:\s*"([^"]+)"')
-                if ($match.Success -and (Test-Health $match.Groups[1].Value)) { return $true }
-            } catch {}
-        }
-        Start-Sleep -Milliseconds 400
-    }
-    return $false
-}
-$parentExited = $false
-try {
-    Write-UpdateLog 'Updater helper started.'
-    Write-UpdateStatus 'waiting_for_exit' $null
-    try {
-        $parent = [System.Diagnostics.Process]::GetProcessById($ParentPid)
-        if (-not $parent.WaitForExit(120000)) { throw 'Timed out waiting for app to exit.' }
-    } catch [System.ArgumentException] {
-    }
-    $parentExited = $true
-    if (-not (Wait-FileUnlocked $AppExe 15000)) {
-        Write-UpdateLog 'Warning: app executable still locked 15s after process exit; proceeding anyway.'
-    }
-    Write-UpdateStatus 'installing' $null
-    if (([System.IO.FileInfo]::new($Installer)).Length -ne $InstallerSize) { throw 'Installer size changed after download.' }
-    $actual = Get-Sha256Hex $Installer
-    if ($actual -ne $ExpectedSha256) { throw 'Installer SHA-256 changed after download.' }
-    $arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /LOG="' + $InstallerLog + '"'
-    $exitCode = Start-Child $Installer $arguments ([System.IO.Path]::GetDirectoryName($Installer)) $true
-    if ($exitCode -ne 0) { throw "Installer exited with code $exitCode." }
-    Write-UpdateStatus 'restarting' $null
-    Start-Child $AppExe '--updated' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-    # Bản onedir không giải nén runtime ra %TEMP% nữa. Mở ngay sau khi cài thường mất 2-4s vì
-    # installer vừa ghi xong nên file còn trong cache của OS; nhưng mở nguội (file đã rơi khỏi
-    # cache, antivirus quét lại gần 1.800 file) đã đo được tới 35s trên máy thật. Cho 90s để một
-    # lần khởi động chậm không bị báo nhầm là hỏng — chờ lâu giờ chẳng hại gì nữa.
-    #
-    # KHÔNG mở lần thứ hai khi chờ quá hạn. Bản onefile trước đây làm vậy và chính đó là thứ sinh
-    # ra hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và
-    # antivirus, một trong hai nạp DLL hỏng giữa chừng. Chờ không thấy thì báo thật cho người dùng.
-    if (-not (Wait-AppHealthy $InstanceStatePath 90000)) {
-        Write-UpdateLog 'Warning: install succeeded but the app did not report healthy within 90s; leaving it to the user to open.'
-        Write-UpdateStatus 'installed' 'Đã cài xong nhưng ứng dụng chưa tự mở lại được. Hãy mở TikTok Affiliate Report từ Desktop hoặc Start Menu.'
-        Write-UpdateLog 'Update installed successfully.'
-        return
-    }
-    Write-UpdateStatus 'installed' $null
-    Write-UpdateLog 'Update installed successfully.'
-} catch {
-    $failure = $_.Exception.Message
-    try { Write-UpdateStatus 'failed' $failure } catch {}
-    try { Write-UpdateLog ('Update failed: ' + $failure) } catch {}
-    if ($parentExited -and [System.IO.File]::Exists($AppExe)) {
-        try {
-            Start-Child $AppExe '' ([System.IO.Path]::GetDirectoryName($AppExe)) $false > $null
-            Write-UpdateLog 'Previous app version restarted after update failure.'
-        } catch {
-            Write-UpdateLog ('App restart failed: ' + $_.Exception.Message)
-        }
-    }
-} finally {
-    try { [System.IO.File]::Delete($PSCommandPath) } catch {}
-}
-'''
+    raise UpdateError("Updater bootstrap không xác nhận khởi động." + (f" {detail}" if detail else ""))
 
 
 def _windows_frozen() -> bool:

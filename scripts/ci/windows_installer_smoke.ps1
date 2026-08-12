@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Fresh', 'Upgrade')]
+    [ValidateSet('Fresh', 'Upgrade', 'Bootstrap')]
     [string]$Mode,
     [Parameter(Mandatory)]
     [string]$CurrentInstaller,
@@ -10,7 +10,8 @@ param(
     [string]$CurrentChecksumFile,
     [string]$PreviousInstaller,
     [string]$PreviousVersion,
-    [string]$PreviousChecksumFile
+    [string]$PreviousChecksumFile,
+    [string]$BootstrapPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -158,6 +159,16 @@ if ($Mode -eq 'Upgrade') {
         throw "PreviousVersion must be lower than CurrentVersion for upgrade smoke."
     }
 }
+if ($Mode -eq 'Bootstrap') {
+    if (!(Test-Path -LiteralPath $BootstrapPath -PathType Leaf)) { throw 'BootstrapPath is required for bootstrap smoke.' }
+    $bootstrapName = Split-Path -Leaf $BootstrapPath
+    $bootstrapMatch = [regex]::Match($bootstrapName, '^TikTokAffiliateUpdater-v(\d+\.\d+\.\d+)\.ps1$')
+    if (!$bootstrapMatch.Success) { throw "Invalid updater bootstrap filename: $bootstrapName" }
+    $bootstrapLine = @(Get-Content -LiteralPath $CurrentChecksumFile | Where-Object { $_ -match ([regex]::Escape($bootstrapName) + '$') })
+    if ($bootstrapLine.Count -ne 1) { throw 'Bootstrap checksum entry is missing.' }
+    $bootstrapExpected = ([regex]::Match($bootstrapLine[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
+    if ((Get-FileHash -LiteralPath $BootstrapPath -Algorithm SHA256).Hash -ne $bootstrapExpected) { throw 'Bootstrap SHA-256 mismatch.' }
+}
 
 try {
     if ($Mode -eq 'Fresh') {
@@ -177,7 +188,7 @@ try {
         $meta = Assert-Routes $baseUrl -IncludePreferences
         if ('SMOKE' -notin @($meta.accounts)) { throw 'Fresh-install data did not persist after restart.' }
         Assert-Target $baseUrl 'SMOKE' '2099-12' 123456789
-    } else {
+    } elseif ($Mode -eq 'Upgrade') {
         Install-App $PreviousInstaller
         Assert-InstalledVersion $PreviousVersion
         $baseUrl = Start-App 43122
@@ -196,6 +207,52 @@ try {
         $meta = Assert-Routes $baseUrl -IncludePreferences
         if ('SMOKE' -notin @($meta.accounts)) { throw 'Smoke account was not preserved during upgrade.' }
         Assert-Target $baseUrl 'SMOKE' '2099-12' 987654321
+    } else {
+        Install-App $CurrentInstaller
+        Assert-InstalledVersion $CurrentVersion
+        $baseUrl = Start-App 43124
+        $body = @{ code = 'SMOKE'; display_name = 'Bootstrap Smoke'; display_order = 1 } | ConvertTo-Json -Compress
+        Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body | Out-Null
+        Set-Target $baseUrl 'SMOKE' '2099-12' 246813579
+        Stop-App
+
+        $dataDir = Join-Path $installDir 'data'
+        $runtimeDir = Join-Path $dataDir "updates\v$CurrentVersion-bootstrap-runtime"
+        New-Item -ItemType Directory -Path $runtimeDir -Force | Out-Null
+        $statusPath = Join-Path $dataDir 'update-status.json'
+        $ackPath = Join-Path $runtimeDir 'bootstrap-ack.json'
+        $updaterLog = Join-Path $dataDir 'updater.log'
+        $installerLog = Join-Path $runtimeDir 'installer.log'
+        $installerHash = (Get-FileHash -LiteralPath $CurrentInstaller -Algorithm SHA256).Hash
+        $bootstrapVersion = [regex]::Match((Split-Path -Leaf $BootstrapPath), '^TikTokAffiliateUpdater-v(\d+\.\d+\.\d+)\.ps1$').Groups[1].Value
+        $attemptId = 'c' * 32
+        $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        $arguments = @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', "`"$BootstrapPath`"",
+            '-ParentPid', '2147483647', '-Installer', "`"$CurrentInstaller`"", '-ExpectedSha256', $installerHash,
+            '-AppExe', "`"$appExe`"", '-LogPath', "`"$updaterLog`"", '-InstallerLog', "`"$installerLog`"",
+            '-StatusPath', "`"$statusPath`"", '-TargetVersion', $CurrentVersion,
+            '-InstallerSize', ([string](Get-Item -LiteralPath $CurrentInstaller).Length),
+            '-InstanceStatePath', "`"$(Join-Path $dataDir 'instance.json')`"", '-BootstrapProtocol', '1',
+            '-BootstrapVersion', $bootstrapVersion, '-AttemptId', $attemptId, '-AckPath', "`"$ackPath`""
+        )
+        $bootstrapProcess = Start-Process -FilePath $powershell -ArgumentList $arguments -PassThru -WindowStyle Hidden
+        if (!$bootstrapProcess.WaitForExit(180000)) {
+            Stop-Process -Id $bootstrapProcess.Id -Force -ErrorAction SilentlyContinue
+            throw 'Updater bootstrap runtime smoke timed out.'
+        }
+        if ($bootstrapProcess.ExitCode -ne 0) { throw "Updater bootstrap exited with code $($bootstrapProcess.ExitCode)." }
+        $status = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json
+        if ($status.phase -ne 'installed' -or $status.target_version -ne $CurrentVersion -or $status.error) { throw 'Updater bootstrap did not reach a clean installed state.' }
+        $ack = Get-Content -LiteralPath $ackPath -Raw | ConvertFrom-Json
+        if ($ack.attempt_id -ne $attemptId -or $ack.bootstrap_version -ne $bootstrapVersion -or $ack.phase -ne 'ready') { throw 'Updater bootstrap ACK is invalid.' }
+        Assert-InstalledVersion $CurrentVersion
+        $instance = Get-Content -LiteralPath (Join-Path $dataDir 'instance.json') -Raw | ConvertFrom-Json
+        $health = Invoke-RestMethod "$($instance.url)/health" -TimeoutSec 10
+        if ($health.status -ne 'ok' -or $health.app_version -ne $CurrentVersion) { throw 'Relaunched target health/version proof failed.' }
+        Assert-Target $instance.url 'SMOKE' '2099-12' 246813579
+        $orphans = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine -match 'TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1' })
+        if ($orphans.Count -ne 0) { throw 'Updater bootstrap process remained after successful runtime smoke.' }
     }
 
     Write-Host "$Mode installer smoke passed."

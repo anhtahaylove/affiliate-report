@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 
 import pytest
@@ -10,6 +11,7 @@ import desktop_launcher
 def test_instance_state_accepts_only_loopback_url_and_reopens_it(tmp_path, monkeypatch):
     state = tmp_path / "instance.json"
     desktop_launcher._write_instance_state(state, "http://127.0.0.1:43120")
+    assert json.loads(state.read_text(encoding="utf-8"))["app_version"] == desktop_launcher.APP_VERSION
 
     opened = []
 

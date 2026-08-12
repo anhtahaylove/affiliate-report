@@ -1,4 +1,5 @@
 name: Windows updater UI smoke
+run-name: Public updater UI smoke ${{ inputs.previous_version }} -> ${{ inputs.current_version }} (${{ inputs.release_sha || 'manual' }}) [${{ inputs.release_nonce || 'manual' }}]
 
 on:
   workflow_dispatch:
@@ -6,25 +7,42 @@ on:
       previous_version:
         description: Public version installed before using the in-app updater
         required: true
-        default: "2.0.5"
+        default: "2.0.6"
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.0.6"
+        default: "2.0.7"
+      release_sha:
+        description: Exact trusted source commit for release-gated runs
+        required: false
+        default: ""
+      release_nonce:
+        description: Unique dispatch marker used to bind a release to this exact smoke run
+        required: false
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
   updater-ui-smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        run: [1, 2, 3, 4, 5]
     runs-on: windows-latest
     timeout-minutes: 25
     env:
       PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report-updates
       PREVIOUS_VERSION: ${{ inputs.previous_version }}
       CURRENT_VERSION: ${{ inputs.current_version }}
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      RELEASE_NONCE: ${{ inputs.release_nonce }}
+      SMOKE_RUN: ${{ matrix.run }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha || github.sha }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -46,6 +64,9 @@ jobs:
           if ([version]$previousVersion -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
           $sourceVersion = & python -c "from tiktok_affiliate_report.version import APP_VERSION; print(APP_VERSION)"
           if ($sourceVersion -ne $currentVersion) { throw "Workflow source version $sourceVersion does not match current_version $currentVersion" }
+          $sourceSha = (git rev-parse HEAD).Trim()
+          if ($env:RELEASE_SHA -and $sourceSha -ne $env:RELEASE_SHA) { throw "Workflow source SHA $sourceSha does not match release_sha $env:RELEASE_SHA" }
+          if ($env:RELEASE_SHA -and $env:RELEASE_NONCE -notmatch '^[a-f0-9]{32}$') { throw "Release-gated runs require a unique 32-character hexadecimal nonce" }
       - name: Install Playwright Chromium
         run: |
           pnpm --dir web install --frozen-lockfile
@@ -75,7 +96,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: updater-ui-smoke-evidence
+          name: updater-ui-smoke-evidence-${{ matrix.run }}
           path: ${{ runner.temp }}/updater-ui-evidence
           if-no-files-found: warn
           retention-days: 7

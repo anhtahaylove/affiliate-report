@@ -15,7 +15,7 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert "[UninstallDelete]" not in installer
     assert ".db" not in installer
     assert "dist\\TikTokAffiliateReport.exe" not in installer + build + readme
-    assert "Get-FileHash -Algorithm SHA256 $setupExe" in build
+    assert "Get-FileHash -Algorithm SHA256 $setupExe, $bootstrapFile" in build
     assert "Get-FileHash -Algorithm SHA256 $appExe, $setupExe" not in build
     assert "$staleMetadata = @($checksumFile, (Join-Path $outputDir 'stable.json'), (Join-Path $outputDir 'stable.json.sig'))" in build
     assert "Remove-Item -LiteralPath $staleMetadata" in build
@@ -78,12 +78,14 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert 'tags:\n      - "v*.*.*"' in workflow
     assert "permissions:\n  actions: read\n  contents: read" in workflow
     assert "windows-installer:\n    needs: verify" in workflow
-    assert "windows-installer:\n    needs: verify\n    runs-on: windows-latest\n    permissions:\n      contents: write" in workflow
+    assert "windows-installer:\n    needs: verify\n    runs-on: windows-latest\n    permissions:\n      actions: write\n      contents: write" in workflow
     assert "POSTGRES_TEST_URL" in workflow
     assert '"artifacts\\installer\\SHA256SUMS.txt"' in workflow
     assert "UPDATE_SIGNING_KEY_B64" in workflow
     assert "UPDATE_FEED_TOKEN" in workflow
     assert "-m scripts.sign_update_feed" in workflow
+    assert r'--bootstrap "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1"' in workflow
+    assert r'--bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1"' in workflow
     assert "anhtahaylove/tiktok-affiliate-report-updates" in workflow
     assert "stable.json.sig" in workflow
     assert "Downloaded release checksum mismatch" in workflow
@@ -101,8 +103,16 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert "Live raw feed does not match signed build artifacts" in workflow
     assert 'gh release list --repo $repo --limit 100 --json tagName,isDraft,isLatest,isPrerelease' in workflow
     assert '$env:GH_TOKEN = ""' in workflow
-    assert "git revert --no-edit $stableCommit" in workflow
-    assert "gh release edit $tag --repo $repo --draft=true" in workflow
+    assert "concurrency:\n  group: signed-public-update-release\n  cancel-in-progress: false" in workflow
+    assert 'gh release download $previousLatestTag --repo $repo --pattern stable.json --pattern stable.json.sig' in workflow
+    assert 'git reset --hard origin/main' in workflow
+    assert 'Rollback stable feed from $tag to $previousLatestTag' in workflow
+    assert 'Live raw feed rollback verification failed' in workflow
+    assert 'Private release rollback verification failed' in workflow
+    assert 'Public release rollback verification failed' in workflow
+    assert 'gh release edit $previousLatestTag --repo $repo --latest' in workflow
+    assert 'Previous public latest release was not restored' in workflow
+    assert 'Rollback also failed:' in workflow
     assert workflow.index("gh release create $tag @assets --repo $repo --draft --latest=false") < workflow.index("Promote public stable feed and releases")
     promote = workflow.index("Promote public stable feed and releases")
     anonymous_publish = workflow.index("gh release edit $tag --repo $repo --draft=false", promote)
@@ -159,8 +169,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.6"
-    assert 'default: "2.0.5"' in workflow
+    assert APP_VERSION == "2.0.7"
+    assert 'default: "2.0.6"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -187,7 +197,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "v$PreviousVersion legacy account is missing" not in smoke
 
 
-def test_v206_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
+def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
     candidate = Path(".github/workflows/windows-installer-smoke.yml").read_text(encoding="utf-8")
     release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     updater_ui = Path(".github/workflows/windows-updater-ui-smoke.yml").read_text(encoding="utf-8")
@@ -222,7 +232,7 @@ def test_v206_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "retention-days: 3" in candidate
     assert "candidate-release-gate:" in candidate
     assert "github.event_name == 'push'" in candidate
-    assert candidate.count("if: always() && needs.candidate-build.result == 'success'") == 2
+    assert candidate.count("if: always() && needs.candidate-build.result == 'success'") == 3
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Fresh" in candidate
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Upgrade" in candidate
     assert '"- Upgrade $previousVersion -> ${currentVersion}: PASS"' in candidate
@@ -230,21 +240,39 @@ def test_v206_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "Run exact-head Windows updater helper runtime tests" in candidate
     assert "tests/test_updater.py tests/test_updater_diagnostics.py" in candidate
     assert "TikTokAffiliateReportSetup-v*.exe" in candidate
+    assert "TikTokAffiliateUpdater-v1.0.0.ps1" in candidate
     assert "SHA256SUMS.txt" in candidate
     assert "stable.json" not in candidate
     assert ".db" not in candidate
 
-    assert "actions: read" in release
+    assert "actions: write" in release
     assert "Require successful installer smoke for this exact main commit" in release
     assert "head_sha=$RELEASE_SHA&event=push&status=completed" in release
     assert 'select(.head_branch == "main" and .conclusion == "success")' in release
     assert "has no successful post-merge Windows installer smoke on main" in release
+    assert "gh workflow run windows-updater-ui-smoke.yml" in release
+    assert "gh workflow run windows-updater-ui-smoke.yml --ref $tag" in release
+    assert "gh workflow run windows-updater-ui-smoke.yml --ref main" not in release
+    assert "-f release_nonce=$releaseNonce" in release
+    assert '$_.displayTitle -eq $smokeTitle -and $_.headSha -eq $releaseSha' in release
+    assert "Public updater UI gate did not pass 5/5" in release
+    assert release.index("gh workflow run windows-updater-ui-smoke.yml") < release.index("gh release edit $tag --repo $repo --prerelease=false --latest")
+    assert "SHA256SUMS must contain exactly the installer and updater bootstrap" in release
+    assert "Candidate SHA256SUMS must contain exactly the installer and updater bootstrap" in candidate
+    assert "candidate-bootstrap-runtime:" in candidate
+    assert "-Mode Bootstrap" in candidate
+    assert "Packaged bootstrap runtime: PASS" in candidate
 
     assert "workflow_dispatch:" in updater_ui
     assert "pull_request:" not in updater_ui
     assert "permissions:\n  contents: read" in updater_ui
+    assert "run: [1, 2, 3, 4, 5]" in updater_ui
+    assert "[${{ inputs.release_nonce || 'manual' }}]" in updater_ui
+    assert "Release-gated runs require a unique 32-character hexadecimal nonce" in updater_ui
+    assert "ref: ${{ inputs.release_sha || github.sha }}" in updater_ui
+    assert "Workflow source SHA" in updater_ui
+    assert 'default: "2.0.7"' in updater_ui
     assert 'default: "2.0.6"' in updater_ui
-    assert 'default: "2.0.5"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui

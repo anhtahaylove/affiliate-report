@@ -54,6 +54,7 @@ def stable_feed(
 ):
     name = overrides.pop("name", f"TikTokAffiliateReportSetup-v{version}.exe")
     installer_info = overrides.pop("installer_info", None)
+    bootstrap_info = overrides.pop("bootstrap_info", None)
     manifest = {
         "schema": updater.UPDATE_SCHEMA,
         "app_id": updater.UPDATE_APP_ID,
@@ -64,6 +65,14 @@ def stable_feed(
         "installer": installer_info or {
             "name": name,
             "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v{version}/{name}",
+            "size": len(installer),
+            "sha256": hashlib.sha256(installer).hexdigest().upper(),
+        },
+        "bootstrap": bootstrap_info or {
+            "protocol": updater.UPDATE_BOOTSTRAP_PROTOCOL,
+            "version": updater.UPDATE_BOOTSTRAP_VERSION,
+            "name": updater.UPDATE_BOOTSTRAP_NAME,
+            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v{version}/{updater.UPDATE_BOOTSTRAP_NAME}",
             "size": len(installer),
             "sha256": hashlib.sha256(installer).hexdigest().upper(),
         },
@@ -78,7 +87,15 @@ def stable_feed(
     return payload, signature, installer
 
 
-def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: bytes = b"installer", trusted_keys=None):
+def install_feed(
+    monkeypatch,
+    manifest: bytes,
+    signature: bytes,
+    installer: bytes = b"installer",
+    trusted_keys=None,
+    *,
+    bootstrap: bytes | None = None,
+):
     seen_headers = []
 
     def fake_urlopen(request, timeout):
@@ -87,6 +104,8 @@ def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: byte
             return Response(manifest)
         if request.full_url.endswith("stable.json.sig"):
             return Response(signature)
+        if request.full_url.endswith(".ps1"):
+            return Response(installer if bootstrap is None else bootstrap)
         return Response(installer)
 
     monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", trusted_keys or {TEST_KEY_ID: TEST_PUBLIC_B64})
@@ -95,9 +114,17 @@ def install_feed(monkeypatch, manifest: bytes, signature: bytes, installer: byte
     return seen_headers
 
 
+def write_bootstrap_asset(tmp_path: Path, content: bytes = b"bootstrap") -> tuple[Path, str]:
+    path = tmp_path / updater.UPDATE_BOOTSTRAP_NAME
+    path.write_bytes(content)
+    return path, hashlib.sha256(content).hexdigest().upper()
+
+
 def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
     installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
+    bootstrap = tmp_path / "TikTokAffiliateUpdater-v1.0.0.ps1"
+    bootstrap.write_bytes(b"bootstrap")
     output_dir = tmp_path / "feed"
     monkeypatch.setattr(
         sys,
@@ -108,8 +135,12 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
             "1.2.1",
             "--installer",
             str(installer),
+            "--bootstrap",
+            str(bootstrap),
             "--asset-url",
             "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateReportSetup-v1.2.1.exe",
+            "--bootstrap-url",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
             "--release-url",
             "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/tag/v1.2.1",
             "--key-id",
@@ -128,7 +159,16 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
     signature = (output_dir / "stable.json.sig").read_bytes()
     assert b"\r" not in manifest + signature
     monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", {TEST_KEY_ID: TEST_PUBLIC_B64})
-    assert updater.verify_update_manifest_bytes(manifest, signature)["version"] == "1.2.1"
+    verified = updater.verify_update_manifest_bytes(manifest, signature)
+    assert verified["version"] == "1.2.1"
+    assert verified["bootstrap"] == {
+        "protocol": 1,
+        "version": "1.0.0",
+        "name": "TikTokAffiliateUpdater-v1.0.0.ps1",
+        "url": "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
+        "size": len(b"bootstrap"),
+        "sha256": hashlib.sha256(b"bootstrap").hexdigest().upper(),
+    }
 
 
 def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, monkeypatch):
@@ -139,14 +179,81 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     progress = []
     downloaded = updater.download_latest_update(tmp_path, current_version="1.1.1", token="ignored", progress_callback=lambda done, total: progress.append((done, total)))
 
-    assert set(json.loads(manifest)) == {"schema", "app_id", "channel", "version", "published_at", "release_url", "installer"}
+    assert set(json.loads(manifest)) == {"schema", "app_id", "channel", "version", "published_at", "release_url", "installer", "bootstrap"}
     assert checked["available"] is True
     assert checked["installable"] is True
     assert checked["source_repo"] == "anhtahaylove/tiktok-affiliate-report-updates"
     assert downloaded["sha256"] == hashlib.sha256(installer).hexdigest().upper()
     assert Path(downloaded["installer_path"]).read_bytes() == installer
-    assert progress == [(len(installer), len(installer))]
+    assert downloaded["bootstrap_protocol"] == 1
+    assert downloaded["bootstrap_sha256"] == hashlib.sha256(installer).hexdigest().upper()
+    assert Path(downloaded["bootstrap_path"]).read_bytes() == installer
+    assert progress == [(len(installer), len(installer) * 2), (len(installer) * 2, len(installer) * 2)]
     assert all("Authorization" not in headers for headers in seen_headers)
+
+
+def test_manifest_accepts_new_bootstrap_version_within_supported_protocol(monkeypatch):
+    bootstrap = b"future-bootstrap"
+    bootstrap_version = "1.1.0"
+    bootstrap_name = f"TikTokAffiliateUpdater-v{bootstrap_version}.ps1"
+    manifest, signature, installer = stable_feed(
+        bootstrap_info={
+            "protocol": updater.UPDATE_BOOTSTRAP_PROTOCOL,
+            "version": bootstrap_version,
+            "name": bootstrap_name,
+            "url": (
+                "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/"
+                f"download/v1.2.1/{bootstrap_name}"
+            ),
+            "size": len(bootstrap),
+            "sha256": hashlib.sha256(bootstrap).hexdigest().upper(),
+        }
+    )
+    install_feed(monkeypatch, manifest, signature, installer)
+
+    checked = updater.check_for_update(current_version="1.1.1")
+
+    assert checked["bootstrap_version"] == bootstrap_version
+    assert checked["bootstrap_protocol"] == updater.UPDATE_BOOTSTRAP_PROTOCOL
+
+
+def test_old_feed_without_bootstrap_remains_readable_for_rollback(monkeypatch):
+    manifest, _signature, installer = stable_feed(version="2.0.6")
+    raw = json.loads(manifest)
+    raw.pop("bootstrap")
+    payload = (json.dumps(raw, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    signature = json.dumps(
+        {"key_id": TEST_KEY_ID, "signature": base64.b64encode(TEST_PRIVATE.sign(payload)).decode("ascii")},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    install_feed(monkeypatch, payload, signature, installer)
+
+    checked = updater.check_for_update(current_version="2.0.7")
+
+    assert checked["available"] is False
+    assert checked["installable"] is False
+    assert "bootstrap_protocol" not in checked
+
+
+def test_newer_feed_without_bootstrap_is_not_automatically_installable(tmp_path, monkeypatch):
+    manifest, _signature, installer = stable_feed(version="2.0.8")
+    raw = json.loads(manifest)
+    raw.pop("bootstrap")
+    payload = (json.dumps(raw, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    signature = json.dumps(
+        {"key_id": TEST_KEY_ID, "signature": base64.b64encode(TEST_PRIVATE.sign(payload)).decode("ascii")},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    install_feed(monkeypatch, payload, signature, installer)
+
+    checked = updater.check_for_update(current_version="2.0.7")
+
+    assert checked["available"] is True
+    assert checked["installable"] is False
+    with pytest.raises(updater.UpdateError, match="thiếu updater bootstrap"):
+        updater.download_latest_update(tmp_path, current_version="2.0.7")
 
 
 def test_download_rejects_tampered_manifest_signature(tmp_path, monkeypatch):
@@ -187,6 +294,17 @@ def test_download_rejects_installer_hash_mismatch(tmp_path, monkeypatch):
     with pytest.raises(updater.UpdateError, match="SHA-256"):
         updater.download_latest_update(tmp_path, current_version="1.1.1")
     assert not list(tmp_path.rglob("*.exe"))
+
+
+def test_download_rejects_bootstrap_hash_mismatch_and_removes_partial_bundle(tmp_path, monkeypatch):
+    manifest, signature, installer = stable_feed(installer=b"clean")
+    install_feed(monkeypatch, manifest, signature, installer, bootstrap=b"dirty")
+
+    with pytest.raises(updater.UpdateError, match="bootstrap"):
+        updater.download_latest_update(tmp_path, current_version="1.1.1")
+
+    assert not list(tmp_path.rglob("*.exe"))
+    assert not list(tmp_path.rglob("*.ps1"))
 
 
 def test_download_rejects_downgrade_or_same_version(tmp_path, monkeypatch):
@@ -244,6 +362,24 @@ def test_manifest_rejects_non_https_bad_filename_size_and_tag(monkeypatch):
         updater.check_for_update(current_version="1.1.1")
 
 
+@pytest.mark.parametrize(
+    ("bootstrap_info", "message"),
+    [
+        ({"protocol": 2, "version": "1.0.0", "name": "TikTokAffiliateUpdater-v1.0.0.ps1", "url": "https://example.test/TikTokAffiliateUpdater-v1.0.0.ps1", "size": 1, "sha256": "0" * 64}, "protocol"),
+        ({"protocol": 1, "version": "1.0.0", "name": "evil.ps1", "url": "https://example.test/evil.ps1", "size": 1, "sha256": "0" * 64}, "Tên hoặc phiên bản"),
+        ({"protocol": 1, "version": "1.0.0", "name": "TikTokAffiliateUpdater-v1.0.0.ps1", "url": "https://example.test/TikTokAffiliateUpdater-v1.0.0.ps1", "size": 0, "sha256": "0" * 64}, "Kích thước"),
+        ({"protocol": 1, "version": "1.0.0", "name": "TikTokAffiliateUpdater-v1.0.0.ps1", "url": "https://example.test/TikTokAffiliateUpdater-v1.0.0.ps1", "size": updater.MAX_BOOTSTRAP_BYTES + 1, "sha256": "0" * 64}, "Kích thước"),
+        ({"protocol": 1, "version": "1.0.0", "name": "TikTokAffiliateUpdater-v1.0.0.ps1", "url": "http://example.test/TikTokAffiliateUpdater-v1.0.0.ps1", "size": 1, "sha256": "0" * 64}, "URL"),
+        ({"protocol": 1, "version": "1.0.0", "name": "TikTokAffiliateUpdater-v1.0.0.ps1", "url": "https://example.test/TikTokAffiliateUpdater-v1.0.0.ps1", "size": 1, "sha256": "bad"}, "SHA-256"),
+    ],
+)
+def test_manifest_rejects_missing_or_invalid_bootstrap(monkeypatch, bootstrap_info, message):
+    manifest, signature, installer = stable_feed(bootstrap_info=bootstrap_info)
+    install_feed(monkeypatch, manifest, signature, installer)
+    with pytest.raises(updater.UpdateError, match=message):
+        updater.check_for_update(current_version="1.1.1")
+
+
 def test_dev_feed_override_is_not_allowed_when_frozen(monkeypatch):
     monkeypatch.setenv("TIKTOK_REPORT_UPDATE_FEED_URL", "https://example.test/stable.json")
     monkeypatch.setattr(updater.sys, "frozen", True, raising=False)
@@ -272,6 +408,10 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
+    bootstrap, bootstrap_sha256 = write_bootstrap_asset(
+        tmp_path,
+        Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_bytes(),
+    )
     app = tmp_path / "TikTokAffiliateReport.exe"
     app.write_bytes(b"app")
     system_root = tmp_path / "Windows"
@@ -294,18 +434,30 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     monkeypatch.setattr(updater.subprocess, "Popen", fake_popen)
 
     instance_state = tmp_path / "instance.json"
-    updater._launch_update_helper(installer, expected, tmp_path / "updater.log", tmp_path / "update-status.json", "1.2.1", installer.stat().st_size, instance_state)
+    updater._launch_update_bootstrap(
+        installer_path=installer,
+        expected_sha256=expected,
+        bootstrap_path=bootstrap,
+        expected_bootstrap_sha256=bootstrap_sha256,
+        bootstrap_protocol=updater.UPDATE_BOOTSTRAP_PROTOCOL,
+        bootstrap_version=updater.UPDATE_BOOTSTRAP_VERSION,
+        log_path=tmp_path / "updater.log",
+        status_path=tmp_path / "update-status.json",
+        target_version="1.2.1",
+        installer_size=installer.stat().st_size,
+        instance_state_path=instance_state,
+        attempt_id="a" * 32,
+        ack_path=tmp_path / "bootstrap-ack.json",
+    )
 
-    helper_path = installer.parent / "install-update.ps1"
-    helper = helper_path.read_text(encoding="utf-8-sig")
+    helper = bootstrap.read_text(encoding="utf-8-sig")
     assert "Write-UpdateStatus 'waiting_for_exit'" in helper
     assert "[System.Diagnostics.Process]::GetProcessById($ParentPid)" in helper
     assert "[System.Security.Cryptography.SHA256]::Create()" in helper
     assert "Start-Child $Installer" in helper
     assert "Start-Child $AppExe" in helper
-    # $ParentPid only tracks the PyInstaller onefile child; its bootloader parent can still hold
-    # $AppExe open briefly after that PID exits, so we must also wait for the file handle itself
-    # to free up before invoking /CLOSEAPPLICATIONS, or Setup aborts with exit code 5.
+    # Waiting for the tracked PID is not sufficient if another app-owned process still holds the
+    # executable; verify the file handle before invoking /CLOSEAPPLICATIONS.
     assert "function Wait-FileUnlocked" in helper
     assert "Wait-FileUnlocked $AppExe 15000" in helper
     assert helper.index("Wait-FileUnlocked $AppExe") > helper.index("$parentExited = $true")
@@ -313,13 +465,15 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     # Start-Child launching the app back up isn't proof it's usable, nên vẫn phải chờ /health thật.
     # Bản onedir không giải nén runtime ra %TEMP% nữa nên lần mở đầu nhanh như mọi lần khác.
     assert "function Wait-AppHealthy" in helper
-    assert "Wait-AppHealthy $InstanceStatePath 90000" in helper
+    assert "Wait-AppHealthy $InstanceStatePath $TargetVersion 90000" in helper
     restarting_index = helper.index("Write-UpdateStatus 'restarting'")
     first_start_child_index = helper.index("Start-Child $AppExe", restarting_index)
-    health_index = helper.index("Wait-AppHealthy $InstanceStatePath 90000")
+    health_index = helper.index("Wait-AppHealthy $InstanceStatePath $TargetVersion 90000")
     assert first_start_child_index < health_index
     assert helper.index("Write-UpdateStatus 'installed' $null", health_index) > health_index
-    assert "within 90s" in helper
+    assert "Target app did not report the expected version and healthy state within 90s." in helper
+    assert "Write-UpdateStatus 'installed' 'Đã cài xong" not in helper
+    assert "Write-UpdateStatus 'restarting' $failure" in helper
     # Chỉ mở app đúng MỘT lần sau khi cài. Mở lần hai khi lần đầu chưa phản hồi là thứ đã sinh ra
     # hộp thoại "Failed to load Python DLL": hai tiến trình cùng giải nén tranh nhau đĩa và AV.
     assert helper.count("Start-Child $AppExe") == 2  # một lần sau khi cài, một lần khi cài lỗi
@@ -327,12 +481,40 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
     for forbidden in ("Wait-Process", "Get-FileHash", "Get-Process", "Start-Process", "Remove-Item"):
         assert forbidden not in helper
     assert captured["args"][0] == str(powershell)
-    assert captured["args"][captured["args"].index("-File") + 1] == str(helper_path)
+    assert captured["args"][captured["args"].index("-File") + 1] == str(bootstrap)
     assert captured["args"][captured["args"].index("-ExpectedSha256") + 1] == expected
     assert captured["args"][captured["args"].index("-InstanceStatePath") + 1] == str(instance_state)
+    assert captured["args"][captured["args"].index("-BootstrapProtocol") + 1] == "1"
+    assert captured["args"][captured["args"].index("-BootstrapVersion") + 1] == "1.0.0"
+    assert captured["args"][captured["args"].index("-AttemptId") + 1] == "a" * 32
     assert captured["kwargs"]["cwd"] == installer.parent
     assert captured["kwargs"]["creationflags"] == 48
     assert captured["kwargs"]["stdout"] is captured["kwargs"]["stderr"]
+
+
+def test_launch_rejects_bootstrap_changed_after_download(tmp_path, monkeypatch):
+    installer = tmp_path / "TikTokAffiliateReportSetup-v2.0.7.exe"
+    installer.write_bytes(b"installer")
+    bootstrap, expected_bootstrap_sha256 = write_bootstrap_asset(tmp_path, b"verified-bootstrap")
+    bootstrap.write_bytes(b"tampered-bootstrap")
+    monkeypatch.setattr(updater, "_windows_frozen", lambda: True)
+
+    with pytest.raises(updater.UpdateError, match="bootstrap đã thay đổi"):
+        updater._launch_update_bootstrap(
+            installer_path=installer,
+            expected_sha256=hashlib.sha256(installer.read_bytes()).hexdigest().upper(),
+            bootstrap_path=bootstrap,
+            expected_bootstrap_sha256=expected_bootstrap_sha256,
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
+            log_path=tmp_path / "updater.log",
+            status_path=tmp_path / "update-status.json",
+            target_version="2.0.7",
+            installer_size=installer.stat().st_size,
+            instance_state_path=tmp_path / "instance.json",
+            attempt_id="a" * 32,
+            ack_path=tmp_path / "bootstrap-ack.json",
+        )
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
@@ -340,8 +522,7 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"not-an-installer")
-    helper = tmp_path / "install-update.ps1"
-    helper.write_text(updater._powershell_helper_script(), encoding="utf-8-sig")
+    helper = Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").resolve()
     status_path = tmp_path / "update-status.json"
     updater.write_update_status(
         status_path,
@@ -381,6 +562,14 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
             str(installer.stat().st_size),
             "-InstanceStatePath",
             str(tmp_path / "instance.json"),
+            "-BootstrapProtocol",
+            "1",
+            "-BootstrapVersion",
+            "1.0.0",
+            "-AttemptId",
+            "a" * 32,
+            "-AckPath",
+            str(tmp_path / "bootstrap-ack.json"),
         ],
         capture_output=True,
         text=True,
@@ -392,8 +581,51 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
     status = updater.read_update_status(status_path)
     assert status["phase"] == "failed"
     assert "SHA-256" in status["error"]
-    assert "Updater helper started." in (tmp_path / "updater.log").read_text(encoding="utf-8")
+    assert "Updater bootstrap protocol 1 started." in (tmp_path / "updater.log").read_text(encoding="utf-8")
+    ack = json.loads((tmp_path / "bootstrap-ack.json").read_text(encoding="utf-8"))
+    assert ack == {
+        "attempt_id": "a" * 32,
+        "bootstrap_version": "1.0.0",
+        "phase": "ready",
+        "protocol": 1,
+        "schema": updater.BOOTSTRAP_ACK_SCHEMA,
+        "target_version": "1.2.1",
+        "updated_at": ack["updated_at"],
+    }
     assert not list(tmp_path.glob("update-status.json.*.tmp"))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
+def test_windows_bootstrap_executes_a_newer_asset_version_on_same_protocol(tmp_path):
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    helper = tmp_path / "TikTokAffiliateUpdater-v1.1.0.ps1"
+    helper.write_bytes(Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_bytes())
+    installer = tmp_path / "TikTokAffiliateReportSetup-v2.0.8.exe"
+    installer.write_bytes(b"not-an-installer")
+    status_path = tmp_path / "update-status.json"
+    ack_path = tmp_path / "bootstrap-ack.json"
+
+    result = subprocess.run(
+        [
+            str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-File", str(helper), "-ParentPid", str(2_147_483_647), "-Installer", str(installer),
+            "-ExpectedSha256", "0" * 64, "-AppExe", str(tmp_path / "TikTokAffiliateReport.exe"),
+            "-LogPath", str(tmp_path / "updater.log"), "-InstallerLog", str(tmp_path / "installer.log"),
+            "-StatusPath", str(status_path), "-TargetVersion", "2.0.8", "-InstallerSize", str(installer.stat().st_size),
+            "-InstanceStatePath", str(tmp_path / "instance.json"), "-BootstrapProtocol", "1",
+            "-BootstrapVersion", "1.1.0", "-AttemptId", "b" * 32, "-AckPath", str(ack_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert updater.read_update_status(status_path)["phase"] == "failed"
+    ack = json.loads(ack_path.read_text(encoding="utf-8"))
+    assert ack["bootstrap_version"] == "1.1.0"
+    assert ack["protocol"] == 1
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows file locking semantics")
@@ -404,7 +636,7 @@ def test_wait_file_unlocked_detects_a_file_still_held_open_by_another_process(tm
     # real Wait-FileUnlocked function (extracted from the generated helper) against actual
     # Windows file-sharing semantics rather than mocking them.
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    helper_source = updater._powershell_helper_script()
+    helper_source = Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_text(encoding="utf-8-sig")
     match = re.search(r"function Wait-FileUnlocked\b.*?\n}\n", helper_source, re.DOTALL)
     assert match, "Wait-FileUnlocked function not found in generated helper script"
     probe = tmp_path / "probe.ps1"
@@ -441,18 +673,18 @@ def test_wait_app_healthy_polls_instance_state_and_health_endpoint(tmp_path):
     import http.server
 
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    helper_source = updater._powershell_helper_script()
+    helper_source = Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_text(encoding="utf-8-sig")
     health_match = re.search(r"function Test-Health\b.*?\n}\n", helper_source, re.DOTALL)
     wait_match = re.search(r"function Wait-AppHealthy\b.*?\n}\n", helper_source, re.DOTALL)
     assert health_match, "Test-Health function not found in generated helper script"
     assert wait_match, "Wait-AppHealthy function not found in generated helper script"
     probe = tmp_path / "probe.ps1"
-    probe.write_text(health_match.group(0) + "\n" + wait_match.group(0) + "\nWrite-Output (Wait-AppHealthy $args[0] ([int]$args[1]))\n", encoding="utf-8-sig")
+    probe.write_text(health_match.group(0) + "\n" + wait_match.group(0) + "\nWrite-Output (Wait-AppHealthy $args[0] $args[1] ([int]$args[2]))\n", encoding="utf-8-sig")
     state_path = tmp_path / "instance.json"
 
     def run_probe(timeout_ms):
         return subprocess.run(
-            [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(state_path), str(timeout_ms)],
+            [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(state_path), "2.0.7", str(timeout_ms)],
             capture_output=True,
             text=True,
             timeout=15,
@@ -467,10 +699,13 @@ def test_wait_app_healthy_polls_instance_state_and_health_endpoint(tmp_path):
     assert elapsed < 5
 
     class HealthHandler(http.server.BaseHTTPRequestHandler):
+        app_version = "2.0.7"
+
         def do_GET(self):
             self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b"ok")
+            self.wfile.write(json.dumps({"status": "ok", "app_version": self.app_version}).encode())
 
         def log_message(self, *args):
             pass
@@ -480,9 +715,15 @@ def test_wait_app_healthy_polls_instance_state_and_health_endpoint(tmp_path):
     thread.start()
     try:
         url = f"http://127.0.0.1:{server.server_port}"
-        state_path.write_text(json.dumps({"pid": 1234, "url": url}), encoding="utf-8")
+        state_path.write_text(json.dumps({"pid": 1234, "url": url, "app_version": "2.0.6"}), encoding="utf-8")
+        wrong_version = run_probe(300)
+        assert wrong_version.stdout.strip() == "False", wrong_version.stderr
+        state_path.write_text(json.dumps({"pid": 1234, "url": url, "app_version": "2.0.7"}), encoding="utf-8")
         healthy = run_probe(5000)
         assert healthy.stdout.strip() == "True", healthy.stderr
+        HealthHandler.app_version = "2.0.6"
+        wrong_health_version = run_probe(300)
+        assert wrong_health_version.stdout.strip() == "False", wrong_health_version.stderr
     finally:
         server.shutdown()
         thread.join(timeout=5)
@@ -493,10 +734,23 @@ def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch
     installer.write_bytes(b"tampered")
     log_path = tmp_path / "updater.log"
     shutdown = threading.Event()
+    bootstrap, bootstrap_sha256 = write_bootstrap_asset(tmp_path)
     monkeypatch.setattr(updater, "_windows_frozen", lambda: True)
 
     with pytest.raises(updater.UpdateError, match="đã thay đổi"):
-        updater.schedule_installer(installer, "0" * 64, log_path, shutdown.set, status_path=tmp_path / "update-status.json", target_version="1.2.1", delay_seconds=0)
+        updater.schedule_installer(
+            installer,
+            "0" * 64,
+            log_path,
+            shutdown.set,
+            status_path=tmp_path / "update-status.json",
+            target_version="1.2.1",
+            bootstrap_path=bootstrap,
+            bootstrap_sha256=bootstrap_sha256,
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
+            delay_seconds=0,
+        )
 
     assert not shutdown.is_set()
 
@@ -554,17 +808,45 @@ def test_schedule_installer_waits_for_helper_handshake_before_shutdown(tmp_path,
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     status_path = tmp_path / "update-status.json"
     shutdown = threading.Event()
+    bootstrap, bootstrap_sha256 = write_bootstrap_asset(tmp_path)
 
-    def fake_launch(installer_path, expected_sha256, log_path, status, target_version, installer_size, instance_state_path):
-        assert installer_path == installer.resolve()
-        assert expected_sha256 == expected
-        assert installer_size == len(b"installer")
-        updater.write_update_status(status, phase="waiting_for_exit", target_version=target_version, bytes_downloaded=installer_size, bytes_total=installer_size)
+    def fake_launch(**kwargs):
+        assert kwargs["installer_path"] == installer.resolve()
+        assert kwargs["expected_sha256"] == expected
+        assert kwargs["bootstrap_path"] == bootstrap.resolve()
+        assert kwargs["expected_bootstrap_sha256"] == bootstrap_sha256
+        assert kwargs["installer_size"] == len(b"installer")
+        Path(kwargs["ack_path"]).write_text(
+            json.dumps(
+                {
+                    "schema": updater.BOOTSTRAP_ACK_SCHEMA,
+                    "phase": "ready",
+                    "attempt_id": kwargs["attempt_id"],
+                    "protocol": 1,
+                    "bootstrap_version": "1.0.0",
+                    "target_version": kwargs["target_version"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        updater.write_update_status(kwargs["status_path"], phase="waiting_for_exit", target_version=kwargs["target_version"], bytes_downloaded=kwargs["installer_size"], bytes_total=kwargs["installer_size"])
 
     monkeypatch.setattr(updater, "_windows_frozen", lambda: True)
-    monkeypatch.setattr(updater, "_launch_update_helper", fake_launch)
+    monkeypatch.setattr(updater, "_launch_update_bootstrap", fake_launch)
 
-    updater.schedule_installer(installer, expected, tmp_path / "updater.log", shutdown.set, status_path=status_path, target_version="1.2.1", delay_seconds=0)
+    updater.schedule_installer(
+        installer,
+        expected,
+        tmp_path / "updater.log",
+        shutdown.set,
+        status_path=status_path,
+        target_version="1.2.1",
+        bootstrap_path=bootstrap,
+        bootstrap_sha256=bootstrap_sha256,
+        bootstrap_protocol=1,
+        bootstrap_version="1.0.0",
+        delay_seconds=0,
+    )
 
     shutdown.wait(1)
     assert shutdown.is_set()
@@ -575,6 +857,7 @@ def test_schedule_installer_fails_without_helper_handshake(tmp_path, monkeypatch
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     shutdown = threading.Event()
+    bootstrap, bootstrap_sha256 = write_bootstrap_asset(tmp_path)
 
     class SlowHelper:
         def __init__(self):
@@ -593,11 +876,23 @@ def test_schedule_installer_fails_without_helper_handshake(tmp_path, monkeypatch
             return 0
 
     helper = SlowHelper()
-    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: helper)
-    monkeypatch.setattr(updater, "_wait_for_helper_handshake", lambda *_args: (_ for _ in ()).throw(updater.UpdateError("no handshake")))
+    monkeypatch.setattr(updater, "_launch_update_bootstrap", lambda **_kwargs: helper)
+    monkeypatch.setattr(updater, "_wait_for_bootstrap_handshake", lambda *_args, **_kwargs: (_ for _ in ()).throw(updater.UpdateError("no handshake")))
 
     with pytest.raises(updater.UpdateError, match="no handshake"):
-        updater.schedule_installer(installer, expected, tmp_path / "updater.log", shutdown.set, status_path=tmp_path / "update-status.json", target_version="1.2.1", delay_seconds=0)
+        updater.schedule_installer(
+            installer,
+            expected,
+            tmp_path / "updater.log",
+            shutdown.set,
+            status_path=tmp_path / "update-status.json",
+            target_version="1.2.1",
+            bootstrap_path=bootstrap,
+            bootstrap_sha256=bootstrap_sha256,
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
+            delay_seconds=0,
+        )
     assert not shutdown.is_set()
     assert helper.terminated
     assert helper.waited
@@ -634,6 +929,7 @@ def test_schedule_installer_preserves_handshake_error_when_helper_cannot_stop(tm
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     log_path = tmp_path / "updater.log"
+    bootstrap, bootstrap_sha256 = write_bootstrap_asset(tmp_path)
 
     class StuckHelper:
         def poll(self):
@@ -648,11 +944,11 @@ def test_schedule_installer_preserves_handshake_error_when_helper_cannot_stop(tm
         def kill(self):
             return None
 
-    monkeypatch.setattr(updater, "_launch_update_helper", lambda *_args: StuckHelper())
+    monkeypatch.setattr(updater, "_launch_update_bootstrap", lambda **_kwargs: StuckHelper())
     monkeypatch.setattr(
         updater,
-        "_wait_for_helper_handshake",
-        lambda *_args: (_ for _ in ()).throw(updater.UpdateError("no handshake")),
+        "_wait_for_bootstrap_handshake",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(updater.UpdateError("no handshake")),
     )
 
     with pytest.raises(updater.UpdateError, match="no handshake") as caught:
@@ -663,6 +959,10 @@ def test_schedule_installer_preserves_handshake_error_when_helper_cannot_stop(tm
             lambda: None,
             status_path=tmp_path / "update-status.json",
             target_version="1.2.1",
+            bootstrap_path=bootstrap,
+            bootstrap_sha256=bootstrap_sha256,
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
             delay_seconds=0,
         )
 
@@ -671,26 +971,34 @@ def test_schedule_installer_preserves_handshake_error_when_helper_cannot_stop(tm
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
-def test_helper_handshake_tolerates_real_slow_windows_powershell(tmp_path):
+def test_bootstrap_handshake_tolerates_real_slow_windows_powershell(tmp_path):
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    status_path = tmp_path / "update-status.json"
+    ack_path = tmp_path / "bootstrap-ack.json"
     probe = tmp_path / "slow-handshake.ps1"
     probe.write_text(
         r'''
-param([string]$StatusPath)
+param([string]$AckPath)
 Start-Sleep -Seconds 8
-$json = '{"schema":"tiktok-affiliate-report.update-status.v1","phase":"waiting_for_exit","target_version":"2.0.6","bytes_downloaded":1,"bytes_total":1,"error":null,"updated_at":"2026-08-12T00:00:00Z"}'
-[System.IO.File]::WriteAllText($StatusPath, $json, [System.Text.UTF8Encoding]::new($false))
+$json = '{"schema":"tiktok-affiliate-report.update-bootstrap-ack.v1","phase":"ready","attempt_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","protocol":1,"bootstrap_version":"1.0.0","target_version":"2.0.7"}'
+[System.IO.File]::WriteAllText($AckPath, $json, [System.Text.UTF8Encoding]::new($false))
 ''',
         encoding="utf-8-sig",
     )
     process = subprocess.Popen(
-        [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(status_path)],
+        [str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(probe), str(ack_path)],
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     started = time.monotonic()
     try:
-        updater._wait_for_helper_handshake(status_path, "2.0.6", tmp_path / "bootstrap.log", timeout_seconds=15)
+        updater._wait_for_bootstrap_handshake(
+            ack_path,
+            attempt_id="a" * 32,
+            target_version="2.0.7",
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
+            bootstrap_log=tmp_path / "bootstrap.log",
+            timeout_seconds=15,
+        )
     finally:
         if process.poll() is None:
             process.kill()
@@ -716,8 +1024,7 @@ def test_stop_update_helper_terminates_real_windows_powershell():
             process.wait(timeout=5)
 
 
-def test_helper_handshake_tolerates_slow_powershell_cold_start(tmp_path, monkeypatch):
-    status_path = tmp_path / "update-status.json"
+def test_bootstrap_handshake_tolerates_slow_powershell_cold_start(tmp_path, monkeypatch):
     clock = {"now": 0.0, "reads": 0}
 
     def monotonic():
@@ -726,47 +1033,116 @@ def test_helper_handshake_tolerates_slow_powershell_cold_start(tmp_path, monkeyp
     def sleep(seconds):
         clock["now"] += seconds
 
-    def read_status(_path):
+    class DelayedAck:
+        def read_text(self, **_kwargs):
+            clock["reads"] += 1
+            if clock["now"] < 8.0:
+                raise FileNotFoundError
+            return json.dumps(
+                {
+                    "schema": updater.BOOTSTRAP_ACK_SCHEMA,
+                    "phase": "ready",
+                    "attempt_id": "a" * 32,
+                    "protocol": 1,
+                    "bootstrap_version": "1.0.0",
+                    "target_version": "2.0.7",
+                }
+            )
+
+    def unused_read_status(_path):
         clock["reads"] += 1
-        phase = "waiting_for_exit" if clock["now"] >= 8.0 else "verifying"
-        return {
-            "schema": updater.UPDATE_STATUS_SCHEMA,
-            "phase": phase,
-            "target_version": "2.0.6",
-            "bytes_downloaded": 1,
-            "bytes_total": 1,
-            "error": None,
-            "updated_at": "2026-08-12T00:00:00Z",
-        }
+        raise AssertionError("status handshake must not be used")
 
     monkeypatch.setattr(updater.time, "monotonic", monotonic)
     monkeypatch.setattr(updater.time, "sleep", sleep)
-    monkeypatch.setattr(updater, "read_update_status", read_status)
+    monkeypatch.setattr(updater, "read_update_status", unused_read_status)
 
-    updater._wait_for_helper_handshake(status_path, "2.0.6", tmp_path / "bootstrap.log")
+    updater._wait_for_bootstrap_handshake(
+        DelayedAck(),
+        attempt_id="a" * 32,
+        target_version="2.0.7",
+        bootstrap_protocol=1,
+        bootstrap_version="1.0.0",
+        bootstrap_log=tmp_path / "bootstrap.log",
+    )
 
     assert clock["now"] >= 8.0
     assert clock["reads"] > 50
 
 
-def test_helper_handshake_checks_ready_status_once_at_deadline(tmp_path, monkeypatch):
+def test_bootstrap_handshake_checks_ready_ack_once_at_deadline(tmp_path, monkeypatch):
     clock = {"now": 0.0}
 
     monkeypatch.setattr(updater.time, "monotonic", lambda: clock["now"])
     monkeypatch.setattr(updater.time, "sleep", lambda seconds: clock.update(now=clock["now"] + seconds))
-    monkeypatch.setattr(
-        updater,
-        "read_update_status",
-        lambda _path: {
-            "phase": "waiting_for_exit" if clock["now"] >= 1.0 else "verifying",
-            "target_version": "2.0.6",
-            "error": None,
-        },
+    class DeadlineAck:
+        def read_text(self, **_kwargs):
+            if clock["now"] < 1.0:
+                raise FileNotFoundError
+            return json.dumps(
+                {
+                    "schema": updater.BOOTSTRAP_ACK_SCHEMA,
+                    "phase": "ready",
+                    "attempt_id": "a" * 32,
+                    "protocol": 1,
+                    "bootstrap_version": "1.0.0",
+                    "target_version": "2.0.7",
+                }
+            )
+
+    updater._wait_for_bootstrap_handshake(
+        DeadlineAck(),
+        attempt_id="a" * 32,
+        target_version="2.0.7",
+        bootstrap_protocol=1,
+        bootstrap_version="1.0.0",
+        bootstrap_log=tmp_path / "bootstrap.log",
+        timeout_seconds=1.0,
     )
 
-    updater._wait_for_helper_handshake(tmp_path / "status.json", "2.0.6", tmp_path / "bootstrap.log", timeout_seconds=1.0)
-
     assert clock["now"] == pytest.approx(1.0)
+
+
+def test_bootstrap_handshake_rejects_stale_or_mismatched_ack(tmp_path):
+    ack_path = tmp_path / "bootstrap-ack.json"
+    ack_path.write_text(
+        json.dumps(
+            {
+                "schema": updater.BOOTSTRAP_ACK_SCHEMA,
+                "phase": "ready",
+                "attempt_id": "b" * 32,
+                "protocol": 1,
+                "bootstrap_version": "1.0.0",
+                "target_version": "2.0.7",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(updater.UpdateError, match="không xác nhận"):
+        updater._wait_for_bootstrap_handshake(
+            ack_path,
+            attempt_id="a" * 32,
+            target_version="2.0.7",
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
+            bootstrap_log=tmp_path / "bootstrap.log",
+            timeout_seconds=0,
+        )
+
+    ack = json.loads(ack_path.read_text(encoding="utf-8"))
+    ack["attempt_id"] = "a" * 32
+    ack["target_version"] = "2.0.8"
+    ack_path.write_text(json.dumps(ack), encoding="utf-8")
+    with pytest.raises(updater.UpdateError, match="handshake không hợp lệ"):
+        updater._wait_for_bootstrap_handshake(
+            ack_path,
+            attempt_id="a" * 32,
+            target_version="2.0.7",
+            bootstrap_protocol=1,
+            bootstrap_version="1.0.0",
+            bootstrap_log=tmp_path / "bootstrap.log",
+            timeout_seconds=0,
+        )
 
 
 def test_version_validation():
