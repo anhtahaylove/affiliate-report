@@ -368,8 +368,10 @@ jobs:
             $env:GH_TOKEN = $env:PRIVATE_GH_TOKEN
             $releaseSha = "${{ github.sha }}"
             $releaseNonce = [guid]::NewGuid().ToString("N")
-            $smokeTitle = "Public updater UI smoke 2.0.6 -> $version ($releaseSha) [$releaseNonce]"
-            gh workflow run windows-updater-ui-smoke.yml --ref $tag -f previous_version=2.0.6 -f current_version=$version -f release_sha=$releaseSha -f release_nonce=$releaseNonce
+            $previousVersion = ([regex]::Match((Get-Content -Raw .github/workflows/windows-updater-ui-smoke.yml), '(?ms)previous_version:.*?default:\s*"([^"]+)"')).Groups[1].Value
+            if (-not $previousVersion) { throw "Could not read previous_version default from the updater UI smoke workflow" }
+            $smokeTitle = "Public updater UI smoke $previousVersion -> $version ($releaseSha) [$releaseNonce]"
+            gh workflow run windows-updater-ui-smoke.yml --ref $tag -f previous_version=$previousVersion -f current_version=$version -f release_sha=$releaseSha -f release_nonce=$releaseNonce
             if ($LASTEXITCODE -ne 0) { throw "Could not dispatch the five-run public updater UI gate" }
             $smokeRun = $null
             for ($attempt = 1; $attempt -le 30 -and !$smokeRun; $attempt++) {

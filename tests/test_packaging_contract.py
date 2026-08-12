@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from tiktok_affiliate_report.version import APP_VERSION
@@ -271,6 +272,13 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "Release-gated runs require a unique 32-character hexadecimal nonce" in updater_ui
     assert "ref: ${{ inputs.release_sha || github.sha }}" in updater_ui
     assert "Workflow source SHA" in updater_ui
+    # release.yml từng chép cứng previous_version=2.0.6 và trôi lại đó khi lane smoke đã chuyển
+    # sang 2.0.7, nên smoke sau phát hành đi qua helper legacy thay vì bootstrap độc lập — không
+    # có gì canh nên không ai thấy. Giờ nó phải đọc từ đúng một nguồn.
+    release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert "-f previous_version=$previousVersion" in release_workflow
+    assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
+
     # Cặp canary v2.0.8: v2.0.7 tự cài v2.0.8 bằng chính bootstrap độc lập đã ký của nó.
     assert 'default: "2.0.8"' in updater_ui
     assert 'default: "2.0.7"' in updater_ui
