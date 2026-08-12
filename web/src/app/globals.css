@@ -511,6 +511,27 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .account-option input { min-height: auto; }
 
+.account-identity {
+  display: inline-grid;
+  min-width: 0;
+  gap: 1px;
+  line-height: 1.25;
+  vertical-align: middle;
+}
+
+.account-identity-name {
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.account-identity-code {
+  color: var(--ink-soft);
+  font: 600 .72rem var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
 .account-option:has(input:checked) {
   border-color: var(--teal);
   background: var(--teal-soft);
@@ -849,6 +870,25 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   line-height: 1.5;
 }
 
+.sync-warning,
+.guided-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--warning-line);
+  border-radius: 14px;
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.guided-empty-state > div { display: grid; gap: 5px; }
+.guided-empty-state h3,
+.guided-empty-state p { margin: 0; }
+.guided-empty-state p { color: var(--ink-soft); line-height: 1.55; }
+.sync-warning button { flex: 0 0 auto; }
+
 .danger-zone {
   border-color: var(--danger-line);
   background: var(--danger-wash);
@@ -1145,7 +1185,7 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .account-edit-grid {
   display: grid;
-  grid-template-columns: 140px;
+  grid-template-columns: minmax(220px, 1fr) 140px;
   gap: 10px;
 }
 
@@ -1375,6 +1415,9 @@ th[aria-sort] .sort-button span { color: var(--teal); }
 .status-badge[data-outcome="skipped"] { border-color: var(--warning-line); background: var(--warning-soft); color: var(--warning-text); }
 .status-badge[data-outcome="failed"] { border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger); }
 
+.post-import-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.import-account-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+
 .first-run-steps {
   display: grid;
   gap: 14px;
@@ -1391,6 +1434,12 @@ th[aria-sort] .sort-button span { color: var(--teal); }
   border: 1px solid var(--line);
   border-radius: 12px;
 }
+
+.first-run-steps li[data-state="done"] { border-color: var(--accent-line); background: var(--teal-soft); }
+.first-run-steps li[data-state="blocked"] { background: var(--surface-soft); }
+.first-run-steps li > div { min-width: 0; flex: 1 1 auto; }
+.first-run-guidance { margin: 0; color: var(--ink-soft); line-height: 1.6; }
+.step-state { flex: 0 0 auto; color: var(--ink-soft); font-size: .76rem; font-weight: 750; }
 
 .step-index {
   display: grid;
@@ -1780,7 +1829,7 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .target-metrics, .account-meta { margin: 0; }
 .target-metrics dt, .account-meta dt { color: var(--ink-soft); font-size: .76rem; }
 .target-metrics dd, .account-meta dd { margin: 3px 0 0; font-weight: 800; }
-.account-create-panel { grid-template-columns: minmax(0, 1fr) auto; align-items: end; margin-bottom: 12px; }
+.account-create-panel { grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr) auto; align-items: end; margin-bottom: 12px; }
 .account-summary-row, .settings-summary-row { margin-bottom: 14px; }
 .account-section { display: grid; align-content: start; gap: 10px; }
 .section-heading.compact { margin-bottom: 0; }

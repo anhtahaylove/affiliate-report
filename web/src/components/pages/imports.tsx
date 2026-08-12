@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CurrentUser, ImportHistoryRow, RejectedRow, UndoImportPreview, loadImportHistory, previewUndoImport, undoImport, uploadExport, visibleRejectedRows } from "@/lib/api";
 import { RecentImports } from "@/components/recent-imports";
-import { ConfirmDialog, canWrite } from "@/components/ui";
+import { ConfirmDialog, canWrite, isOwner } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { errorMessage, integer } from "@/lib/format";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 type FileOutcome = "imported" | "duplicate" | "skipped" | "failed";
 
@@ -24,14 +26,14 @@ const OUTCOME_LABELS: Record<FileOutcome, string> = {
   failed: "Lỗi",
 };
 
-const IMPORT_STEPS = ["Tài khoản", "Chọn tệp", "Kiểm tra", "Nhập dữ liệu"] as const;
+const IMPORT_STEPS = ["Tài khoản", "Chọn tệp", "Hàng đợi", "Nhập dữ liệu"] as const;
 
 function fileSizeText(size: number) {
   if (size < 1024 * 1024) return `${integer.format(Math.max(1, Math.round(size / 1024)))} KB`;
   return `${integer.format(Math.round((size / 1024 / 1024) * 10) / 10)} MB`;
 }
 
-export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser; accounts: string[]; maxUploadMb: number }) {
+export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: CurrentUser; accounts: string[]; directory: AccountDirectory; maxUploadMb: number }) {
   const [account, setAccount] = useState(accounts[0] ?? "");
   const [files, setFiles] = useState<FileList | null>(null);
   const [history, setHistory] = useState<ImportHistoryRow[]>([]);
@@ -42,7 +44,8 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
   const [processedFiles, setProcessedFiles] = useState(0);
   const [undo, setUndo] = useState<UndoImportPreview | null>(null);
   const fileQueue = useMemo(() => Array.from(files ?? []), [files]);
-  const activeStep = busy ? 3 : fileQueue.length ? 2 : account ? 1 : 0;
+  const selectedAccount = accounts.includes(account) ? account : accounts[0] ?? "";
+  const activeStep = busy ? 3 : fileQueue.length ? 2 : selectedAccount ? 1 : 0;
   const refreshHistory = useCallback(async () => {
     const data = await loadImportHistory(20);
     setHistory(data.items);
@@ -54,13 +57,14 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
     }
     void load();
   }, [refreshHistory]);
+  const hasSuccessfulResult = results.some((result) => result.outcome === "imported" || result.outcome === "duplicate");
 
   async function submit() {
     setResults([]);
     setProcessedFiles(0);
     setCurrentFile("");
     if (!canWrite(user)) return setMessage("Tài khoản chỉ xem không có quyền nhập dữ liệu.");
-    if (!account || !files?.length) return setMessage("Hãy chọn tài khoản và ít nhất một file .xlsx.");
+    if (!selectedAccount || !files?.length) return setMessage("Hãy chọn tài khoản và ít nhất một file .xlsx.");
     setBusy(true);
     setMessage("Đang chuẩn bị hàng đợi import…");
     const queued = Array.from(files);
@@ -75,7 +79,7 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
         continue;
       }
       try {
-        const result = await uploadExport(account, file);
+        const result = await uploadExport(selectedAccount, file);
         const imported = result.inserted + result.updated + result.unchanged;
         collected.push({
           file: file.name,
@@ -135,17 +139,18 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
         <div className="section-heading">
           <div>
             <p className="section-label">Nhập tuần tự</p>
-            <h2>Chọn tài khoản → Chọn tệp → Kiểm tra → Nhập</h2>
+            <h2>Chọn account → Chọn tệp → Xem hàng đợi → Nhập</h2>
             <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp; chỉ hỗ trợ định dạng .xlsx.</p>
           </div>
         </div>
+        {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có account khả dụng</p><h3>{isOwner(user) ? "Tạo account trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp account"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một account để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi account được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo account đầu tiên</Link> : null}</div> : <>
         <ol className="workflow-steps" aria-label="Quy trình nhập dữ liệu">
           {IMPORT_STEPS.map((step, index) => <li key={step} data-state={index < activeStep ? "done" : index === activeStep ? "active" : "pending"}>{step}</li>)}
         </ol>
         <div className="upload-form">
           <div className="field">
             <label htmlFor="import-account">1. Tài khoản TikTok</label>
-            <select id="import-account" value={account} onChange={(event) => setAccount(event.target.value)} disabled={busy}>{accounts.map((item) => <option key={item}>{item}</option>)}</select>
+            <select id="import-account" value={selectedAccount} onChange={(event) => setAccount(event.target.value)} disabled={busy}>{accounts.map((item) => <option key={item} value={item}>{directory.label(item)}</option>)}</select>
           </div>
           <div className="field dropzone">
             <span className="field-label">2. Tệp Excel đã xuất từ TikTok</span>
@@ -174,7 +179,7 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
             <progress id="import-progress" max={Math.max(1, fileQueue.length)} value={processedFiles} />
             <span>{busy && currentFile ? `Đang xử lý ${currentFile}` : `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} tệp đã xử lý`}</span>
           </div>
-          <button className="primary" type="button" onClick={() => void submit()} disabled={busy}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>
+          <button className="primary" type="button" onClick={() => void submit()} disabled={busy || !selectedAccount || !fileQueue.length}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>
           {message ? <p className="upload-result" role="status">{message}</p> : null}
           {results.length ? (
             <ol className="import-results" aria-label="Kết quả nhập theo từng file">
@@ -192,9 +197,11 @@ export function ImportsPage({ user, accounts, maxUploadMb }: { user: CurrentUser
               ))}
             </ol>
           ) : null}
+          {hasSuccessfulResult ? <nav className="post-import-actions" aria-label="Bước tiếp theo sau khi nhập"><Link className="button-link" href="/">Xem Dashboard</Link><Link className="button-link secondary-link" href="/targets">Đặt mục tiêu tháng</Link></nav> : null}
         </div>
+        </>}
       </section>
-      <RecentImports rows={history} onUndo={(row) => void startUndo(row)} />
+      <RecentImports rows={history} directory={directory} onUndo={(row) => void startUndo(row)} />
 
       <ConfirmDialog
         open={undo !== null}

@@ -5,6 +5,8 @@ import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { SlidersHorizontal, X } from "lucide-react";
 import { firstDayOfMonth, lastDayOfMonth, currentMonth, lastDays, previousMonth, statusLabel, wholeMonth } from "@/lib/format";
 import { buildFilterHref } from "@/lib/filter-query";
+import { AccountIdentity } from "@/components/account-identity";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 export const ORDER_PAGE_SIZES = [50, 100, 200];
 
@@ -40,7 +42,7 @@ export function useUrlFilters() {
   }), [month, params]);
 }
 
-export function FilterBar({ accounts, statuses, showSearch = false, actions }: { accounts: string[]; statuses: string[]; showSearch?: boolean; actions?: ReactNode }) {
+export function FilterBar({ accounts, directory, statuses, showSearch = false, actions }: { accounts: string[]; directory: AccountDirectory; statuses: string[]; showSearch?: boolean; actions?: ReactNode }) {
   const filters = useUrlFilters();
   const initialFilters = {
     ...filters,
@@ -48,10 +50,10 @@ export function FilterBar({ accounts, statuses, showSearch = false, actions }: {
     statuses: statuses.length ? (filters.statuses.length ? filters.statuses : statuses) : [],
   };
   const filterKey = JSON.stringify({ filters, accounts, statuses });
-  return <FilterForm key={filterKey} accounts={accounts} statuses={statuses} showSearch={showSearch} actions={actions} initialFilters={initialFilters} />;
+  return <FilterForm key={filterKey} accounts={accounts} directory={directory} statuses={statuses} showSearch={showSearch} actions={actions} initialFilters={initialFilters} />;
 }
 
-function FilterForm({ accounts, statuses, showSearch = false, actions, initialFilters }: { accounts: string[]; statuses: string[]; showSearch?: boolean; actions?: ReactNode; initialFilters: UrlFilters }) {
+function FilterForm({ accounts, directory, statuses, showSearch = false, actions, initialFilters }: { accounts: string[]; directory: AccountDirectory; statuses: string[]; showSearch?: boolean; actions?: ReactNode; initialFilters: UrlFilters }) {
   const router = useRouter();
   const pathname = usePathname();
   const [draft, setDraft] = useState(initialFilters);
@@ -63,7 +65,7 @@ function FilterForm({ accounts, statuses, showSearch = false, actions, initialFi
   const allStatusesSelected = statuses.length > 0 && draft.statuses.length === statuses.length;
   const compactSummary = [
     `${draft.start.split("-").reverse().join("/")} – ${draft.end.split("-").reverse().join("/")}`,
-    allAccountsSelected ? "Tất cả tài khoản" : `${draft.accounts.length}/${accounts.length} tài khoản`,
+    allAccountsSelected ? "Tất cả account" : `${draft.accounts.length}/${accounts.length} tài khoản`,
     statuses.length ? (allStatusesSelected ? "Tất cả trạng thái" : `${draft.statuses.length}/${statuses.length} trạng thái`) : null,
   ].filter(Boolean).join(" · ");
 
@@ -168,12 +170,12 @@ function FilterForm({ accounts, statuses, showSearch = false, actions, initialFi
           <div className="account-options">
             <label className="account-option select-all-option">
               <input type="checkbox" checked={allAccountsSelected} onChange={() => toggleAll("accounts", accounts)} />
-              Tất cả tài khoản
+              Tất cả account
             </label>
             {accounts.map((account) => (
               <label className="account-option" key={account}>
                 <input type="checkbox" checked={draft.accounts.includes(account)} onChange={() => toggle("accounts", account)} />
-                {account}
+                <AccountIdentity directory={directory} code={account} />
               </label>
             ))}
           </div>

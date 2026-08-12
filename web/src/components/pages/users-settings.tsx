@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminUser, CurrentUser, IdentityPolicy, loadUsers, updateUser } from "@/lib/api";
 import { errorMessage, integer, roleLabel } from "@/lib/format";
 import { KeyRound, ShieldCheck } from "lucide-react";
+import { AccountIdentity } from "@/components/account-identity";
+import type { AccountDirectory } from "@/lib/account-directory";
 
-export function UsersSettingsPage({ currentUser, accounts, identityPolicy }: { currentUser: CurrentUser; accounts: string[]; identityPolicy: IdentityPolicy }) {
+export function UsersSettingsPage({ currentUser, accounts, directory, identityPolicy }: { currentUser: CurrentUser; accounts: string[]; directory: AccountDirectory; identityPolicy: IdentityPolicy }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
@@ -88,7 +90,7 @@ export function UsersSettingsPage({ currentUser, accounts, identityPolicy }: { c
               {user.role !== "owner" ? (
                 <fieldset className="filter-stack">
                   <legend className="field-label">Tài khoản được truy cập ({integer.format(user.accounts.length)}/{integer.format(accounts.length)})</legend>
-                  <div className="account-options">{accounts.map((account) => <label className="account-option" key={account}><input type="checkbox" checked={user.accounts.includes(account)} onChange={() => toggleAccount(user, account)} disabled={saving === user.id} />{account}</label>)}</div>
+                  <div className="account-options">{accounts.map((account) => <label className="account-option" key={account}><input type="checkbox" checked={user.accounts.includes(account)} onChange={() => toggleAccount(user, account)} disabled={saving === user.id} /><AccountIdentity directory={directory} code={account} /></label>)}</div>
                 </fieldset>
               ) : <p className="hint">Chủ sở hữu có quyền truy cập tất cả tài khoản.</p>}
               {lockedSelf ? <p className="hint">Đang đăng nhập bằng người dùng này nên các thao tác tự hạ quyền/tự khóa đã bị chặn.</p> : null}

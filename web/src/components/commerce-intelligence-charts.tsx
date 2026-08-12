@@ -13,7 +13,8 @@ import {
   YAxis,
 } from "recharts";
 import type { AnalyticsBreakdownRow, AnalyticsTrendRow } from "@/lib/api";
-import { accountLabel, formatMoney, statusLabel } from "@/lib/format";
+import { formatMoney, statusLabel } from "@/lib/format";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 const compactMoney = new Intl.NumberFormat("vi-VN", {
   notation: "compact",
@@ -46,11 +47,11 @@ export function CommissionTrendChart({ rows }: { rows: AnalyticsTrendRow[] }) {
   );
 }
 
-export function AccountContributionChart({ rows }: { rows: AnalyticsBreakdownRow[] }) {
+export function AccountContributionChart({ rows, directory }: { rows: AnalyticsBreakdownRow[]; directory: AccountDirectory }) {
   const data = rows
     .filter((row) => row.account)
     .slice(0, 8)
-    .map((row) => ({ ...row, label: accountLabel(row.account) }));
+    .map((row) => ({ ...row, label: directory.label(row.account) }));
   return (
     <div className="ci-chart" role="img" aria-label="Biểu đồ đóng góp hoa hồng theo tài khoản">
       <ResponsiveContainer width="100%" height={Math.max(220, data.length * 46)}>

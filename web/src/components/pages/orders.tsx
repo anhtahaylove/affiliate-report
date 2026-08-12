@@ -7,6 +7,8 @@ import { ORDER_PAGE_SIZES, UrlFilters } from "@/components/filters";
 import { Notice, Skeleton, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
 import { errorMessage, formatDateTime, formatMoney, integer, statusLabel } from "@/lib/format";
+import { AccountIdentity } from "@/components/account-identity";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 function csvCell(value: unknown) {
   const text = value == null ? "" : String(value);
@@ -58,9 +60,9 @@ function filterSummary(filters: UrlFilters) {
   return parts;
 }
 
-function orderCell(column: OrderColumnKey, row: OrderRow, index: number) {
+function orderCell(column: OrderColumnKey, row: OrderRow, index: number, directory: AccountDirectory) {
   switch (column) {
-    case "account": return row.account;
+    case "account": return <AccountIdentity directory={directory} code={row.account} />;
     case "order_id": return row.order_id ?? "—";
     case "sku_id": return row.sku_id ?? "—";
     case "product_name": return <span className="product-cell" title={row.product_name ?? undefined}>{row.product_name ?? "—"}</span>;
@@ -73,7 +75,7 @@ function orderCell(column: OrderColumnKey, row: OrderRow, index: number) {
   }
 }
 
-export function OrdersPage({ filters }: { filters: UrlFilters }) {
+export function OrdersPage({ filters, directory }: { filters: UrlFilters; directory: AccountDirectory }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -178,7 +180,7 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
           <tbody>
             {orders.map((row, index) => (
               <tr key={`${row.account}-${row.order_id}-${row.sku_id}-${index}`}>
-                {activeColumns.map((column) => <td key={column.key}>{orderCell(column.key, row, index)}</td>)}
+                {activeColumns.map((column) => <td key={column.key}>{orderCell(column.key, row, index, directory)}</td>)}
               </tr>
             ))}
           </tbody>
@@ -191,7 +193,7 @@ export function OrdersPage({ filters }: { filters: UrlFilters }) {
           <article className="order-card" role="listitem" key={`${row.business_key}-${index}`}>
             <div className="record-title"><strong>{row.order_id ?? row.sku_id ?? `Dòng ${index + 1}`}</strong><StatusBadge status={row.status} /></div>
             <dl className="order-card-metrics">
-              <div><dt>Tài khoản</dt><dd>{row.account}</dd></div>
+              <div><dt>Tài khoản</dt><dd><AccountIdentity directory={directory} code={row.account} /></dd></div>
               <div><dt>Ngày</dt><dd>{formatDateTime(row.order_date)}</dd></div>
               <div><dt>GMV</dt><dd>{formatMoney(row.gmv)}</dd></div>
               <div><dt>Hoa hồng ước tính</dt><dd>{formatMoney(row.estimated_commission)}</dd></div>

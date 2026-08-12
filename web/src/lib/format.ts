@@ -57,10 +57,6 @@ export function roleLabel(value: string | null | undefined) {
   return ROLE_LABELS[value.trim().toLowerCase()] ?? value;
 }
 
-export function accountLabel(value: string | null | undefined) {
-  return value === "ALL" ? "Tất cả tài khoản" : value || "Chưa xác định";
-}
-
 export function formatBytes(value: number | null | undefined) {
   if (value == null) return "—";
   if (value < 1024 * 1024) return `${integer.format(Math.max(1, Math.round(value / 1024)))} KB`;
