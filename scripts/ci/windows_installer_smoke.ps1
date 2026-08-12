@@ -251,7 +251,14 @@ try {
         $health = Invoke-RestMethod "$($instance.url)/health" -TimeoutSec 10
         if ($health.status -ne 'ok' -or $health.app_version -ne $CurrentVersion) { throw 'Relaunched target health/version proof failed.' }
         Assert-Target $instance.url 'SMOKE' '2099-12' 246813579
-        $orphans = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine -match 'TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1' })
+        # Cùng cuộc đua như trong windows_updater_ui_smoke.ps1: chưa cắn ở lane này nhưng cùng
+        # một lý do, nên đợi có giới hạn thay vì kiểm một phát.
+        $orphanWait = [System.Diagnostics.Stopwatch]::StartNew()
+        do {
+            $orphans = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.CommandLine -and $_.CommandLine -match 'TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1' })
+            if ($orphans.Count -eq 0) { break }
+            Start-Sleep -Milliseconds 500
+        } while ($orphanWait.ElapsedMilliseconds -lt 30000)
         if ($orphans.Count -ne 0) { throw 'Updater bootstrap process remained after successful runtime smoke.' }
     }
 
