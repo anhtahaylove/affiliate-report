@@ -7,7 +7,9 @@ import { AnalyticsBreakdownRow, AnalyticsDimensionRow, AnalyticsResponse, loadAn
 import { UrlFilters } from "@/components/filters";
 import { Notice, Skeleton, StateCard, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
-import { accountLabel, formatDateTime, formatMoney, integer, percent, statusLabel } from "@/lib/format";
+import { formatDateTime, formatMoney, integer, percent, statusLabel } from "@/lib/format";
+import { AccountIdentity } from "@/components/account-identity";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 const CommissionTrendChart = dynamic(
   () => import("@/components/commerce-intelligence-charts").then((module) => module.CommissionTrendChart),
@@ -22,7 +24,7 @@ const StatusMixChart = dynamic(
   { ssr: false, loading: () => <div className="chart-loading" aria-label="Đang dựng biểu đồ" /> },
 );
 
-export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
+export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; directory: AccountDirectory }) {
   const { data, error, loading } = useApi<AnalyticsResponse>(
     `analytics-v2:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end])}`,
     () => loadAnalytics({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end }),
@@ -76,11 +78,11 @@ export function AnalyticsPage({ filters }: { filters: UrlFilters }) {
           <div className="analytics-split account-analysis">
             <section className="canvas-panel">
               <div className="panel-heading"><div><p className="section-label">Đóng góp</p><h2>Tài khoản tạo ra hoa hồng</h2></div><Link className="text-action" href="/accounts">Quản lý tài khoản</Link></div>
-              {data.account_breakdown.length ? <AccountContributionChart rows={data.account_breakdown} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
+              {data.account_breakdown.length ? <AccountContributionChart rows={data.account_breakdown} directory={directory} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
             </section>
-            <BreakdownList rows={data.account_breakdown} mode="account" />
+            <BreakdownList rows={data.account_breakdown} mode="account" directory={directory} />
           </div>
-          <BreakdownTable rows={data.account_breakdown} mode="account" />
+          <BreakdownTable rows={data.account_breakdown} mode="account" directory={directory} />
         </Tabs.Content>
 
         <Tabs.Content value="commerce" className="analytics-tab-panel">
@@ -105,13 +107,13 @@ function InsightMetric({ label, value, note, tone = "neutral" }: { label: string
   return <article className="insight-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
 }
 
-function BreakdownList({ rows, mode }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account" }) {
+function BreakdownList({ rows, mode, directory }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account"; directory?: AccountDirectory }) {
   return (
     <section className="canvas-panel breakdown-list-panel">
       <div className="panel-heading"><div><p className="section-label">Phân bổ</p><h2>{mode === "status" ? "Tín hiệu cần chú ý" : "Tỷ trọng tài khoản"}</h2></div></div>
       <ol className="rank-list">
         {rows.slice(0, 6).map((row, index) => {
-          const label = mode === "status" ? statusLabel(row.status) : accountLabel(row.account);
+          const label = mode === "status" ? statusLabel(row.status) : directory?.label(row.account) ?? row.account ?? "Chưa xác định";
           const share = row.commission_share ?? 0;
           return <li key={`${mode}-${label}`}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{label}</strong><small>{integer.format(row.orders)} đơn · {formatMoney(mode === "status" ? row.initial_commission : row.actual_commission)}</small><div className="share-track" aria-label={`${label}: ${percent(share)}`}><span style={{ width: `${Math.max(0, Math.min(share * 100, 100))}%` }} /></div></div><b>{percent(share)}</b></li>;
         })}
@@ -120,8 +122,8 @@ function BreakdownList({ rows, mode }: { rows: AnalyticsBreakdownRow[]; mode: "s
   );
 }
 
-function BreakdownTable({ rows, mode }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account" }) {
-  return <section className="canvas-panel desktop-data-table"><div className="panel-heading"><div><p className="section-label">Chi tiết</p><h2>Bảng đóng góp</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng đóng góp theo tài khoản" tabIndex={0}><table><thead><tr><th>{mode === "status" ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Tỷ trọng</th></tr></thead><tbody>{rows.map((row) => <tr key={row[mode === "status" ? "status" : "account"] ?? "unknown"}><td>{mode === "status" ? <StatusBadge status={row.status} /> : accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table></div></section>;
+function BreakdownTable({ rows, mode, directory }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account"; directory?: AccountDirectory }) {
+  return <section className="canvas-panel desktop-data-table"><div className="panel-heading"><div><p className="section-label">Chi tiết</p><h2>Bảng đóng góp</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng đóng góp theo tài khoản" tabIndex={0}><table><thead><tr><th>{mode === "status" ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Tỷ trọng</th></tr></thead><tbody>{rows.map((row) => <tr key={row[mode === "status" ? "status" : "account"] ?? "unknown"}><td>{mode === "status" ? <StatusBadge status={row.status} /> : directory ? <AccountIdentity directory={directory} code={row.account} /> : row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table></div></section>;
 }
 
 function DimensionLeaderboard({ title, eyebrow, rows }: { title: string; eyebrow: string; rows: AnalyticsDimensionRow[] }) {

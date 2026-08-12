@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ApiError, CurrentUser, dailyReportExportUrl, loadCurrentUser, loadMeta, loadUiPreferences, saveUiPreferences, type IdentityPolicy, type RuntimeCapabilities, type UiPreferences } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ApiError, CurrentUser, dailyReportExportUrl, loadCurrentUser, loadMeta, loadUiPreferences, saveUiPreferences, type MetaResponse, type UiPreferences } from "@/lib/api";
 import { AppShell, AuthCard } from "@/components/app-shell";
 import { FilterBar, useUrlFilters } from "@/components/filters";
 import { Notice, canWrite, isOwner } from "@/components/ui";
@@ -17,6 +17,7 @@ import { UsersSettingsPage } from "@/components/pages/users-settings";
 import { applyThemePreference, ThemePreferences, type Theme } from "@/components/theme-toggle";
 import { errorMessage } from "@/lib/format";
 import { SavedViews } from "@/components/saved-views";
+import { createAccountDirectory } from "@/lib/account-directory";
 
 type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | "accounts" | "preferences" | "data" | "update" | "users";
 
@@ -36,12 +37,7 @@ const routeMeta: Record<RouteKind, { label: string; title: string; copy: string;
 export function OperationsPage({ route }: { route: RouteKind }) {
   const filters = useUrlFilters();
   const [user, setUser] = useState<CurrentUser | null>(null);
-  const [accounts, setAccounts] = useState<string[]>([]);
-  const [statuses, setStatuses] = useState<string[]>([]);
-  const [maxUploadMb, setMaxUploadMb] = useState(50);
-  const [appVersion, setAppVersion] = useState("");
-  const [capabilities, setCapabilities] = useState<RuntimeCapabilities | null>(null);
-  const [identityPolicy, setIdentityPolicy] = useState<IdentityPolicy | null>(null);
+  const [metaData, setMetaData] = useState<MetaResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [authError, setAuthError] = useState("");
@@ -54,12 +50,7 @@ export function OperationsPage({ route }: { route: RouteKind }) {
         const [currentUser, meta, uiPreferences] = await Promise.all([loadCurrentUser(), loadMeta(), loadUiPreferences()]);
         if (!active) return;
         setUser(currentUser);
-        setAccounts(meta.accounts);
-        setStatuses(meta.statuses);
-        setMaxUploadMb(meta.max_upload_mb);
-        setAppVersion(meta.app_version ?? "");
-        setCapabilities(meta.capabilities);
-        setIdentityPolicy(meta.identity_policy);
+        setMetaData(meta);
         setPreferences(uiPreferences);
         applyThemePreference(uiPreferences.theme);
         setLoadError("");
@@ -75,33 +66,42 @@ export function OperationsPage({ route }: { route: RouteKind }) {
     return () => { active = false; };
   }, []);
 
+  const refreshAccountMetadata = useCallback(async () => {
+    const refreshed = await loadMeta();
+    setMetaData(refreshed);
+  }, []);
+  const accountDirectory = useMemo(
+    () => createAccountDirectory(metaData?.account_items, metaData?.accounts),
+    [metaData],
+  );
+
   if (loading) return <main className="auth-shell"><section className="auth-card panel"><div className="brand-badge">AFF</div><h1>Đang tải trung tâm vận hành…</h1><p className="hint">Đang kiểm tra phiên đăng nhập và kết nối dữ liệu.</p></section></main>;
   if (authError || loadError || !user) return <AuthCard message={authError || loadError || "Chưa xác thực."} />;
-  if (!preferences || !capabilities || !identityPolicy) return <AuthCard message="Không thể tải cấu hình ứng dụng." />;
-  const meta = routeMeta[route];
+  if (!preferences || !metaData) return <AuthCard message="Không thể tải cấu hình ứng dụng." />;
+  const pageMeta = routeMeta[route];
   async function updatePreferences(changes: Partial<Pick<UiPreferences, "theme" | "sidebar_collapsed" | "dashboard_layout">>) {
     const updated = await saveUiPreferences(changes);
     setPreferences(updated);
     applyThemePreference(updated.theme);
   }
-  const shellProps = { user, appVersion, collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
-  if (meta.needsWrite && !canWrite(user)) return <AppShell {...shellProps}><Notice text="Bạn không có quyền nhập dữ liệu. Hãy liên hệ chủ sở hữu để được cấp quyền." /></AppShell>;
-  if (meta.needsOwner && !isOwner(user)) return <AppShell {...shellProps}><Notice text="Chỉ chủ sở hữu được truy cập trang này." /></AppShell>;
+  const shellProps = { user, appVersion: metaData.app_version ?? "", collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
+  if (pageMeta.needsWrite && !canWrite(user)) return <AppShell {...shellProps}><Notice text="Bạn không có quyền nhập dữ liệu. Hãy liên hệ chủ sở hữu để được cấp quyền." /></AppShell>;
+  if (pageMeta.needsOwner && !isOwner(user)) return <AppShell {...shellProps}><Notice text="Chỉ chủ sở hữu được truy cập trang này." /></AppShell>;
 
   return (
-    <AppShell {...shellProps} heading={<div className="page-heading"><h1>{meta.title}</h1><p className="subtle">{meta.copy}</p></div>}>
+    <AppShell {...shellProps} heading={<div className="page-heading"><h1>{pageMeta.title}</h1><p className="subtle">{pageMeta.copy}</p></div>}>
       {(["dashboard", "analytics", "orders"] as RouteKind[]).includes(route) ? <SavedViews route={route as "dashboard" | "analytics" | "orders"} /> : null}
-      {meta.filters ? <FilterBar accounts={accounts} statuses={route === "targets" ? [] : statuses} showSearch={meta.search} actions={route === "dashboard" ? <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a> : null} /> : null}
-      {route === "dashboard" ? <DashboardHome filters={filters} accounts={accounts} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}
-      {route === "analytics" ? <AnalyticsPage filters={filters} /> : null}
-      {route === "orders" ? <OrdersPage filters={filters} /> : null}
-      {route === "imports" ? <ImportsPage user={user} accounts={accounts} maxUploadMb={maxUploadMb} /> : null}
-      {route === "targets" ? <TargetsPage user={user} filters={filters} accounts={accounts} /> : null}
-      {route === "accounts" ? <AccountsPage /> : null}
+      {pageMeta.filters ? <FilterBar accounts={metaData.accounts} directory={accountDirectory} statuses={route === "targets" ? [] : metaData.statuses} showSearch={pageMeta.search} actions={route === "dashboard" ? <a className="button-link secondary-link" download="tiktok-affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a> : null} /> : null}
+      {route === "dashboard" ? <DashboardHome user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}
+      {route === "analytics" ? <AnalyticsPage filters={filters} directory={accountDirectory} /> : null}
+      {route === "orders" ? <OrdersPage filters={filters} directory={accountDirectory} /> : null}
+      {route === "imports" ? <ImportsPage user={user} accounts={metaData.accounts} directory={accountDirectory} maxUploadMb={metaData.max_upload_mb} /> : null}
+      {route === "targets" ? <TargetsPage user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} /> : null}
+      {route === "accounts" ? <AccountsPage onAccountsChanged={refreshAccountMetadata} /> : null}
       {route === "preferences" ? <ThemePreferences value={preferences.theme} onChange={(theme: Theme) => updatePreferences({ theme })} /> : null}
-      {route === "data" ? <DataSettingsPage capability={capabilities.data_admin} backend={capabilities.database_backend} /> : null}
-      {route === "update" ? <UpdateSettingsPage checkCapability={capabilities.update_check} installCapability={capabilities.update_install} /> : null}
-      {route === "users" ? <UsersSettingsPage currentUser={user} accounts={accounts} identityPolicy={identityPolicy} /> : null}
+      {route === "data" ? <DataSettingsPage capability={metaData.capabilities.data_admin} backend={metaData.capabilities.database_backend} /> : null}
+      {route === "update" ? <UpdateSettingsPage checkCapability={metaData.capabilities.update_check} installCapability={metaData.capabilities.update_install} /> : null}
+      {route === "users" ? <UsersSettingsPage currentUser={user} accounts={metaData.accounts} directory={accountDirectory} identityPolicy={metaData.identity_policy} /> : null}
     </AppShell>
   );
 }

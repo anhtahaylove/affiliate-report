@@ -6,22 +6,27 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, Eye, EyeOff, SlidersHorizontal } from "lucide-react";
 import {
   AnalyticsResponse,
+  CurrentUser,
   ImportHistoryRow,
   MonthlyKpiRow,
   OverviewRow,
+  TargetRow,
   loadAnalytics,
   loadDashboard,
   loadImportHistory,
   loadMonthlyKpi,
+  loadTargets,
   queryString,
   type DashboardWidget,
   type UiPreferences,
 } from "@/lib/api";
 import { UrlFilters } from "@/components/filters";
-import { Notice, Skeleton } from "@/components/ui";
+import { canWrite, isOwner, Notice, Skeleton } from "@/components/ui";
 import { RecentImports } from "@/components/recent-imports";
+import { AccountIdentity } from "@/components/account-identity";
 import { useApi } from "@/lib/use-api";
-import { accountLabel, achievementTone, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
+import { achievementTone, currentMonth, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 const CommissionTrendChart = dynamic(
   () => import("@/components/commerce-intelligence-charts").then((module) => module.CommissionTrendChart),
@@ -37,6 +42,7 @@ type DashboardData = {
   kpi: MonthlyKpiRow[];
   analytics: AnalyticsResponse;
   history: ImportHistoryRow[];
+  targets: TargetRow[];
 };
 
 type ActionAlert = {
@@ -47,18 +53,20 @@ type ActionAlert = {
   action: string;
 };
 
-export function DashboardHome({ filters, accounts, preferences, onPreferencesChange }: { filters: UrlFilters; accounts: string[]; preferences: UiPreferences; onPreferencesChange: (changes: Partial<Pick<UiPreferences, "dashboard_layout">>) => Promise<void> }) {
+export function DashboardHome({ user, filters, accounts, directory, preferences, onPreferencesChange }: { user: CurrentUser; filters: UrlFilters; accounts: string[]; directory: AccountDirectory; preferences: UiPreferences; onPreferencesChange: (changes: Partial<Pick<UiPreferences, "dashboard_layout">>) => Promise<void> }) {
   const scope = { accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end };
+  const onboardingMonth = currentMonth();
   const { data, error, loading } = useApi<DashboardData>(
-    `dashboard-v2:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end])}`,
+    `dashboard-v2:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end, onboardingMonth])}`,
     async () => {
-      const [dashboard, monthly, analytics, imports] = await Promise.all([
+      const [dashboard, monthly, analytics, imports, targets] = await Promise.all([
         loadDashboard(scope),
         loadMonthlyKpi(scope),
         loadAnalytics(scope),
         loadImportHistory(5, filters.accounts),
+        loadTargets(onboardingMonth, filters.accounts.length ? filters.accounts : undefined),
       ]);
-      return { overview: dashboard.overview, kpi: monthly.items, analytics, history: imports.items };
+      return { overview: dashboard.overview, kpi: monthly.items, analytics, history: imports.items, targets: targets.items };
     },
     "Không thể tải trung tâm điều hành.",
   );
@@ -67,7 +75,7 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
   if (error) return <Notice text={error} />;
   if (loading || !data) return <Skeleton rows={4} tall label="Đang tải trung tâm điều hành" />;
 
-  const { overview, kpi, analytics, history } = data;
+  const { overview, kpi, analytics, history, targets } = data;
   const summary = analytics.summary;
   const previous = analytics.previous_period?.summary;
   const total = filters.accounts.length === 1
@@ -76,10 +84,11 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
   const activeKpi = filters.accounts.length === 1
     ? kpi.find((row) => row.account === filters.accounts[0])
     : kpi.find((row) => row.account === "ALL");
-  const selectedLabel = filters.accounts.length ? filters.accounts.join(" + ") : accountLabel("ALL");
+  const selectedLabel = filters.accounts.length ? filters.accounts.map((account) => directory.label(account)).join(" + ") : directory.label("ALL");
   const wholeScope = filters.accounts.length === 0 || filters.accounts.length === accounts.length;
+  const setup = { hasAccounts: accounts.length > 0, hasImports: history.length > 0, hasTarget: targets.length > 0 };
 
-  if (wholeScope && !history.length && summary.order_lines === 0) return <FirstRun />;
+  if (wholeScope && (!setup.hasAccounts || !setup.hasImports)) return <FirstRun user={user} setup={setup} />;
 
   const targetAchievement = analytics.target?.achievement ?? activeKpi?.target_achievement ?? null;
   const progress = Math.max(0, Math.min((targetAchievement ?? 0) * 100, 100));
@@ -91,6 +100,7 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
 
   return (
     <div className="momentum-dashboard">
+      {wholeScope && !setup.hasTarget ? <FirstRun user={user} setup={setup} /> : null}
       <DashboardCustomizer compact={compactDashboard} preferences={preferences} onPreferencesChange={onPreferencesChange} />
       <section className="today-pulse" style={widgetStyle("today_pulse")} data-widget-id="today_pulse" aria-labelledby="today-pulse-title">
         <div className="pulse-heading">
@@ -176,7 +186,7 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
         <section className="momentum-grid insight-grid single-widget">
           <article className="canvas-panel account-canvas">
             <div className="panel-heading"><div><p className="section-label">Cơ cấu tài khoản</p><h2>Đóng góp theo tài khoản</h2></div></div>
-            {analytics.account_breakdown.length ? <AccountContributionChart rows={analytics.account_breakdown} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
+            {analytics.account_breakdown.length ? <AccountContributionChart rows={analytics.account_breakdown} directory={directory} /> : <p className="empty">Chưa có dữ liệu tài khoản.</p>}
           </article>
         </section>
       </DashboardDisclosure>
@@ -215,11 +225,11 @@ export function DashboardHome({ filters, accounts, preferences, onPreferencesCha
       </DashboardDisclosure>
 
       <DashboardDisclosure compact={compactDashboard} label="Lần nhập gần đây" hint={`${integer.format(history.length)} lần gần nhất`} style={widgetStyle("recent_imports")} widgetId="recent_imports">
-        <RecentImports rows={history} />
+        <RecentImports rows={history} directory={directory} />
       </DashboardDisclosure>
       <div className="dashboard-fixed-footer">
         <DashboardDisclosure compact={compactDashboard} label="Hiệu suất chi tiết" hint={`${integer.format(overview.filter((row) => row.account !== "ALL").length)} tài khoản`}>
-          <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} />
+          <AccountComparison rows={overview.filter((row) => row.account !== "ALL")} kpi={kpi} directory={directory} />
         </DashboardDisclosure>
       </div>
     </div>
@@ -392,23 +402,28 @@ function TrendFallback({ rows }: { rows: AnalyticsResponse["trend"] }) {
   return <div className="sr-chart-table"><table><caption>Dữ liệu xu hướng bảy kỳ gần nhất</caption><thead><tr><th>Kỳ</th><th>Hoa hồng</th><th>Đã nhận</th></tr></thead><tbody>{rows.map((row) => <tr key={row.period}><td>{row.period}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(row.final_received)}</td></tr>)}</tbody></table></div>;
 }
 
-function FirstRun() {
+function FirstRun({ user, setup }: { user: CurrentUser; setup: { hasAccounts: boolean; hasImports: boolean; hasTarget: boolean } }) {
+  const owner = isOwner(user);
+  const writer = canWrite(user);
+  if (!setup.hasAccounts && !owner) {
+    return <section className="canvas-panel first-run" aria-labelledby="first-run-title"><div className="panel-heading"><div><p className="section-label">Chưa có phạm vi dữ liệu</p><h2 id="first-run-title">Liên hệ chủ sở hữu để được cấp account</h2><p>{writer ? "Sau khi được cấp account, bạn có thể nhập tệp và đặt mục tiêu trong phạm vi được phép." : "Tài khoản của bạn đang ở chế độ chỉ xem và chưa được cấp phạm vi báo cáo."}</p></div></div><p className="first-run-guidance">Không có thao tác quản trị nào được mở cho vai trò hiện tại.</p></section>;
+  }
   const steps = [
-    { href: "/accounts", title: "Tạo tài khoản TikTok", copy: "Tạo phạm vi báo cáo cho từng tài khoản affiliate." },
-    { href: "/imports", title: "Nhập tệp Excel đầu tiên", copy: "Chọn tài khoản, kiểm tra hàng đợi rồi nhập tệp TikTok." },
-    { href: "/targets", title: "Đặt mục tiêu tháng", copy: "Mở planner để hệ thống tính pace và dự báo." },
+    { done: setup.hasAccounts, href: owner ? "/accounts" : null, title: "Tạo account TikTok", copy: setup.hasAccounts ? "Đã có phạm vi account để vận hành." : "Tạo phạm vi báo cáo cho từng account affiliate." },
+    { done: setup.hasImports, href: writer && setup.hasAccounts ? "/imports" : null, title: "Nhập tệp Excel đầu tiên", copy: setup.hasImports ? "Đã có lịch sử import để dựng báo cáo." : "Chọn account, xem hàng đợi rồi nhập tệp TikTok." },
+    { done: setup.hasTarget, href: writer && setup.hasAccounts ? "/targets" : null, title: "Đặt mục tiêu tháng", copy: setup.hasTarget ? "Đã có mục tiêu cho tháng hiện tại." : "Mở planner để hệ thống tính pace và dự báo." },
   ];
-  return <section className="canvas-panel first-run"><div className="panel-heading"><div><p className="section-label">Khởi động</p><h2>Thiết lập workspace đầu tiên</h2><p>Hoàn tất ba bước để mở toàn bộ Commerce Intelligence.</p></div></div><ol className="first-run-steps">{steps.map((step, index) => <li key={step.href}><span className="step-index" aria-hidden="true">{index + 1}</span><div><Link href={step.href}><strong>{step.title}</strong></Link><p>{step.copy}</p></div></li>)}</ol></section>;
+  return <section className="canvas-panel first-run" aria-labelledby="first-run-title"><div className="panel-heading"><div><p className="section-label">Khởi động có hướng dẫn</p><h2 id="first-run-title">Hoàn tất thiết lập vận hành</h2><p>Các bước được cập nhật tự động từ dữ liệu và quyền hiện tại.</p></div></div><ol className="first-run-steps">{steps.map((step, index) => <li key={step.title} data-state={step.done ? "done" : step.href ? "current" : "blocked"}><span className="step-index" aria-hidden="true">{step.done ? "✓" : index + 1}</span><div>{step.href ? <Link href={step.href}><strong>{step.title}</strong></Link> : <strong>{step.title}</strong>}<p>{step.copy}</p></div><span className="step-state">{step.done ? "Hoàn tất" : step.href ? "Cần làm" : "Chưa khả dụng"}</span></li>)}</ol></section>;
 }
 
-function AccountComparison({ rows, kpi }: { rows: OverviewRow[]; kpi: MonthlyKpiRow[] }) {
+function AccountComparison({ rows, kpi, directory }: { rows: OverviewRow[]; kpi: MonthlyKpiRow[]; directory: AccountDirectory }) {
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
   return (
     <section className="canvas-panel account-comparison" id="accounts">
       <div className="panel-heading"><div><p className="section-label">Hiệu suất tài khoản</p><h2>Hiệu suất chi tiết</h2></div><Link className="text-action" href="/accounts">Quản lý tài khoản</Link></div>
       {rows.length ? <>
-        <div className="table-wrap desktop-data-table" role="region" aria-label="Bảng hiệu suất tài khoản" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => { const achievement = kpiMap.get(row.account)?.target_achievement; return <tr key={row.account}><td>{accountLabel(row.account)}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td><span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></td></tr>; })}</tbody></table></div>
-        <div className="mobile-data-list">{rows.map((row) => <article className="mobile-data-card" key={row.account}><div><strong>{accountLabel(row.account)}</strong><span>{integer.format(row.orders)} đơn</span></div><dl><div><dt>GMV thực tế</dt><dd>{formatMoney(row.actual_gmv)}</dd></div><div><dt>Hoa hồng</dt><dd>{formatMoney(row.actual_commission)}</dd></div><div><dt>Đạt mục tiêu</dt><dd>{percent(kpiMap.get(row.account)?.target_achievement)}</dd></div></dl></article>)}</div>
+        <div className="table-wrap desktop-data-table" role="region" aria-label="Bảng hiệu suất tài khoản" tabIndex={0}><table><thead><tr><th>Tài khoản</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Mục tiêu</th><th>Đã đạt</th></tr></thead><tbody>{rows.map((row) => { const achievement = kpiMap.get(row.account)?.target_achievement; return <tr key={row.account}><td><AccountIdentity directory={directory} code={row.account} /></td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{formatMoney(kpiMap.get(row.account)?.monthly_target)}</td><td><span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span></td></tr>; })}</tbody></table></div>
+        <div className="mobile-data-list">{rows.map((row) => <article className="mobile-data-card" key={row.account}><div><AccountIdentity directory={directory} code={row.account} /><span>{integer.format(row.orders)} đơn</span></div><dl><div><dt>GMV thực tế</dt><dd>{formatMoney(row.actual_gmv)}</dd></div><div><dt>Hoa hồng</dt><dd>{formatMoney(row.actual_commission)}</dd></div><div><dt>Đạt mục tiêu</dt><dd>{percent(kpiMap.get(row.account)?.target_achievement)}</dd></div></dl></article>)}</div>
       </> : <p className="empty">Chưa có dữ liệu tài khoản trong bộ lọc.</p>}
     </section>
   );

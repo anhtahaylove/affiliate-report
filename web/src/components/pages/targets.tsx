@@ -5,7 +5,9 @@ import { CurrentUser, MonthlyKpiRow, TargetRow, copyPreviousTargets, loadMonthly
 import { UrlFilters } from "@/components/filters";
 import { canWrite } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
-import { accountLabel, achievementTone, errorMessage, formatMoney, integer, percent } from "@/lib/format";
+import { achievementTone, errorMessage, formatMoney, integer, percent } from "@/lib/format";
+import { AccountIdentity } from "@/components/account-identity";
+import type { AccountDirectory } from "@/lib/account-directory";
 
 function previousMonthOf(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -18,7 +20,7 @@ function monthLabel(month: string) {
   return `${monthNumber}/${year}`;
 }
 
-export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; filters: UrlFilters; accounts: string[] }) {
+export function TargetsPage({ user, filters, accounts, directory }: { user: CurrentUser; filters: UrlFilters; accounts: string[]; directory: AccountDirectory }) {
   const [targets, setTargets] = useState<TargetRow[]>([]);
   const [kpi, setKpi] = useState<MonthlyKpiRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -51,7 +53,7 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
     try {
       await saveTarget(account, filters.month, Number(draft));
       invalidateApiCache();
-      setMessage(`Đã lưu KPI/ngày cho ${accountLabel(account)}.`);
+      setMessage(`Đã lưu KPI/ngày cho ${directory.label(account)}.`);
       await refresh();
     } catch (reason) {
       setMessage(errorMessage(reason, "Không thể lưu mục tiêu."));
@@ -101,7 +103,7 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
             <article className="target-card" key={account}>
               <div className="record-title">
                 <div>
-                  <strong>{accountLabel(account)}</strong>
+                  <AccountIdentity directory={directory} code={account} />
                   <span>{account === "ALL" ? "Mục tiêu mặc định cho toàn bộ tài khoản" : "Mục tiêu riêng theo tài khoản"}</span>
                 </div>
                 <span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span>
@@ -115,7 +117,7 @@ export function TargetsPage({ user, filters, accounts }: { user: CurrentUser; fi
               <div className="target-edit-row">
                 <div className="field">
                   <label htmlFor={`target-${account}`}>KPI/ngày mới</label>
-                  <input id={`target-${account}`} type="number" min="0" step="1" value={draft} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${accountLabel(account)}`} />
+                  <input id={`target-${account}`} type="number" min="0" step="1" value={draft} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${directory.get(account).accessibleName}`} />
                 </div>
                 <button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button>
               </div>
