@@ -191,15 +191,20 @@ jobs:
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/tiktok-affiliate-report"
           $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
+          # Một repo duy nhất: bản nháp ở đây CHÍNH LÀ bản vừa tạo và xác minh ở bước trước, mang
+          # đúng năm asset đó. Ở mô hình hai repo, bước này tạo một release mới tinh bên kho kia
+          # nên xoá-rồi-tạo-lại là vô hại. Cùng một kho thì nó thành tạo → xoá → tạo lại trên
+          # cùng một tag, và asset không kịp xuất hiện công khai cho bước tải ẩn danh ngay sau —
+          # đúng chỗ v2.0.14 dừng lại. Dùng lại bản đã xác minh thay vì dựng lại.
           $existingJson = gh release view $tag --repo $repo --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
             $existing = $existingJson | ConvertFrom-Json
             if (!$existing.isDraft) { throw "Public release $tag is already published" }
-            gh release delete $tag --repo $repo --yes
-            if ($LASTEXITCODE -ne 0) { throw "Could not replace existing public draft release" }
+            Write-Host "Reusing the verified draft release as the public release."
+          } else {
+            gh release create $tag @assets --repo $repo --draft --latest=false --title "TikTok Affiliate Report $tag" --notes "Public auto-update feed for $tag"
+            if ($LASTEXITCODE -ne 0) { throw "Could not create public draft release" }
           }
-          gh release create $tag @assets --repo $repo --draft --latest=false --title "TikTok Affiliate Report $tag" --notes "Public auto-update feed for $tag"
-          if ($LASTEXITCODE -ne 0) { throw "Could not create public draft release" }
           $verify = Join-Path $env:RUNNER_TEMP "public-release-verify"
           New-Item -ItemType Directory -Path $verify -Force | Out-Null
           gh release download $tag --repo $repo --dir $verify
