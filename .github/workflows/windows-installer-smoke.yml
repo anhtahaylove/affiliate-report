@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/windows-installer-smoke.yml"
+      - ".gitattributes"
       - "tiktok_affiliate_report/**"
       - "web/**"
       - "packaging/**"
@@ -33,6 +34,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/windows-installer-smoke.yml"
+      - ".gitattributes"
       - "tiktok_affiliate_report/**"
       - "web/**"
       - "packaging/**"
