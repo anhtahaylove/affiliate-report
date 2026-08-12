@@ -121,7 +121,7 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
-          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $repo = "anhtahaylove/tiktok-affiliate-report"
           $keyId = "tiktok-report-updates-2026-08"
           $publicKey = .\.venv\Scripts\python.exe -m scripts.sign_update_feed --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --bootstrap "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
           $pinned = .\.venv\Scripts\python.exe -c "from tiktok_affiliate_report.updater import TRUSTED_UPDATE_KEYS; print(TRUSTED_UPDATE_KEYS['$keyId'])"
@@ -189,7 +189,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
-          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
+          $repo = "anhtahaylove/tiktok-affiliate-report"
           $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
           $existingJson = gh release view $tag --repo $repo --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
@@ -235,7 +235,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: anhtahaylove/tiktok-affiliate-report
-          token: ${{ secrets.UPDATE_FEED_TOKEN }}
+          token: ${{ github.token }}
           path: update-feed
       - name: Promote public stable feed and releases
         shell: pwsh
@@ -246,9 +246,8 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
-          $repo = "anhtahaylove/tiktok-affiliate-report-updates"
-          # Nơi chứa asset và nơi chứa feed nay là hai repo khác nhau; đừng gộp lại một biến.
-          $feedRepo = "anhtahaylove/tiktok-affiliate-report"
+          $repo = "anhtahaylove/tiktok-affiliate-report"
+          $feedRepo = $repo
           $assetNames = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig")
           $stableCommitted = $false
           $stableCommit = ""

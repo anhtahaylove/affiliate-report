@@ -6,7 +6,7 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.12"
+        default: "2.0.13"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
@@ -53,7 +53,7 @@ permissions:
   contents: read
 
 env:
-  PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report-updates
+  PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report
   PREVIOUS_STABLE_VERSION: "2.0.6"
   CANDIDATE_ARTIFACT_NAME: v207-candidate-installer
 

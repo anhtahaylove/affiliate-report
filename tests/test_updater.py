@@ -62,10 +62,10 @@ def stable_feed(
         "channel": updater.UPDATE_CHANNEL,
         "version": version,
         "published_at": "2026-08-04T00:00:00Z",
-        "release_url": f"https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/tag/v{version}",
+        "release_url": f"https://github.com/anhtahaylove/tiktok-affiliate-report/releases/tag/v{version}",
         "installer": installer_info or {
             "name": name,
-            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v{version}/{name}",
+            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v{version}/{name}",
             "size": len(installer),
             "sha256": hashlib.sha256(installer).hexdigest().upper(),
         },
@@ -73,7 +73,7 @@ def stable_feed(
             "protocol": updater.UPDATE_BOOTSTRAP_PROTOCOL,
             "version": updater.UPDATE_BOOTSTRAP_VERSION,
             "name": updater.UPDATE_BOOTSTRAP_NAME,
-            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v{version}/{updater.UPDATE_BOOTSTRAP_NAME}",
+            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v{version}/{updater.UPDATE_BOOTSTRAP_NAME}",
             "size": len(installer),
             "sha256": hashlib.sha256(installer).hexdigest().upper(),
         },
@@ -139,11 +139,11 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
             "--bootstrap",
             str(bootstrap),
             "--asset-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateReportSetup-v1.2.1.exe",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v1.2.1/TikTokAffiliateReportSetup-v1.2.1.exe",
             "--bootstrap-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
             "--release-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/tag/v1.2.1",
+            "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/tag/v1.2.1",
             "--key-id",
             TEST_KEY_ID,
             "--output-dir",
@@ -166,7 +166,7 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
         "protocol": 1,
         "version": "1.0.0",
         "name": "TikTokAffiliateUpdater-v1.0.0.ps1",
-        "url": "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
+        "url": "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
         "size": len(b"bootstrap"),
         "sha256": hashlib.sha256(b"bootstrap").hexdigest().upper(),
     }
@@ -203,7 +203,7 @@ def test_manifest_accepts_new_bootstrap_version_within_supported_protocol(monkey
             "version": bootstrap_version,
             "name": bootstrap_name,
             "url": (
-                "https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases/"
+                "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/"
                 f"download/v1.2.1/{bootstrap_name}"
             ),
             "size": len(bootstrap),

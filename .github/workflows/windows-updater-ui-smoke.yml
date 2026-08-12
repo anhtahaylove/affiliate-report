@@ -11,7 +11,7 @@ on:
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.0.12"
+        default: "2.0.13"
       release_sha:
         description: Exact trusted source commit for release-gated runs
         required: false
@@ -33,7 +33,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     env:
-      PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report-updates
+      PUBLIC_UPDATE_REPO: anhtahaylove/tiktok-affiliate-report
       PREVIOUS_VERSION: ${{ inputs.previous_version }}
       CURRENT_VERSION: ${{ inputs.current_version }}
       RELEASE_SHA: ${{ inputs.release_sha }}

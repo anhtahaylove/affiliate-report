@@ -16,7 +16,7 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report-updates/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v2.0.12.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v2.0.13.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -33,7 +33,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\TikTokAffiliateReportSetup-v2.0.12.exe -Algorithm SHA256
+   Get-FileHash .\TikTokAffiliateReportSetup-v2.0.13.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -61,7 +61,7 @@ Owner có thể dùng mục **Reset Data** trong dashboard local. App bắt bu�
 
 Mục **Khôi phục backup** liệt kê thời gian, dung lượng và row counts để xem trước. Restore chỉ thay các bảng dữ liệu báo cáo, giữ nguyên user/session đang dùng và luôn tạo thêm một safety backup của trạng thái hiện tại trước khi ghi đè.
 
-Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. App đọc public feed `stable.json` + `stable.json.sig` từ `anhtahaylove/tiktok-affiliate-report-updates`, xác minh chữ ký Ed25519 bằng public key ghim trong app, rồi mới tải installer HTTPS đúng tên/kích thước/SHA-256. Không cần GitHub token trên máy người dùng; biến `TIKTOK_REPORT_UPDATE_FEED_URL` chỉ dùng được khi chạy source/dev, không dùng trong bản cài frozen.
+Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. App đọc public feed `stable.json` + `stable.json.sig` từ `anhtahaylove/tiktok-affiliate-report`, xác minh chữ ký Ed25519 bằng public key ghim trong app, rồi mới tải installer HTTPS đúng tên/kích thước/SHA-256. Không cần GitHub token trên máy người dùng; biến `TIKTOK_REPORT_UPDATE_FEED_URL` chỉ dùng được khi chạy source/dev, không dùng trong bản cài frozen.
 
 Kết quả helper/installer được ghi tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\updater.log` và thư mục `data\updates\v<version>` để chẩn đoán nếu update bị Windows hoặc antivirus chặn.
 
@@ -143,7 +143,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v2.0.12.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v2.0.13.exe`
 - `artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
