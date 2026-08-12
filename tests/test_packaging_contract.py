@@ -224,6 +224,8 @@ def test_v205_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "github.event_name == 'push'" in candidate
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Fresh" in candidate
     assert "scripts\\ci\\windows_installer_smoke.ps1 -Mode Upgrade" in candidate
+    assert '"- Upgrade $previousVersion -> ${currentVersion}: PASS"' in candidate
+    assert "$currentVersion: PASS" not in candidate
     assert "TikTokAffiliateReportSetup-v*.exe" in candidate
     assert "SHA256SUMS.txt" in candidate
     assert "stable.json" not in candidate

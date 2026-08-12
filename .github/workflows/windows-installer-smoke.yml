@@ -223,7 +223,7 @@ jobs:
             -PreviousInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$previousVersion.exe") `
             -PreviousVersion $previousVersion `
             -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt")
-          "- Upgrade $previousVersion -> $currentVersion: PASS" >> $env:GITHUB_STEP_SUMMARY
+          "- Upgrade $previousVersion -> ${currentVersion}: PASS" >> $env:GITHUB_STEP_SUMMARY
 
   candidate-release-gate:
     if: always() && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
