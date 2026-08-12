@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.10 - 2026-08-12
+
+Bản v2.0.8 và v2.0.9 đều không phát hành được nên chưa từng tới máy nào. Toàn bộ nội dung của chúng nằm trong bản này.
+
+Thay đổi duy nhất so với v2.0.9 nằm ở bộ kiểm thử nội bộ, không đụng tới ứng dụng: bài kiểm tra sau phát hành từng báo hỏng khi tiến trình cài đặt chưa kịp tự thoát, dù bản cập nhật đã cài xong và dữ liệu còn nguyên. Giờ nó chờ tối đa 30 giây thay vì kết luận ngay.
+
 ## v2.0.9 - 2026-08-12
 
 Bản v2.0.8 không phát hành được nên chưa từng tới máy nào — toàn bộ nội dung của nó nằm trong bản này, cộng thêm hai bản sửa bên dưới.
