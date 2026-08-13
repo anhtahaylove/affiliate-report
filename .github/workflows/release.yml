@@ -164,7 +164,7 @@ jobs:
           $installerName = "TikTokAffiliateReportSetup-v$version.exe"
           $checksumLines = @(Get-Content (Join-Path $verify "SHA256SUMS.txt"))
           $checksumNames = @($checksumLines | ForEach-Object {
-            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  ((?:TikTok)?AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
             if (!$match.Success) { throw "SHA256SUMS contains a malformed or unexpected entry" }
             $match.Groups[2].Value
           } | Sort-Object)
@@ -215,7 +215,7 @@ jobs:
           $installerName = "TikTokAffiliateReportSetup-v$version.exe"
           $checksumLines = @(Get-Content (Join-Path $verify "SHA256SUMS.txt"))
           $checksumNames = @($checksumLines | ForEach-Object {
-            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+            $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  ((?:TikTok)?AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
             if (!$match.Success) { throw "SHA256SUMS contains a malformed or unexpected entry" }
             $match.Groups[2].Value
           } | Sort-Object)
@@ -359,7 +359,7 @@ jobs:
             $installerName = "TikTokAffiliateReportSetup-v$version.exe"
             $checksumLines = @(Get-Content (Join-Path $releaseVerify "SHA256SUMS.txt"))
             $checksumNames = @($checksumLines | ForEach-Object {
-              $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  (AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
+              $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  ((?:TikTok)?AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
               if (!$match.Success) { throw "SHA256SUMS contains a malformed or unexpected entry" }
               $match.Groups[2].Value
             } | Sort-Object)
