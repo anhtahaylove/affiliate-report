@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.26 - 2026-08-13
+## v2.0.27 - 2026-08-13
 
 **Ứng dụng đổi tên thành Affiliate Report.** Tên cũ chứa nhãn hiệu TikTok nên đổi sang tên trung tính. Ứng dụng vẫn đọc đúng tệp Excel TikTok Shop xuất ra như trước — không đổi gì về cách dùng.
 

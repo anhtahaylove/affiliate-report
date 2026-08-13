@@ -16,7 +16,7 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.0.26.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.0.27.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\AffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -33,7 +33,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\AffiliateReportSetup-v2.0.26.exe -Algorithm SHA256
+   Get-FileHash .\AffiliateReportSetup-v2.0.27.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -143,7 +143,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\AffiliateReportSetup-v2.0.26.exe`
+- `artifacts\installer\AffiliateReportSetup-v2.0.27.exe`
 - `artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
@@ -195,7 +195,7 @@ Kịch bản này cố ý không nằm trong CI: mỗi lần chạy phải tải
 - Nhập nhầm file thì dùng **Hoàn tác lần nhập này** trong Nhập dữ liệu, không cần reset toàn bộ.
 - `REPORT AFF.xlsx` là nguồn thiết kế output legacy; app không cần link Google Sheets để chạy.
 
-## Đổi tên từ v2.0.26
+## Đổi tên từ v2.0.27
 
 Ứng dụng trước đây tên là *TikTok Affiliate Report*, nay là **Affiliate Report** — tên cũ mang
 nhãn hiệu không thuộc về dự án. Cách dùng không đổi: vẫn đọc đúng tệp Excel do TikTok Shop xuất

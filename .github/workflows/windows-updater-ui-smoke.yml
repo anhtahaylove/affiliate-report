@@ -11,7 +11,7 @@ on:
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.0.26"
+        default: "2.0.27"
       release_sha:
         description: Exact trusted source commit for release-gated runs
         required: false
@@ -92,7 +92,7 @@ jobs:
             }
           }
           # Tên asset của một bản đã phát hành là VĨNH VIỄN — GitHub không cho đổi tên tệp trong
-          # release đã có. Bản trước v2.0.26 mang tên cũ và sẽ mãi như vậy, nên phải thử cả hai
+          # release đã có. Bản trước v2.0.27 mang tên cũ và sẽ mãi như vậy, nên phải thử cả hai
           # dạng. Giữ đúng tên tải được, vì windows_updater_ui_smoke.ps1 so tên tệp với dòng
           # tương ứng trong SHA256SUMS.txt.
           foreach ($version in @($env:PREVIOUS_VERSION, $env:CURRENT_VERSION)) {
