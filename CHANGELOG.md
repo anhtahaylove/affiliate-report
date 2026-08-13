@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.0.19 - 2026-08-13
+
+**Thả tệp vào thư mục, ứng dụng tự nhập.** Bạn xuất tệp TikTok trên điện thoại rồi phải chuyển sang máy tính mới nhập được — đó là bước cực nhất trong cả quy trình. Nay có thêm một thư mục nhập tự động:
+
+```
+...\TikTokAffiliateReport\data\inbox\<MÃ ACCOUNT>```
+
+Chép tệp `.xlsx` vào thư mục con mang tên account là xong. Ứng dụng quét mỗi 15 giây, nhập rồi dời tệp sang `.done`; tệp lỗi sang `.failed` kèm ghi chú lý do. Đường dẫn thật hiện ngay trên trang **Nhập dữ liệu**.
+
+Cách dùng đáng giá nhất: cắm thư mục đó vào Google Drive, OneDrive hoặc Syncthing. Điện thoại lưu tệp xong là máy tính tự nhập, không phải chuyển tệp thủ công nữa.
+
+Thả lại đúng tệp cũ không làm dữ liệu nhân đôi — ứng dụng vẫn nhận ra tệp đã nhập như khi tải lên bằng trình duyệt. Tệp đang được đồng bộ dở sẽ được để nguyên chờ lượt sau, không bị đọc nửa chừng.
+
 ## v2.0.18 - 2026-08-13
 
 Các bản từ 2.0.12 đến 2.0.17 đều không phát hành được nên chưa từng tới máy nào; toàn bộ nội dung của chúng nằm trong bản này.
