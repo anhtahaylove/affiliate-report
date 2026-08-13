@@ -41,11 +41,15 @@ function Assert-Installer([string]$Path, [string]$Version, [string]$ChecksumFile
         throw "Checksum file not found: $ChecksumFile"
     }
 
-    $expectedName = "AffiliateReportSetup-v$Version.exe"
+    # Bản phát hành TRƯỚC khi đổi thương hiệu mang tên cũ, và tên đó là vĩnh viễn — asset trên
+    # GitHub không đổi tên được. Nên chấp nhận cả hai, rồi kiểm checksum theo đúng tên thật của
+    # tệp đang cầm. Vẫn không nhận bừa: tên phải khớp trọn một trong hai dạng, kèm đúng phiên bản.
+    $tenHopLe = @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")
     $actualName = Split-Path -Leaf $Path
-    if ($actualName -ne $expectedName) {
-        throw "Installer filename is $actualName, expected $expectedName"
+    if ($tenHopLe -notcontains $actualName) {
+        throw "Installer filename is $actualName, expected one of: $($tenHopLe -join ', ')"
     }
+    $expectedName = $actualName
 
     $escapedName = [regex]::Escape($expectedName)
     $matches = @(Get-Content -LiteralPath $ChecksumFile | Where-Object { $_ -match "^([A-Fa-f0-9]{64})\s+\*?$escapedName$" })
