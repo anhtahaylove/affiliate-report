@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from datetime import date
 
 import pytest
@@ -7,7 +9,7 @@ import pandas as pd
 from sqlalchemy import select
 
 from tiktok_affiliate_report.accounts import create_account
-from tiktok_affiliate_report.db import get_engine, import_rows, init_db, monthly_targets, order_line_versions
+from tiktok_affiliate_report.db import get_engine, import_rows, init_db, monthly_targets, order_line_versions, raw_import_rows
 from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
 from tiktok_affiliate_report.reports import analytics, count_orders, daily_report, monthly_kpi, orders, overview, sheets_output
 
@@ -459,3 +461,23 @@ def test_analytics_returns_finance_dimensions_settlement_quality_and_forecast():
     assert result["data_quality"]["missing_settlement_date_rows"] == 2
     assert result["target"]["monthly_target"] == 31000
     assert result["target"]["projected_month_end"] == 108500
+
+
+def test_khong_luu_trung_chuoi_json_goc_o_order_line_versions():
+    """Chuỗi JSON gốc chỉ nằm một chỗ: raw_import_rows.
+
+    Đo trên database thật: bản sao thứ hai ở order_line_versions chiếm 12,8 MB trên 45,7 MB,
+    200/200 cặp giống hệt nhau từng byte, và không nơi nào trong mã đọc nó. Trả default="" ở
+    db.py về việc ghi lại `raw` thì test này ĐỎ.
+    """
+    e = engine()
+
+    import_rows(e, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[raw_row()])
+
+    with e.connect() as conn:
+        version = conn.execute(select(order_line_versions)).mappings().one()
+        goc = conn.execute(select(raw_import_rows.c.raw_json)).scalar_one()
+    assert version["raw_json"] == ""
+    # Bản gốc phải còn nguyên, vì hoàn tác lần nhập và audit đều dựa vào nó. So sánh sau khi
+    # đưa qua JSON vì hai trường ngày được lưu thành chuỗi, phần còn lại giữ nguyên từng trường.
+    assert goc == json.loads(json.dumps(raw_row(), default=str))

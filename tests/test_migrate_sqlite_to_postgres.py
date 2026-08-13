@@ -59,7 +59,16 @@ def downgrade_source_to_v4(engine) -> None:
         for column in analytics_columns:
             conn.execute(text(f"ALTER TABLE order_line_versions DROP COLUMN {column}"))
         conn.execute(text("DROP TABLE accounts"))
-        conn.execute(text("DELETE FROM schema_migrations WHERE version = 5"))
+        # Database v4 thật có raw_json đầy đủ — bản v4 này lại dựng từ import_rows của mã hiện
+        # tại, vốn để cột đó rỗng từ migration 8. Trả nội dung vào cho giống hàng thật, nếu
+        # không thì migration 0005 chẳng có gì để backfill và phép thử mất ý nghĩa.
+        conn.execute(text("""
+            UPDATE order_line_versions SET raw_json = (
+                SELECT r.raw_json FROM raw_import_rows r
+                WHERE r.business_key = order_line_versions.business_key LIMIT 1)
+        """))
+        # Bỏ cả 8 để đường nâng cấp chạy đúng thứ tự thật: 0005 backfill trước, 8 dọn sau.
+        conn.execute(text("DELETE FROM schema_migrations WHERE version IN (5, 8)"))
 
 
 def test_mask_secret_hides_password():

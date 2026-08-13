@@ -166,6 +166,34 @@ def _migration_0007_ui_preferences_saved_views(conn: Connection) -> None:
     metadata.create_all(conn, tables=[user_ui_preferences, saved_report_views])
 
 
+def _migration_0008_drop_duplicate_raw_json(conn: Connection) -> None:
+    """Bỏ order_line_versions.raw_json — bản sao thứ hai của cùng một chuỗi JSON.
+
+    Đo trên database thật: 45,7 MB cho 5.508 dòng, trong đó raw_import_rows.raw_json 12,8 MB và
+    order_line_versions.raw_json 12,8 MB. So 200 cặp cùng business_key: 200/200 giống hệt nhau
+    từng byte.
+
+    Cột này chỉ được GHI, không nơi nào đọc: imports.undo_import và imports.order_line_history
+    không đụng tới, order_line_history chọn cột tường minh, reports.py loại nó khỏi báo cáo bằng
+    tên, và giao diện web không nhắc tới. JSON gốc vẫn còn nguyên trong raw_import_rows, nơi
+    phục vụ audit và hoàn tác lần nhập — nên bỏ đi không mất khả năng nào.
+
+    Migration 0005 từng backfill các cột chuẩn hoá TỪ cột này; nó chạy trước migration này theo
+    thứ tự nên vẫn có dữ liệu để đọc.
+    """
+    if "raw_json" not in _columns(conn, "order_line_versions"):
+        return
+    # KHÔNG dùng DROP COLUMN: migration 0005 backfill các cột chuẩn hoá TỪ cột này và có guard
+    # checksum chống sửa migration đã áp dụng, nên cột phải còn tồn tại lúc 0005 chạy. Cũng
+    # không đặt NULL được vì database cũ khai báo NOT NULL. Ghi rỗng là đủ thu hồi chỗ; '""' là
+    # đúng thứ SQLAlchemy ghi cho chuỗi rỗng ở cột kiểu JSON.
+    #
+    # Không lọc "WHERE raw_json <> ..." dù chỉ cần ghi các dòng còn dữ liệu: kiểu json của
+    # PostgreSQL không có toán tử so sánh nên mệnh đề đó đổ ngay. Migration chạy đúng một lần,
+    # ghi cả bảng không đắt hơn đáng kể mà chạy được trên cả hai hệ.
+    conn.execute(text("""UPDATE order_line_versions SET raw_json = '""'"""))
+
+
 MIGRATIONS = [
     Migration(1, "baseline_create_or_adopt", _migration_0001_baseline),
     Migration(2, "import_audit_columns_and_indexes", _migration_0002_import_audit_columns_and_indexes),
@@ -174,6 +202,7 @@ MIGRATIONS = [
     Migration(5, "account_registry_and_analytics_columns", _migration_0005_account_registry_and_analytics_columns),
     Migration(6, "rename_target_commission_to_daily", _migration_0006_rename_target_commission),
     Migration(7, "ui_preferences_saved_views", _migration_0007_ui_preferences_saved_views),
+    Migration(8, "drop_duplicate_raw_json", _migration_0008_drop_duplicate_raw_json),
 ]
 
 

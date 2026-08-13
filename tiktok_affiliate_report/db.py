@@ -113,7 +113,12 @@ order_line_versions = Table(
     Column("estimated_commission", BigInteger, nullable=False, default=0),
     Column("final_received", BigInteger),
     Column("normalized_hash", String(64), nullable=False),
-    Column("raw_json", JSON, nullable=False),
+    # Từ migration 8 cột này để rỗng: raw_import_rows đã giữ nguyên chuỗi JSON gốc cho audit
+    # và hoàn tác, còn bản sao ở đây chỉ được ghi chứ không nơi nào đọc — đo được chiếm 28%
+    # database. Không bỏ hẳn cột vì hai lẽ: migration 0005 backfill các cột chuẩn hoá TỪ nó và
+    # migration đã áp dụng thì không được sửa, còn database cũ khai báo cột NOT NULL mà SQLite
+    # không đổi được ràng buộc. default="" để lệnh chèn không cần nhắc tới nó nữa.
+    Column("raw_json", JSON, nullable=False, default=""),
     Column("is_current", Boolean, nullable=False, default=True),
     Column("version", Integer, nullable=False, default=1),
     Column("batch_id", Integer, ForeignKey("import_batches.id", ondelete="RESTRICT"), nullable=False),
@@ -445,7 +450,6 @@ def import_rows(
                     "estimated_commission": row.get("estimated_commission") or 0,
                     "final_received": row.get("final_received"),
                     "normalized_hash": row["normalized_hash"],
-                    "raw_json": raw,
                     "is_current": True,
                     "version": (current[2] + 1) if current else 1,
                     "batch_id": batch_id,

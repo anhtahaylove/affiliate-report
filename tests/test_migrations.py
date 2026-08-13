@@ -39,7 +39,7 @@ def test_init_db_runs_versioned_migrations_and_seeds_targets():
     assert {i["name"] for i in inspector.get_indexes("raw_import_rows")} >= {"ix_raw_import_rows_batch_id"}
     assert {i["name"] for i in inspector.get_indexes("import_batches")} >= {"ix_import_batches_account_created_at"}
     with e.connect() as conn:
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7, 8]
         assert conn.execute(select(monthly_targets.c.id)).first() is None
         assert conn.execute(select(accounts)).first() is None
     assert {"app_users", "user_account_access", "auth_sessions", "oidc_login_states"} <= set(inspector.get_table_names())
@@ -92,7 +92,7 @@ def test_migrations_adopt_existing_sqlite_and_preserve_data():
     with e.connect() as conn:
         old = conn.execute(text("select file_sha, filename, account, inserted from import_batches where id = 1")).mappings().one()
         assert dict(old) == {"file_sha": "abc", "filename": "old.xlsx", "account": "CHIISTORE", "inserted": 3}
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7, 8]
         assert conn.execute(select(accounts.c.code)).scalar_one() == "CHIISTORE"
 
 
@@ -207,6 +207,9 @@ def test_migration_backfills_analytics_columns_from_raw_json():
     assert version["order_type"] == "Affiliate"
     assert version["commission_type"] == "Standard"
     assert version["currency"] == "VND"
+    # Migration 8 chạy sau 0005 nên backfill vẫn lấy được dữ liệu, rồi cột mới bị ghi rỗng.
+    # Cột khai báo NOT NULL ở database cũ, nên đây là phép thử migration 8 trên đúng ràng buộc đó.
+    assert version["raw_json"] == ""
 
 
 def test_migration_renames_target_commission_and_keeps_existing_values():
