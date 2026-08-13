@@ -194,3 +194,16 @@ Kịch bản này cố ý không nằm trong CI: mỗi lần chạy phải tải
 - Một dòng hỏng chỉ làm mất đúng dòng đó; phần còn lại của file vẫn được nhập và dòng bị loại được báo kèm số dòng.
 - Nhập nhầm file thì dùng **Hoàn tác lần nhập này** trong Nhập dữ liệu, không cần reset toàn bộ.
 - `REPORT AFF.xlsx` là nguồn thiết kế output legacy; app không cần link Google Sheets để chạy.
+
+## Đổi tên từ v2.0.26
+
+Ứng dụng trước đây tên là *TikTok Affiliate Report*, nay là **Affiliate Report** — tên cũ mang
+nhãn hiệu không thuộc về dự án. Cách dùng không đổi: vẫn đọc đúng tệp Excel do TikTok Shop xuất
+ra, vẫn 47 cột như cũ.
+
+Đường dẫn đổi theo: thư mục cài `%LOCALAPPDATA%\AffiliateReport` cho máy cài mới, tệp dữ liệu
+`affiliate_report.db`, và tệp cài đặt mang tiền tố `AffiliateReportSetup`.
+
+Máy đã cài từ trước **giữ nguyên thư mục cũ** — Windows nhớ nơi đã cài và cài đè đúng chỗ đó,
+nên không có gì phải di chuyển. Tệp database được đổi tên tự động lúc mở app, bản cũ vẫn nằm
+nguyên bên cạnh làm dự phòng. Không tệp nào bị xoá.
