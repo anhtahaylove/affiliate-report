@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.21 - 2026-08-13
+
+**Sửa lỗi: cổng ghép cặp không tự đóng.** Ở v2.0.20, khi mã QR hết hạn, đường nhận tệp chỉ được đóng vào lúc bạn mở lại trang Nhập dữ liệu. Đóng tab trình duyệt là không còn gì kích hoạt việc dọn, nên cổng đó nằm mở trên mạng cho tới khi tắt ứng dụng — trái với điều bản trước mô tả.
+
+Không rò rỉ dữ liệu: mã đã hết hạn nên mọi yêu cầu gửi tới đều bị từ chối, cổng chỉ trả về lỗi. Nhưng để một cổng nằm mở mà không có lý do là sai, nên nay nó tự đóng đúng lúc mã hết hạn, không phụ thuộc vào việc bạn có mở trang hay không.
+
 ## v2.0.20 - 2026-08-13
 
 **Gửi tệp từ điện thoại bằng mã QR.** Bản trước đã có thư mục nhập tự động; bản này giải quyết nốt trường hợp không dùng dịch vụ đồng bộ nào. Vào trang **Nhập dữ liệu**, bật **Gửi tệp từ điện thoại**, quét mã QR, chọn tệp Excel — tệp đi thẳng vào máy tính, không phải chép qua cáp hay gửi qua Zalo.

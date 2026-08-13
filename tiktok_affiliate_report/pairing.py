@@ -188,16 +188,20 @@ class PairingRunner:
         self._max_upload_mb = max_upload_mb
         self._server: Any = None
         self._thread: Any = None
+        self._hen: Any = None
         self._lock = threading.Lock()
 
     def bat(self, account: str, *, ttl: float = TOKEN_TTL_SECONDS) -> PairingSession:
         with self._lock:
             self._khoi_dong()
-            return self.state.bat(account, ttl=ttl)
+            phien = self.state.bat(account, ttl=ttl)
+            self._hen_don(ttl)
+            return phien
 
     def tat(self) -> None:
         with self._lock:
             self.state.tat()
+            self._huy_hen()
             self._dung()
 
     def don_neu_het_han(self) -> None:
@@ -205,6 +209,21 @@ class PairingRunner:
         with self._lock:
             if self.state.session is not None and not self.state.dang_bat():
                 self._dung()
+
+    # Hẹn giờ đóng cổng đúng lúc mã hết hạn. Không có nó thì việc dọn chỉ xảy ra khi có ai
+    # gọi /api/v1/pairing, mà đóng tab trình duyệt là không còn ai gọi — socket nằm nghe trên
+    # LAN vô thời hạn dù mã đã chết. Đã gặp thật trên máy người dùng ở v2.0.20.
+    def _hen_don(self, ttl: float) -> None:
+        self._huy_hen()
+        self._hen = threading.Timer(ttl + 1, self.don_neu_het_han)
+        self._hen.daemon = True
+        self._hen.start()
+
+    def _huy_hen(self) -> None:
+        hen = getattr(self, "_hen", None)
+        if hen is not None:
+            hen.cancel()
+            self._hen = None
 
     def trang_thai(self) -> dict[str, Any]:
         phien = self.state.session

@@ -170,3 +170,42 @@ def test_ghep_cap_mac_dinh_tat_va_khong_mo_cong_nao(tmp_path):
     assert r.json() == {"enabled": False}
     # Mặc định TẮT nghĩa là chưa có gì nghe trên LAN, không phải "có nghe nhưng từ chối".
     assert getattr(app.state, "pairing").state.port == 0
+
+
+def test_cong_lan_tu_dong_dong_khi_ma_het_han_khong_can_ai_hoi(monkeypatch):
+    """Lỗi thật gặp trên máy người dùng ở v2.0.20.
+
+    Việc dọn chỉ chạy khi có ai gọi /api/v1/pairing. Đóng tab trình duyệt là không còn ai gọi,
+    nên socket nằm nghe trên LAN vô thời hạn dù mã đã chết. Test này KHÔNG gọi hàm dọn nào —
+    chỉ đợi. Bỏ phần hẹn giờ trong PairingRunner.bat thì nó đỏ.
+    """
+    import socket
+    import time
+
+    from tiktok_affiliate_report.pairing import PairingRunner
+
+    def cong_dang_mo(port: int) -> bool:
+        s = socket.socket()
+        s.settimeout(1)
+        try:
+            s.connect(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+        finally:
+            s.close()
+
+    runner = PairingRunner(nhan_tep=lambda *a: {}, max_upload_mb=MAX_MB)
+    runner.bat("CHIISTORE", ttl=1)
+    port = runner.state.port
+    time.sleep(1.0)
+    assert cong_dang_mo(port), "cổng phải mở trong lúc mã còn sống"
+
+    # Chỉ đợi quá hạn. Không gọi trang thai(), không gọi don_neu_het_han().
+    for _ in range(60):
+        time.sleep(0.25)
+        if not cong_dang_mo(port):
+            break
+
+    assert not cong_dang_mo(port), "mã hết hạn rồi mà cổng LAN vẫn nằm mở"
+    runner.tat()
