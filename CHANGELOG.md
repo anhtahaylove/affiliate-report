@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.24 - 2026-08-13
+
+**Bảng nội dung giờ mới dùng được.** Bảng “Nội dung chuyển đổi” ở trang Phân tích trước đây hiện 20 dòng đều ghi “Video”, không phân biệt được dòng nào với dòng nào. Nay mỗi dòng hiện đúng ID nội dung, đối chiếu được với TikTok.
+
+**Thấy ngay đâu là nguồn thu chính.** Ba bảng xếp hạng sản phẩm, cửa hàng và nội dung nay ghi rõ nhóm dẫn đầu chiếm bao nhiêu phần trăm hoa hồng, và mỗi dòng có tỷ trọng riêng. Trên dữ liệu của bạn, 3 sản phẩm đầu chiếm 62% — con số đó trước đây phải tự nhẩm.
+
+**Trang Tổng quan và Phân tích dễ đọc hơn.** Mỗi trang nay có một chỉ số chính nổi bật thay vì bốn ô ngang hàng, phần mục tiêu gộp lại thành một khối liền mạch, và biểu đồ có chú giải. Các nhãn tiếng Anh còn sót ở trang Phân tích đã chuyển hết sang tiếng Việt.
+
+**Mã QR gửi tệp hiện nhanh hơn.** Phần hiển thị mã nhẹ đi đáng kể, không ảnh hưởng cách dùng.
+
 ## v2.0.23 - 2026-08-13
 
 **Gửi tệp từ điện thoại xong, máy tính tự hiện ngay.** Trước đây phải tự tải lại trang mới thấy lần nhập vừa rồi trong danh sách. Nay trang Nhập dữ liệu tự cập nhật trong vòng vài giây sau khi điện thoại gửi xong.
