@@ -247,6 +247,8 @@ export type MetaResponse = {
   statuses: string[];
   max_upload_mb: number;
   app_version?: string;
+  /** Chỉ có ở bản chạy trên máy: thư mục thả tệp để tự nhập. */
+  inbox_dir?: string | null;
   capabilities: RuntimeCapabilities;
   identity_policy: IdentityPolicy;
 };

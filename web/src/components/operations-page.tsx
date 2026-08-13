@@ -97,7 +97,7 @@ export function OperationsPage({ route }: { route: RouteKind }) {
       {route === "dashboard" ? <DashboardHome user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}
       {route === "analytics" ? <AnalyticsPage filters={filters} directory={accountDirectory} /> : null}
       {route === "orders" ? <OrdersPage filters={filters} directory={accountDirectory} /> : null}
-      {route === "imports" ? <ImportsPage user={user} accounts={metaData.accounts} directory={accountDirectory} maxUploadMb={metaData.max_upload_mb} /> : null}
+      {route === "imports" ? <ImportsPage user={user} accounts={metaData.accounts} directory={accountDirectory} maxUploadMb={metaData.max_upload_mb} inboxDir={metaData.inbox_dir ?? null} /> : null}
       {route === "targets" ? <TargetsPage user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} /> : null}
       {route === "accounts" ? <AccountsPage onAccountsChanged={refreshAccountMetadata} /> : null}
       {route === "preferences" ? <ThemePreferences value={preferences.theme} onChange={(theme: Theme) => updatePreferences({ theme })} /> : null}

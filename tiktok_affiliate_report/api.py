@@ -298,6 +298,15 @@ def _previous_month(month: date) -> date:
     return date(month.year - 1, 12, 1) if month.month == 1 else date(month.year, month.month - 1, 1)
 
 
+def _inbox_dir_label(app: FastAPI) -> str | None:
+    try:
+        from .inbox import inbox_dir
+
+        return str(inbox_dir(sqlite_file_path(_engine(app)).parent))
+    except Exception:  # noqa: BLE001 - PostgreSQL hoặc cấu hình khác thì đơn giản là không có
+        return None
+
+
 def _engine(app: FastAPI) -> Engine:
     return app.state.engine
 
@@ -620,6 +629,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             # Hiện ngay ở thanh bên: trước đây chỉ owner xem được, nằm sâu trong Cài đặt >
             # Cập nhật, nên người báo lỗi thường không biết mình đang chạy bản nào.
             "app_version": APP_VERSION,
+            # Thư mục nhập tự động chỉ có ở bản chạy trên máy (SQLite). Trả về đường dẫn để
+            # giao diện chỉ được cho người dùng thả tệp vào đâu — tạo thư mục im lặng trong
+            # %LOCALAPPDATA% thì không ai tìm ra.
+            "inbox_dir": _inbox_dir_label(app),
             "capabilities": _runtime_capabilities(app),
             "identity_policy": _identity_policy(app),
         }
