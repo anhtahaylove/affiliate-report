@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "2.0.27"
+  #define MyAppVersion "2.0.28"
 #endif
 
 [Setup]
@@ -18,7 +18,7 @@ OutputDir=..\artifacts\installer
 ; Bản v2.0.25 đang chạy trên máy người dùng có hai chỗ kiểm tên installer, và bản chuyển tiếp
 ; mới nới được một chỗ — regex nội tuyến trong updater.py vẫn chỉ nhận tên cũ. Không vá được từ
 ; xa. Đổi tên tệp ở bản này là mọi máy ở v2.0.25 từ chối gói cập nhật và kẹt lại vĩnh viễn.
-; Đổi được sau khi mọi máy đã lên >= v2.0.27, vì bản đó nới cả hai chỗ.
+; Đổi được sau khi mọi máy đã lên >= v2.0.28, vì bản đó nới cả hai chỗ.
 OutputBaseFilename=TikTokAffiliateReportSetup-v{#MyAppVersion}
 SetupIconFile=app.ico
 UninstallDisplayIcon={app}\AffiliateReport.exe
