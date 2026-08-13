@@ -6,7 +6,7 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.28"
+        default: "2.0.29"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
@@ -144,7 +144,7 @@ jobs:
           $currentVersion = "${{ steps.version.outputs.current_version }}"
           $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$currentVersion.exe"
           $checksum = "artifacts\installer\SHA256SUMS.txt"
-          .\packaging\assert_no_embedded_database.ps1 -Path "build\installer-app\AffiliateReport"
+          .\packaging\assert_no_embedded_database.ps1 -Path "build\installer-app\TikTokAffiliateReport"
           $bootstrap = "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1"
           $actualFiles = @(Get-ChildItem -LiteralPath "artifacts\installer" -File | ForEach-Object Name | Sort-Object)
           $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object

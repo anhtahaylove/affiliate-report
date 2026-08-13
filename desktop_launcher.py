@@ -19,7 +19,13 @@ from affiliate_report.version import APP_VERSION
 
 
 HOST = "127.0.0.1"
-MUTEX_NAME = r"Local\AffiliateReport.SingleInstance"
+# Tên tệp chạy và mutex GIỮ NGUYÊN tên cũ dù sản phẩm đã đổi tên.
+#
+# Sau khi cài xong, bootstrap mở lại ứng dụng bằng đường dẫn mà bản ĐANG CHẠY truyền sang
+# (sys.executable). Đổi tên tệp chạy làm đường dẫn đó biến mất sau khi cài, app không quay lại,
+# và bản cập nhật bị coi là hỏng — đã xảy ra thật ở v2.0.28. Chỉ đổi được sau khi bootstrap biết
+# tự tìm tệp chạy theo cả hai tên, và mọi máy đã lên bản có bootstrap đó.
+MUTEX_NAME = r"Local\TikTokAffiliateReport.SingleInstance"
 ERROR_ALREADY_EXISTS = 183
 
 

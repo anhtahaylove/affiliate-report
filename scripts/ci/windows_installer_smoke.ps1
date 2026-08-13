@@ -33,7 +33,7 @@ $thuMucCoThe = @(
     (Join-Path $env:LOCALAPPDATA 'AffiliateReport'),
     (Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport')
 )
-$tenExeCoThe = @('AffiliateReport.exe', 'TikTokAffiliateReport.exe')
+$tenExeCoThe = @('TikTokAffiliateReport.exe', 'TikTokAffiliateReport.exe')
 
 function Get-InstallDir() {
     try {

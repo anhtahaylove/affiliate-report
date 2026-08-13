@@ -1,13 +1,13 @@
 param(
     [switch]$SkipAppBuild,
-    [string]$AppVersion = '2.0.28'
+    [string]$AppVersion = '2.0.29'
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 # onedir: staging là một THƯ MỤC (exe + _internal), không còn là một file .exe đơn lẻ.
-$appDir = Join-Path $root 'build\installer-app\AffiliateReport'
+$appDir = Join-Path $root 'build\installer-app\TikTokAffiliateReport'
 $outputDir = Join-Path $root 'artifacts\installer'
 $setupExe = Join-Path $root "artifacts\installer\TikTokAffiliateReportSetup-v$AppVersion.exe"
 $checksumFile = Join-Path $root 'artifacts\installer\SHA256SUMS.txt'

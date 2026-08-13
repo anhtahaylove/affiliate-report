@@ -16,7 +16,7 @@ if (Test-Path -LiteralPath $artifact -PathType Container) {
     if ($found) {
         throw "Release privacy gate failed: embedded database found: $($found.FullName -join ', ')"
     }
-    $exe = Join-Path $artifact 'AffiliateReport.exe'
+    $exe = Join-Path $artifact 'TikTokAffiliateReport.exe'
     if (!(Test-Path -LiteralPath $exe)) {
         throw "Release privacy gate failed: missing $exe"
     }

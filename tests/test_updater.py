@@ -414,7 +414,7 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
         tmp_path,
         Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_bytes(),
     )
-    app = tmp_path / "AffiliateReport.exe"
+    app = tmp_path / "TikTokAffiliateReport.exe"
     app.write_bytes(b"app")
     system_root = tmp_path / "Windows"
     powershell = system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
@@ -551,7 +551,7 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
             "-ExpectedSha256",
             "0" * 64,
             "-AppExe",
-            str(tmp_path / "AffiliateReport.exe"),
+            str(tmp_path / "TikTokAffiliateReport.exe"),
             "-LogPath",
             str(tmp_path / "updater.log"),
             "-InstallerLog",
@@ -611,7 +611,7 @@ def test_windows_bootstrap_executes_a_newer_asset_version_on_same_protocol(tmp_p
         [
             str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", str(helper), "-ParentPid", str(2_147_483_647), "-Installer", str(installer),
-            "-ExpectedSha256", "0" * 64, "-AppExe", str(tmp_path / "AffiliateReport.exe"),
+            "-ExpectedSha256", "0" * 64, "-AppExe", str(tmp_path / "TikTokAffiliateReport.exe"),
             "-LogPath", str(tmp_path / "updater.log"), "-InstallerLog", str(tmp_path / "installer.log"),
             "-StatusPath", str(status_path), "-TargetVersion", "2.0.8", "-InstallerSize", str(installer.stat().st_size),
             "-InstanceStatePath", str(tmp_path / "instance.json"), "-BootstrapProtocol", "1",
@@ -643,7 +643,7 @@ def test_wait_file_unlocked_detects_a_file_still_held_open_by_another_process(tm
     assert match, "Wait-FileUnlocked function not found in generated helper script"
     probe = tmp_path / "probe.ps1"
     probe.write_text(match.group(0) + "\nWrite-Output (Wait-FileUnlocked $args[0] ([int]$args[1]))\n", encoding="utf-8-sig")
-    target = tmp_path / "AffiliateReport.exe"
+    target = tmp_path / "TikTokAffiliateReport.exe"
     target.write_bytes(b"app")
 
     def run_probe(timeout_ms):

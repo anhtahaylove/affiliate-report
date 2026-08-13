@@ -23,7 +23,7 @@ $thuMucCoThe = @(
     (Join-Path $env:LOCALAPPDATA 'AffiliateReport'),
     (Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport')
 )
-$tenExeCoThe = @('AffiliateReport.exe', 'TikTokAffiliateReport.exe')
+$tenExeCoThe = @('TikTokAffiliateReport.exe', 'TikTokAffiliateReport.exe')
 
 function Get-InstallDir() {
     try {
@@ -116,7 +116,7 @@ function Start-App {
 
 function Stop-App {
     for ($attempt = 1; $attempt -le 20; $attempt++) {
-        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'AffiliateReport.exe'" |
+        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'TikTokAffiliateReport.exe'" |
             Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($appExe) })
         if ($processes.Count -eq 0) { return }
         $processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }

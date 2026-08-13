@@ -15,7 +15,7 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert 'Name: "{app}\\data"; Flags: uninsneveruninstall' in installer
     assert "[UninstallDelete]" not in installer
     assert ".db" not in installer
-    assert "dist\\AffiliateReport.exe" not in installer + build + readme
+    assert "dist\\TikTokAffiliateReport.exe" not in installer + build + readme
     assert "Get-FileHash -Algorithm SHA256 $setupExe, $bootstrapFile" in build
     assert "Get-FileHash -Algorithm SHA256 $appExe, $setupExe" not in build
     assert "$staleMetadata = @($checksumFile, (Join-Path $outputDir 'stable.json'), (Join-Path $outputDir 'stable.json.sig'))" in build
@@ -34,9 +34,13 @@ def test_app_ships_as_onedir_so_first_launch_never_unpacks_to_temp():
     # onedir xuất ra một THƯ MỤC. Cổng riêng tư phải trỏ vào thư mục đó, không phải file .exe —
     # đổi --onedir mà quên dòng này thì build đỏ ngay ở bước cuối, đúng như đã xảy ra ở v1.3.2.
     assert '-Path "%APP_STAGE%\\AffiliateReport"' in batch
-    assert '-Path "%APP_STAGE%\\AffiliateReport.exe"' not in batch
+    assert '-Path "%APP_STAGE%\\TikTokAffiliateReport.exe"' not in batch
     # Installer phải chép cả thư mục, và dọn runtime cũ để không sót .dll lệch phiên bản.
-    assert 'Source: "..\\build\\installer-app\\AffiliateReport\\*"' in installer
+    # Thư mục dàn dựng mang tên tệp chạy, mà tên đó giữ nguyên tên cũ — xem ghi chú ở
+    # desktop_launcher.py: đổi nó thì bootstrap không mở lại được app sau khi cài.
+    # Thư mục dàn dựng mang tên tệp chạy, mà tên đó giữ nguyên tên cũ — xem ghi chú ở
+    # desktop_launcher.py: đổi nó thì bootstrap không mở lại được app sau khi cài.
+    assert 'Source: "..\\build\\installer-app\\TikTokAffiliateReport\\*"' in installer
     assert "recursesubdirs" in installer
     assert 'Type: filesandordirs; Name: "{app}\\_internal"' in installer
     # Dữ liệu người dùng không bao giờ nằm trong diện dọn dẹp.
@@ -77,7 +81,7 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert "--hidden-import affiliate_report.pairing" in batch
     assert '--add-data "%CD%\\packaging\\app.ico;packaging"' in batch
     assert 'pystray==0.19.5; sys_platform == "win32"' in Path("requirements-api.txt").read_text(encoding="utf-8")
-    assert "AffiliateReport.SingleInstance" in Path("desktop_launcher.py").read_text(encoding="utf-8")
+    assert "TikTokAffiliateReport.SingleInstance" in Path("desktop_launcher.py").read_text(encoding="utf-8")
     assert 'pystray.MenuItem("Thoát ứng dụng"' in Path("desktop_launcher.py").read_text(encoding="utf-8")
     assert "Flags: nowait postinstall skipifsilent" in installer
     assert 'tags:\n      - "v*.*.*"' in workflow
@@ -190,7 +194,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.28"
+    assert APP_VERSION == "2.0.29"
     assert 'default: "2.0.25"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
@@ -304,7 +308,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.0.28"' in updater_ui
+    assert 'default: "2.0.29"' in updater_ui
     assert 'default: "2.0.25"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui

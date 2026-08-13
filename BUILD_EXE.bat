@@ -28,9 +28,9 @@ call pnpm --dir web build
 if errorlevel 1 goto :error
 if not exist "web\out\index.html" goto :missing_web
 
-echo [3/4] Dong goi AffiliateReport.exe...
-if exist "dist\AffiliateReport.exe" del /q "dist\AffiliateReport.exe"
-"%PYTHON%" -m PyInstaller --noconfirm --clean --onedir --windowed --name AffiliateReport --specpath build --distpath "%APP_STAGE%" --workpath build\pyinstaller-work --icon "%CD%\packaging\app.ico" --add-data "%CD%\packaging\app.ico;packaging" --add-data "%CD%\web\out;web" --add-data "%CD%\affiliate_report\migrations.py;affiliate_report" --collect-all openpyxl --collect-submodules uvicorn --copy-metadata uvicorn --hidden-import h11 --hidden-import python_multipart --hidden-import pystray._win32 --hidden-import sqlalchemy.dialects.sqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg --hidden-import affiliate_report.auth --hidden-import affiliate_report.api --hidden-import affiliate_report.db --hidden-import affiliate_report.migrations --hidden-import segno --hidden-import affiliate_report.pairing --hidden-import affiliate_report.parser --hidden-import affiliate_report.reports --hidden-import affiliate_report.updater --hidden-import affiliate_report.version desktop_launcher.py
+echo [3/4] Dong goi TikTokAffiliateReport.exe...
+if exist "dist\TikTokAffiliateReport.exe" del /q "dist\TikTokAffiliateReport.exe"
+"%PYTHON%" -m PyInstaller --noconfirm --clean --onedir --windowed --name TikTokAffiliateReport --specpath build --distpath "%APP_STAGE%" --workpath build\pyinstaller-work --icon "%CD%\packaging\app.ico" --add-data "%CD%\packaging\app.ico;packaging" --add-data "%CD%\web\out;web" --add-data "%CD%\affiliate_report\migrations.py;affiliate_report" --collect-all openpyxl --collect-submodules uvicorn --copy-metadata uvicorn --hidden-import h11 --hidden-import python_multipart --hidden-import pystray._win32 --hidden-import sqlalchemy.dialects.sqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg --hidden-import affiliate_report.auth --hidden-import affiliate_report.api --hidden-import affiliate_report.db --hidden-import affiliate_report.migrations --hidden-import segno --hidden-import affiliate_report.pairing --hidden-import affiliate_report.parser --hidden-import affiliate_report.reports --hidden-import affiliate_report.updater --hidden-import affiliate_report.version desktop_launcher.py
 if errorlevel 1 goto :error
 
 echo [4/4] Kiem tra khong nhung database nguoi dung...
