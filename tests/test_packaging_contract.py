@@ -196,7 +196,11 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
     assert "AffiliateReportSetup-v$currentVersion.exe" in workflow
-    assert "AffiliateReportSetup-v$previousVersion.exe" in workflow
+    # Bản trước được tải qua Get-PreviousInstaller vì asset có thể còn mang tên trước khi đổi
+    # thương hiệu; tên vẫn dựng từ biến phiên bản, không được ghim số cứng.
+    assert "AffiliateReportSetup-v$Version.exe" in workflow
+    assert "TikTokAffiliateReportSetup-v$Version.exe" in workflow
+    assert "$previousVersion" in workflow
     assert "SHA256SUMS-current.txt" in workflow
     assert "SHA256SUMS-previous.txt" in workflow
     assert "-CurrentVersion $currentVersion" in workflow
