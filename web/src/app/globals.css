@@ -2164,3 +2164,36 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   background: var(--surface-soft); font-family: var(--font-mono); font-size: 0.8rem;
   overflow-wrap: anywhere;
 }
+
+/* Bảng xếp hạng theo chiều: sản phẩm, cửa hàng, nội dung.
+   Đo trên dữ liệu thật (5.508 dòng): tên sản phẩm dài 50-80 ký tự nên phải cắt gọn mà vẫn
+   xem được đủ; nội dung không có tên, chỉ có ID 19 chữ số nên cần chữ đều để đối chiếu. */
+.dimension-concentration {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+}
+.dimension-concentration strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.dimension-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dimension-label[data-mono="true"],
+.dimension-cell[data-mono="true"] {
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+.dimension-cell {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

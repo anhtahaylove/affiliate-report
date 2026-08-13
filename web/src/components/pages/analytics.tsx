@@ -103,9 +103,11 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
         </Tabs.Content>
 
         <Tabs.Content value="commerce" className="analytics-tab-panel">
-          <DimensionLeaderboard title="Sản phẩm dẫn đầu" eyebrow="Hiệu suất sản phẩm" rows={data.products} />
-          <DimensionLeaderboard title="Cửa hàng tạo doanh thu" eyebrow="Đóng góp cửa hàng" rows={data.shops} />
-          <DimensionLeaderboard title="Nội dung chuyển đổi" eyebrow="Hiệu suất nội dung" rows={data.content} />
+          <DimensionLeaderboard title="Sản phẩm dẫn đầu" eyebrow="Hiệu suất sản phẩm" rows={data.products} total={data.summary.actual_commission} />
+          <DimensionLeaderboard title="Cửa hàng tạo doanh thu" eyebrow="Đóng góp cửa hàng" rows={data.shops} total={data.summary.actual_commission} />
+          {/* Nội dung nhận diện bằng ID 19 chữ số, không có tên. Chữ đều giúp đọc và đối chiếu
+              được; title cho phép xem đủ khi ô bị cắt. */}
+          <DimensionLeaderboard title="Nội dung chuyển đổi" eyebrow="Hiệu suất nội dung" rows={data.content} total={data.summary.actual_commission} mono />
         </Tabs.Content>
 
         <Tabs.Content value="settlement" className="analytics-tab-panel">
@@ -143,13 +145,19 @@ function BreakdownTable({ rows, mode, directory }: { rows: AnalyticsBreakdownRow
   return <section className="canvas-panel desktop-data-table"><div className="panel-heading"><div><p className="section-label">Chi tiết</p><h2>Bảng đóng góp</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng đóng góp theo tài khoản" tabIndex={0}><table><thead><tr><th>{mode === "status" ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Tỷ trọng</th></tr></thead><tbody>{rows.map((row) => <tr key={row[mode === "status" ? "status" : "account"] ?? "unknown"}><td>{mode === "status" ? <StatusBadge status={row.status} /> : directory ? <AccountIdentity directory={directory} code={row.account} /> : row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table></div></section>;
 }
 
-function DimensionLeaderboard({ title, eyebrow, rows }: { title: string; eyebrow: string; rows: AnalyticsDimensionRow[] }) {
+function DimensionLeaderboard({ title, eyebrow, rows, total, mono = false }: { title: string; eyebrow: string; rows: AnalyticsDimensionRow[]; total: number; mono?: boolean }) {
+  // Đo trên dữ liệu thật: 3 dòng đầu chiếm 56% hoa hồng ở cả sản phẩm lẫn cửa hàng. Mức tập
+  // trung đó mới là điều cần thấy, chứ không phải một danh sách phẳng — nên mỗi dòng hiện
+  // phần trăm đóng góp, và phần đầu bảng nói thẳng nhóm dẫn đầu chiếm bao nhiêu.
+  const dan_dau = rows.slice(0, 3).reduce((con, row) => con + row.actual_commission, 0);
+  const ty_trong = (giatri: number) => (total > 0 ? giatri / total : 0);
   return (
     <section className="canvas-panel dimension-leaderboard">
       <div className="panel-heading"><div><p className="section-label">{eyebrow}</p><h2>{title}</h2></div><span>Top {rows.length}</span></div>
       {rows.length ? <>
-        <ol className="dimension-ranks">{rows.slice(0, 5).map((row, index) => <li key={row.id}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong>{row.label}</strong><small>{integer.format(row.orders)} đơn · {integer.format(row.units_sold)} sản phẩm</small></div><div><b>{formatMoney(row.actual_commission)}</b><small>Huỷ {percent(row.cancellation_rate)}</small></div></li>)}</ol>
-        <div className="table-wrap desktop-data-table" role="region" aria-label={`Bảng ${title.toLowerCase()}`} tabIndex={0}><table><thead><tr><th>Tên</th><th>Đơn</th><th>SL</th><th>Hoàn</th><th>GMV</th><th>Hoa hồng</th><th>Tỷ lệ huỷ</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.label}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{integer.format(row.units_refunded)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.cancellation_rate)}</td></tr>)}</tbody></table></div>
+        {total > 0 ? <p className="dimension-concentration">3 dòng đầu chiếm <strong>{percent(ty_trong(dan_dau))}</strong> hoa hồng trong phạm vi</p> : null}
+        <ol className="dimension-ranks">{rows.slice(0, 5).map((row, index) => <li key={row.id}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong className="dimension-label" data-mono={mono ? "true" : undefined} title={row.label}>{row.label}</strong><small>{integer.format(row.orders)} đơn · {integer.format(row.units_sold)} sản phẩm</small></div><div><b>{formatMoney(row.actual_commission)}</b><small>{percent(ty_trong(row.actual_commission))} · Huỷ {percent(row.cancellation_rate)}</small></div></li>)}</ol>
+        <div className="table-wrap desktop-data-table" role="region" aria-label={`Bảng ${title.toLowerCase()}`} tabIndex={0}><table><thead><tr><th>Tên</th><th>Đơn</th><th>SL</th><th>Hoàn</th><th>GMV</th><th>Hoa hồng</th><th>Tỷ lệ huỷ</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td className="dimension-cell" data-mono={mono ? "true" : undefined} title={row.label}>{row.label}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{integer.format(row.units_refunded)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.cancellation_rate)}</td></tr>)}</tbody></table></div>
       </> : <p className="empty">Chưa có dữ liệu trong phạm vi này.</p>}
     </section>
   );

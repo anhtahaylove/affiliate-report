@@ -771,3 +771,24 @@ def test_analytics_and_excel_exports_follow_account_scope(tmp_path):
     assert payload.json()["products"][0]["label"] == "Sản phẩm"
     assert orders_export.status_code == 200 and orders_export.content.startswith(b"PK")
     assert daily_export.status_code == 200 and daily_export.content.startswith(b"PK")
+
+
+def test_bang_noi_dung_nhan_dien_tung_dong_thay_vi_lap_lai_loai_noi_dung(tmp_path):
+    """Nội dung không có tên riêng, chỉ có content_type — và mọi dòng đều là "Video".
+
+    Đo trên dữ liệu thật: 343 content_id khác nhau nhưng đúng một content_type, nên nhãn lấy
+    theo content_type làm cả bảng xếp hạng thành 20 dòng giống hệt nhau. Trả label về
+    content_type thì test này ĐỎ.
+    """
+    client, engine = api(tmp_path)
+    rows = [
+        normalized(**{"ID đơn hàng": "O1", "ID SKU": "S1", "Id nội dung": "C-AAA", "Loại nội dung": "Video"}),
+        normalized(**{"ID đơn hàng": "O2", "ID SKU": "S2", "Id nội dung": "C-BBB", "Loại nội dung": "Video"}),
+    ]
+    import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=rows)
+
+    content = client.get("/api/v1/analytics").json()["content"]
+
+    nhan = [row["label"] for row in content]
+    assert len(set(nhan)) == len(nhan), f"nhãn trùng nhau, không phân biệt được dòng nào: {nhan}"
+    assert set(nhan) == {"C-AAA", "C-BBB"}

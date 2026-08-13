@@ -584,7 +584,11 @@ def _dimension(df: pd.DataFrame, dimension: str, top: int) -> list[dict[str, obj
     return [
         {
             "id": str(getattr(row, id_column)),
-            "label": str(getattr(row, label_column)),
+            # Nội dung không có tên, chỉ có content_type — mà mọi dòng đều là "Video", nên
+            # bảng xếp hạng nội dung hiện 20 dòng mang nhãn giống hệt nhau, không phân biệt
+            # được gì. Đo trên dữ liệu thật: 343 content_id khác nhau, đúng một content_type.
+            # Với nội dung thì chính ID mới là thứ nhận diện được.
+            "label": str(getattr(row, id_column if dimension == "content" else label_column)),
             "orders": int(row.orders),
             "order_lines": int(row.order_lines),
             "units_sold": int(row.units_sold),
