@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.0.30 - 2026-08-14
+
+**Gửi tệp từ điện thoại ngay cả khi không cùng Wi-Fi.** Trang Nhập dữ liệu nay có hai
+lựa chọn rõ ràng: **Cùng Wi-Fi** tiếp tục dùng listener LAN ngắn hạn như trước, còn
+**Khác mạng** dùng Cloud Pairing Relay tại `aff-report.huuhungn.io.vn`. Bạn bè cài app
+không cần tài khoản Cloudflare, không phải mở port và không phải cấu hình Cloudflare
+Tunnel.
+
+Với Cloud Pairing, trình duyệt điện thoại mã hóa tệp bằng AES-256-GCM trước khi gửi.
+Cloudflare chỉ giữ bản mã hóa tạm thời trong R2; khóa giải mã nằm trong mã QR và bộ nhớ
+của ứng dụng desktop. Phiên chỉ dùng một lần, tự hết hạn sau 5 phút và bản mã hóa được
+xóa ngay khi nhập xong hoặc bằng tác vụ dọn quá hạn.
+
+Đường LAN và đường cloud đều đưa tệp qua đúng pipeline nhập hiện có, nên giới hạn tệp,
+kiểm tra định dạng, chống trùng, lịch sử lần nhập và versioning không đổi. Khi custom
+domain tạm thời không khả dụng, ứng dụng tự thử endpoint `workers.dev` dự phòng của cùng
+Worker.
+
 ## v2.0.29 - 2026-08-13
 
 **Ứng dụng đổi tên thành Affiliate Report.** Tên cũ chứa nhãn hiệu TikTok nên đổi sang tên trung tính. Ứng dụng vẫn đọc đúng tệp Excel TikTok Shop xuất ra như trước — không đổi gì về cách dùng.
