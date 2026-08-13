@@ -25,6 +25,7 @@ dist/
 node_modules/
 .next/
 coverage/
+infra/cloudflare/pairing-relay/worker-configuration.d.ts
 .DS_Store
 Thumbs.db
 

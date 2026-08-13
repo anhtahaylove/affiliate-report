@@ -203,6 +203,74 @@ def test_operator_requires_csrf_and_cannot_upload_another_account(tmp_path):
     assert audit["uploaded_by_label"] == "viewer@example.test"
 
 
+def test_cloud_pairing_requires_csrf_role_and_account_scope(tmp_path):
+    client, _, auth = oidc_api(tmp_path)
+    user, tokens = login(client, auth, "viewer@example.test", "viewer")
+    auth.update_user(user.user_id or 0, accounts=["CHIISTORE"])
+
+    fake = SimpleNamespace(
+        enabled=False,
+        account="",
+        tat=lambda: None,
+    )
+
+    def bat(account: str) -> None:
+        fake.enabled = True
+        fake.account = account
+
+    def trang_thai() -> dict[str, object]:
+        return {
+            "enabled": fake.enabled,
+            "mode": "cloud",
+            "account": fake.account,
+            "phase": "created" if fake.enabled else "idle",
+            "so_lan_nhan": 0,
+        }
+
+    fake.bat = bat
+    fake.trang_thai = trang_thai
+    client.app.state.cloud_pairing = fake
+
+    assert client.get("/api/v1/pairing").status_code == 403
+    assert client.post(
+        "/api/v1/pairing",
+        data={"account": "CHIISTORE", "mode": "cloud"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
+
+    auth.update_user(user.user_id or 0, role="operator", accounts=["CHIISTORE"])
+    assert client.post(
+        "/api/v1/pairing",
+        data={"account": "CHIISTORE", "mode": "cloud"},
+    ).status_code == 403
+    assert client.post(
+        "/api/v1/pairing",
+        data={"account": "THAOBRA", "mode": "cloud"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
+
+    allowed = client.post(
+        "/api/v1/pairing",
+        data={"account": "CHIISTORE", "mode": "cloud"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["mode"] == "cloud"
+    assert client.get("/api/v1/pairing").status_code == 200
+
+    auth.update_user(user.user_id or 0, accounts=["THAOBRA"])
+    assert client.get("/api/v1/pairing").status_code == 403
+    assert client.post(
+        "/api/v1/pairing",
+        data={"account": "THAOBRA", "mode": "cloud"},
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
+    assert client.delete(
+        "/api/v1/pairing",
+        headers={"X-CSRF-Token": tokens.csrf_token},
+    ).status_code == 403
+
+
 def test_copy_previous_targets_respects_csrf_role_and_account_scope(tmp_path):
     """Chép hàng loạt phải chịu đúng ràng buộc như sửa từng KPI một."""
     client, engine, auth = oidc_api(tmp_path)

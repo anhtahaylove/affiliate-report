@@ -10,13 +10,14 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 - Dashboard `ALL` và từng account: đơn hàng, GMV, hoa hồng, huỷ, KPI ngày/tháng.
 - Sửa KPI/ngày theo từng account; owner sửa thêm target tổng `ALL`.
 - Upload `.xlsx`, phản hồi duplicate/inserted/updated/unchanged/rejected và lịch sử import gần nhất.
+- Hybrid Pairing gửi file từ điện thoại: ưu tiên cùng Wi-Fi/LAN hoặc dùng Cloudflare relay khi hai thiết bị khác mạng; nội dung được mã hóa AES-256-GCM trước khi lên cloud.
 - Roles `owner` / `operator` / `viewer`, account allowlist, OIDC session + CSRF cho shared web.
 - SQLite cho local single-user; PostgreSQL cho shared multi-user.
 - PWA responsive dùng chung cho web/desktop, sẵn boundary để bọc mobile sau này.
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.0.29.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v2.0.30.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\AffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -33,7 +34,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\AffiliateReportSetup-v2.0.29.exe -Algorithm SHA256
+   Get-FileHash .\TikTokAffiliateReportSetup-v2.0.30.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -42,6 +43,8 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 5. Chờ vài giây; app tự mở trình duyệt tại một địa chỉ `http://127.0.0.1:<port>` chỉ truy cập được trên chính máy đó.
 
 Lần đầu sử dụng: vào **Accounts** tạo account, vào **Imports** chọn account và upload file TikTok `.xlsx`, sau đó xem **Dashboard**/**Analytics** và đặt KPI tại **Targets**. Scope **ALL** tự tổng hợp các account; không upload file vào **ALL**.
+
+Trong **Imports → Gửi tệp từ điện thoại**, chọn **Cùng Wi-Fi** để gửi trực tiếp tới máy tính hoặc **Khác mạng** để dùng Cloud Pairing tại `aff-report.huuhungn.io.vn`. Máy người dùng không cần tài khoản Cloudflare hay cấu hình domain; relay dùng chung chỉ giữ ciphertext tối đa 15 phút và xóa ngay sau khi desktop xác nhận đã nhận. URL `workers.dev` của cùng Worker được nhúng làm fallback khi custom domain tạm lỗi.
 
 ### Mở lại, đóng app và xử lý lỗi
 
@@ -143,7 +146,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\AffiliateReportSetup-v2.0.29.exe`
+- `artifacts\installer\TikTokAffiliateReportSetup-v2.0.30.exe`
 - `artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
@@ -184,6 +187,7 @@ Kịch bản này cố ý không nằm trong CI: mỗi lần chạy phải tải
 - [Input/output mapping](docs/DATA_MAPPING.md)
 - [Database schema](docs/schema.sql)
 - [Phase 2 architecture](docs/PHASE-2-ARCHITECTURE.md)
+- [Hybrid Pairing trên Cloudflare](docs/HYBRID-PAIRING-CLOUDFLARE.md)
 
 ## Quy tắc dữ liệu
 

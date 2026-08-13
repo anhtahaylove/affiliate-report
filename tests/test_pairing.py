@@ -175,6 +175,75 @@ def test_ghep_cap_mac_dinh_tat_va_khong_mo_cong_nao(tmp_path):
     assert getattr(app.state, "pairing").state.port == 0
 
 
+class FakeCloudPairing:
+    def __init__(self, *, failure: Exception | None = None):
+        self.account = ""
+        self.enabled = False
+        self.stopped = 0
+        self.failure = failure
+
+    def bat(self, account: str):
+        if self.failure:
+            raise self.failure
+        self.account = account
+        self.enabled = True
+
+    def tat(self):
+        self.enabled = False
+        self.stopped += 1
+
+    def trang_thai(self):
+        return {
+            "enabled": self.enabled,
+            "mode": "cloud",
+            "account": self.account,
+            "phase": "created" if self.enabled else "idle",
+            "so_lan_nhan": 0,
+        }
+
+
+def test_api_chon_cloud_khong_mo_listener_lan_va_co_the_tat(tmp_path):
+    client, app = api_client(tmp_path)
+    cloud = FakeCloudPairing()
+    app.state.cloud_pairing = cloud
+
+    started = client.post("/api/v1/pairing", data={"account": "CHIISTORE", "mode": "cloud"})
+
+    assert started.status_code == 200
+    assert started.json() == {
+        "enabled": True,
+        "mode": "cloud",
+        "account": "CHIISTORE",
+        "phase": "created",
+        "so_lan_nhan": 0,
+    }
+    assert getattr(app.state, "pairing", None) is None
+    assert client.get("/api/v1/pairing").json()["mode"] == "cloud"
+    assert client.delete("/api/v1/pairing").json() == {"enabled": False}
+    assert cloud.stopped == 1
+
+
+def test_api_cloud_that_bai_tra_loi_an_toan_va_khong_chuyen_mode(tmp_path):
+    from affiliate_report.cloud_pairing import CloudPairingError
+
+    client, app = api_client(tmp_path)
+    app.state.cloud_pairing = FakeCloudPairing(failure=CloudPairingError("Không kết nối được Cloud Pairing."))
+
+    failed = client.post("/api/v1/pairing", data={"account": "CHIISTORE", "mode": "cloud"})
+
+    assert failed.status_code == 503
+    assert failed.json()["detail"] == "Không kết nối được Cloud Pairing."
+    assert getattr(app.state, "pairing_mode", "lan") == "lan"
+
+
+def test_api_tu_choi_mode_khong_duoc_ho_tro(tmp_path):
+    client, _ = api_client(tmp_path)
+
+    response = client.post("/api/v1/pairing", data={"account": "CHIISTORE", "mode": "public-insecure"})
+
+    assert response.status_code == 422
+
+
 def test_cong_lan_tu_dong_dong_khi_ma_het_han_khong_can_ai_hoi(monkeypatch):
     """Lỗi thật gặp trên máy người dùng ở v2.0.20.
 

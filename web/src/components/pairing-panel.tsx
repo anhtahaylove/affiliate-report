@@ -1,115 +1,161 @@
 "use client";
 
+import { Cloud, ShieldCheck, Wifi } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadPairingStatus, startPairing, stopPairing, type PairingStatus } from "@/lib/api";
+import {
+  loadPairingStatus,
+  startPairing,
+  stopPairing,
+  type PairingMode,
+  type PairingStatus,
+} from "@/lib/api";
 import { errorMessage } from "@/lib/format";
 
-/**
- * Ghép cặp điện thoại: quét QR rồi gửi thẳng tệp vừa xuất từ TikTok sang máy tính.
- *
- * Mặc định TẮT, và tắt nghĩa là không có cổng nào mở trên mạng LAN. Khi bật, ứng dụng dựng
- * một listener riêng chỉ nhận tệp — không route nào khác được phục vụ ra ngoài loopback.
- */
+/** Hybrid Pairing: LAN là đường nhanh nhất; cloud là relay ciphertext khi hai máy khác mạng. */
 export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTep?: () => void }) {
   const [status, setStatus] = useState<PairingStatus>({ enabled: false });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState<PairingMode | "stop" | null>(null);
+  const [requestError, setRequestError] = useState("");
   const [conLai, setConLai] = useState(0);
   const daNhan = useRef<number | null>(null);
-
-  // Giữ callback trong ref theo đúng khuôn useApi: ghi trong effect chứ không trong lúc
-  // render, và hiệu ứng hỏi trạng thái khỏi phải dựng lại mỗi lần trang cha render.
   const onNhanTepRef = useRef(onNhanTep);
+
   useEffect(() => {
     onNhanTepRef.current = onNhanTep;
   });
 
+  const apDungTrangThai = useCallback((moi: PairingStatus) => {
+    setStatus(moi);
+    setConLai(moi.expires_in ?? 0);
+    const truoc = daNhan.current;
+    daNhan.current = moi.so_lan_nhan ?? 0;
+    if (truoc !== null && (moi.so_lan_nhan ?? 0) > truoc) onNhanTepRef.current?.();
+  }, []);
+
   const dongBo = useCallback(async () => {
     try {
-      const moi = await loadPairingStatus();
-      setStatus(moi);
-      setConLai(moi.expires_in ?? 0);
-      // Bộ đếm tăng nghĩa là điện thoại vừa gửi xong một tệp. Báo cho trang cha làm mới danh
-      // sách; không có bước này thì người dùng phải tự tải lại trang mới thấy lần nhập.
-      const truoc = daNhan.current;
-      daNhan.current = moi.so_lan_nhan ?? 0;
-      if (truoc !== null && (moi.so_lan_nhan ?? 0) > truoc) onNhanTepRef.current?.();
+      apDungTrangThai(await loadPairingStatus());
     } catch {
-      // Không báo lỗi cho việc dò trạng thái nền: người dùng chưa làm gì cả.
+      // Dò nền không làm gián đoạn tác vụ; lần kế tiếp sẽ tự thử lại.
     }
-  }, []);
+  }, [apDungTrangThai]);
 
-  // Lấy trạng thái lần đầu theo đúng khuôn của useApi trong repo: await trước rồi mới đặt
-  // state, vì gọi thẳng hàm đặt state trong effect là lỗi lint của React 19.
   useEffect(() => {
-    let con_hieu_luc = true;
+    let conHieuLuc = true;
     void (async () => {
       const moi = await loadPairingStatus().catch(() => null);
-      if (!con_hieu_luc || !moi) return;
-      setStatus(moi);
-      setConLai(moi.expires_in ?? 0);
+      if (conHieuLuc && moi) apDungTrangThai(moi);
     })();
     return () => {
-      con_hieu_luc = false;
+      conHieuLuc = false;
     };
-  }, []);
+  }, [apDungTrangThai]);
 
-  // Đếm ngược tại chỗ thay vì hỏi server mỗi giây. Hết giờ thì hỏi lại một lần để lấy trạng
-  // thái thật, vì server mới là nơi quyết định mã còn sống hay không.
   useEffect(() => {
     if (!status.enabled || conLai <= 0) return;
-    const dinh_gio = setTimeout(() => {
+    const dinhGio = setTimeout(() => {
       const moi = conLai - 1;
       setConLai(moi);
-      // Hỏi lại mỗi 2 giây chứ không chỉ lúc hết giờ: điện thoại gửi xong thì trang này phải
-      // biết ngay để làm mới danh sách lần nhập.
       if (moi <= 0 || moi % 2 === 0) void dongBo();
     }, 1000);
-    return () => clearTimeout(dinh_gio);
+    return () => clearTimeout(dinhGio);
   }, [status.enabled, conLai, dongBo]);
 
-  async function doiTrangThai() {
-    setBusy(true);
-    setError("");
+  async function bat(mode: PairingMode) {
+    setBusy(mode);
+    setRequestError("");
     try {
-      setStatus(status.enabled ? await stopPairing() : await startPairing(account));
-      if (!status.enabled) await dongBo();
+      apDungTrangThai(await startPairing(account, mode));
     } catch (reason) {
-      setError(errorMessage(reason, "Không đổi được chế độ ghép cặp."));
+      setRequestError(errorMessage(reason, "Không tạo được mã ghép cặp."));
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  async function tat() {
+    setBusy("stop");
+    setRequestError("");
+    try {
+      apDungTrangThai(await stopPairing());
+    } catch (reason) {
+      setRequestError(errorMessage(reason, "Không tắt được ghép cặp."));
+    } finally {
+      setBusy(null);
     }
   }
 
   const phut = Math.floor(conLai / 60);
   const giay = String(conLai % 60).padStart(2, "0");
+  const cloud = status.mode === "cloud";
+  const visibleError = requestError || status.error || "";
 
   return (
-    <section className="panel pairing-panel">
+    <section className="panel pairing-panel" aria-labelledby="pairing-title">
       <div className="pairing-head">
         <div>
-          <h2>Gửi tệp từ điện thoại</h2>
+          <h2 id="pairing-title">Gửi tệp từ điện thoại</h2>
           <p className="subtle">
-            Bật để hiện mã QR. Quét bằng điện thoại rồi chọn tệp Excel vừa xuất từ TikTok — tệp đi thẳng vào
-            {account ? ` tài khoản ${account}` : " tài khoản đang chọn"}, không cần chép qua máy tính.
+            Quét một mã dùng một lần rồi chọn file Excel vừa xuất từ TikTok. Dữ liệu được nhập vào
+            {account ? ` tài khoản ${account}` : " tài khoản đang chọn"} bằng cùng quy trình chống trùng trên máy tính.
           </p>
         </div>
-        <button type="button" className={status.enabled ? "danger-link" : "button-link"} onClick={doiTrangThai} disabled={busy || !account}>
-          {busy ? "Đang xử lý…" : status.enabled ? "Tắt ghép cặp" : "Bật ghép cặp"}
-        </button>
+        {status.enabled ? (
+          <button type="button" className="danger-link" onClick={tat} disabled={busy !== null}>
+            {busy === "stop" ? "Đang tắt…" : "Tắt ghép cặp"}
+          </button>
+        ) : null}
       </div>
 
-      {error ? <p className="notice error">{error}</p> : null}
+      {visibleError ? <p className="notice error" role="alert">{visibleError}</p> : null}
+      {!visibleError && status.message ? (
+        <p className={`pairing-message ${status.result ? "is-success" : ""}`} role="status">{status.message}</p>
+      ) : null}
+
+      {!status.enabled ? (
+        <fieldset className="pairing-mode-picker" disabled={busy !== null || !account}>
+          <legend>Chọn cách kết nối</legend>
+          <button type="button" className="pairing-choice" onClick={() => void bat("lan")}>
+            <Wifi aria-hidden="true" size={21} strokeWidth={1.8} />
+            <span>
+              <strong>Cùng Wi-Fi</strong>
+              <small>Nhanh nhất · file đi thẳng tới máy tính</small>
+            </span>
+            <span className="pairing-choice-action">{busy === "lan" ? "Đang tạo…" : "Tạo mã LAN"}</span>
+          </button>
+          <button type="button" className="pairing-choice" onClick={() => void bat("cloud")}>
+            <Cloud aria-hidden="true" size={21} strokeWidth={1.8} />
+            <span>
+              <strong>Khác mạng</strong>
+              <small>Dùng 4G/5G hoặc Wi-Fi khác qua Cloudflare</small>
+            </span>
+            <span className="pairing-choice-action">{busy === "cloud" ? "Đang kết nối…" : "Tạo mã Cloud"}</span>
+          </button>
+        </fieldset>
+      ) : null}
 
       {status.enabled && status.qr_svg ? (
         <div className="pairing-body">
-          <div className="pairing-qr" aria-label="Mã QR ghép cặp" dangerouslySetInnerHTML={{ __html: status.qr_svg }} />
+          <div className="pairing-qr" aria-label={`Mã QR ghép cặp ${cloud ? "qua cloud" : "cùng Wi-Fi"}`} dangerouslySetInnerHTML={{ __html: status.qr_svg }} />
           <div className="pairing-meta">
+            <div className="pairing-active-mode">
+              {cloud ? <Cloud aria-hidden="true" size={18} /> : <Wifi aria-hidden="true" size={18} />}
+              <strong>{cloud ? "Cloud Pairing · khác mạng" : "LAN Pairing · cùng Wi-Fi"}</strong>
+            </div>
             <p>
               Mã còn hiệu lực <strong>{phut}:{giay}</strong> và chỉ dùng được <strong>một lần</strong>.
             </p>
-            <p className="hint">Điện thoại phải cùng mạng Wi-Fi với máy tính này.</p>
-            <code className="pairing-url">{status.url}</code>
+            <p className="hint">
+              {cloud
+                ? "Điện thoại có thể ở bất kỳ mạng nào. Relay chỉ giữ bản mã hóa ngắn hạn; khóa giải mã không rời mã QR và ứng dụng này."
+                : "Điện thoại phải cùng Wi-Fi/LAN với máy tính; file không đi qua dịch vụ cloud."}
+            </p>
+            {cloud ? (
+              <p className="pairing-relay"><ShieldCheck aria-hidden="true" size={17} /> Relay: {status.relay_host || "Cloudflare Workers"}</p>
+            ) : status.url ? (
+              <code className="pairing-url">{status.url}</code>
+            ) : null}
+            {status.message ? <p className="pairing-progress" role="status" aria-live="polite">{status.message}</p> : null}
           </div>
         </div>
       ) : null}

@@ -1,0 +1,21 @@
+{
+	"name": "affiliate-report-pairing-relay",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"types": "wrangler types",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"check": "pnpm run types && pnpm run typecheck && pnpm run test && wrangler deploy --dry-run --outdir dist",
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^5.20260813.1",
+		"wrangler": "^4.122.0",
+		"typescript": "^7.0.2",
+		"vitest": "^4.1.10",
+		"@cloudflare/vitest-pool-workers": "^0.21.2"
+	}
+}

@@ -686,22 +686,31 @@ export async function loadImportHistory(limit = 10, accounts?: string[]) {
   return request<ListResponse<ImportHistoryRow> & { limit: number }>(`/api/v1/imports${queryString({ limit, account: accounts })}`);
 }
 
+export type PairingMode = "lan" | "cloud";
+
 export type PairingStatus = {
   enabled: boolean;
+  mode?: PairingMode;
   account?: string;
   url?: string;
   qr_svg?: string;
   expires_in?: number;
   so_lan_nhan?: number;
+  phase?: "idle" | "created" | "uploading" | "ready" | "importing";
+  message?: string;
+  error?: string;
+  relay_host?: string;
+  result?: Record<string, unknown> | null;
 };
 
 export async function loadPairingStatus() {
   return request<PairingStatus>("/api/v1/pairing");
 }
 
-export async function startPairing(account: string) {
+export async function startPairing(account: string, mode: PairingMode = "lan") {
   const body = new FormData();
   body.append("account", account);
+  body.append("mode", mode);
   return request<PairingStatus>("/api/v1/pairing", { method: "POST", body });
 }
 

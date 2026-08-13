@@ -2143,12 +2143,35 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .inbox-hint code { font-family: var(--font-mono); font-size: 0.84rem; overflow-wrap: anywhere; }
 .inbox-hint .subtle { color: var(--ink-soft); font-size: 0.84rem; }
 
-/* Ghép cặp điện thoại: mã QR để gửi tệp từ điện thoại sang máy tính qua mạng LAN. */
+/* Hybrid Pairing: LAN ưu tiên, cloud relay chỉ giữ ciphertext ngắn hạn. */
 .pairing-panel { margin-top: 14px; }
 .pairing-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .pairing-head h2 { margin: 0 0 4px; font-size: 1rem; }
 .pairing-head p { margin: 0; max-width: 62ch; font-size: 0.88rem; line-height: 1.55; }
 .pairing-head button { min-height: 44px; }
+
+.pairing-message {
+  margin: 14px 0 0; padding: 10px 12px;
+  border: 1px solid var(--accent-line); border-radius: 12px;
+  background: var(--teal-soft); color: var(--accent-strong); font-size: 0.86rem;
+}
+.pairing-message.is-success { border-color: var(--success-line); background: var(--success-soft); color: var(--success); }
+
+.pairing-mode-picker {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+  min-width: 0; margin: 16px 0 0; padding: 0; border: 0;
+}
+.pairing-mode-picker legend { grid-column: 1 / -1; margin-bottom: 8px; color: var(--ink-soft); font-size: 0.8rem; font-weight: 800; }
+.pairing-choice {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 4px 10px;
+  min-height: 104px; padding: 14px; text-align: left; border-color: var(--line-strong); background: var(--surface);
+}
+.pairing-choice:hover { border-color: var(--teal); background: var(--teal-soft); }
+.pairing-choice > svg { grid-row: 1 / span 2; margin-top: 1px; color: var(--teal); }
+.pairing-choice > span { display: grid; min-width: 0; gap: 3px; }
+.pairing-choice strong { font-size: 0.9rem; }
+.pairing-choice small { color: var(--ink-soft); font-size: 0.78rem; font-weight: 500; line-height: 1.45; }
+.pairing-choice-action { grid-column: 2; margin-top: 6px; color: var(--accent-strong); font-size: 0.78rem; font-weight: 800; }
 
 .pairing-body { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
 /* Nền trắng cố định: bộ đọc QR cần tương phản tối trên sáng, kể cả khi app đang ở chế độ tối. */
@@ -2158,11 +2181,22 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .pairing-qr svg { display: block; width: 240px; height: 240px; max-width: 100%; }
 .pairing-meta { flex: 1 1 240px; min-width: 0; }
 .pairing-meta p { margin: 0 0 6px; font-size: 0.88rem; line-height: 1.55; }
+.pairing-active-mode { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--accent-strong); }
+.pairing-relay { display: flex; align-items: center; gap: 7px; color: var(--ink-soft); }
+.pairing-progress { margin-top: 12px !important; padding-top: 10px; border-top: 1px solid var(--line); color: var(--accent-strong); font-weight: 700; }
 .pairing-url {
   display: block; margin-top: 8px; padding: 8px 10px;
   border: 1px solid var(--line-strong); border-radius: var(--radius);
   background: var(--surface-soft); font-family: var(--font-mono); font-size: 0.8rem;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .pairing-mode-picker { grid-template-columns: 1fr; }
+  .pairing-choice { min-height: 96px; }
+  .pairing-body { align-items: flex-start; }
+  .pairing-qr { margin-inline: auto; }
+  .pairing-meta { flex-basis: 100%; }
 }
 
 /* Bảng xếp hạng theo chiều: sản phẩm, cửa hàng, nội dung.
