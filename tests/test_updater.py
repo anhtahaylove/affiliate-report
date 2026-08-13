@@ -1251,3 +1251,55 @@ def test_download_gives_up_after_the_retry_budget(tmp_path, monkeypatch):
 
     assert len(attempts) == updater._DOWNLOAD_ATTEMPTS
     assert not list(tmp_path.glob("*"))
+
+
+def test_chap_nhan_ca_ten_asset_cu_lan_moi():
+    """Bản lề của đợt đổi tên: bản đang chạy phải nhận được tên mới TRƯỚC khi tên mới xuất hiện.
+
+    Bản cài trên máy tự kiểm tên tệp tải về trước khi cho chạy. Nếu nó chỉ biết tên cũ thì bản
+    phát hành đầu tiên mang tên mới bị chính nó từ chối, và máy kẹt vĩnh viễn ở phiên bản cũ —
+    không sửa được bằng auto-update vì đường cập nhật đã đứt. Thu hẹp lại regex thì test này ĐỎ.
+    """
+    from tiktok_affiliate_report.updater import BOOTSTRAP_RE, INSTALLER_RE
+
+    assert INSTALLER_RE.match("TikTokAffiliateReportSetup-v2.0.25.exe")
+    assert INSTALLER_RE.match("AffiliateReportSetup-v2.0.26.exe")
+    assert BOOTSTRAP_RE.match("TikTokAffiliateUpdater-v1.0.0.ps1")
+    assert BOOTSTRAP_RE.match("AffiliateUpdater-v1.0.0.ps1")
+    # Nới lỏng không có nghĩa là nhận bừa.
+    assert not INSTALLER_RE.match("ThuGiSetup-v2.0.26.exe")
+    assert not INSTALLER_RE.match("AffiliateReportSetup-v2.0.26.exe.bat")
+    assert not BOOTSTRAP_RE.match("AffiliateUpdater.ps1")
+
+
+def test_feed_hong_o_nguon_chinh_thi_thu_nguon_du_phong(monkeypatch):
+    """Đổi tên repo làm URL feed đổi theo, mà GitHub không cam kết chuyển hướng raw.
+
+    Bỏ vòng lặp dự phòng trong _latest_release_with_fallback thì test này ĐỎ.
+    """
+    from tiktok_affiliate_report import updater
+
+    da_goi: list[str] = []
+
+    def gia_lap(url: str, token: str | None = None) -> dict[str, object]:
+        da_goi.append(url)
+        if url == updater.DEFAULT_UPDATE_FEED_URL:
+            raise updater.UpdateError("404 Not Found")
+        return {"version": "9.9.9"}
+
+    monkeypatch.setattr(updater, "_latest_release", gia_lap)
+
+    assert updater._latest_release_with_fallback() == {"version": "9.9.9"}
+    assert da_goi == [updater.DEFAULT_UPDATE_FEED_URL, *updater.FALLBACK_UPDATE_FEED_URLS]
+
+
+def test_ca_hai_nguon_hong_thi_bao_loi_chu_khong_im_lang(monkeypatch):
+    from tiktok_affiliate_report import updater
+
+    def luon_hong(url: str, token: str | None = None) -> dict[str, object]:
+        raise updater.UpdateError("khong voi toi")
+
+    monkeypatch.setattr(updater, "_latest_release", luon_hong)
+
+    with pytest.raises(updater.UpdateError, match="khong voi toi"):
+        updater._latest_release_with_fallback()

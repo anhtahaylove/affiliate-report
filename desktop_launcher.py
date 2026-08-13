@@ -4,6 +4,7 @@ import ctypes
 import json
 import os
 import secrets
+import shutil
 import socket
 import sys
 import threading
@@ -221,11 +222,43 @@ def _start_inbox_watcher(app: object, data_dir: Path) -> None:
     threading.Thread(target=loop, name="inbox-watcher", daemon=True).start()
 
 
+LEGACY_DATA_DIR_NAME = "TikTokAffiliateReport"
+LEGACY_DATABASE_NAME = "tiktok_affiliate_report.db"
+DATABASE_NAME = "affiliate_report.db"
+
+
+def _di_tru_du_lieu(data_dir: Path) -> None:
+    """Đưa dữ liệu cũ sang chỗ mới trước khi bất cứ ai mở database.
+
+    Đợt đổi tên thương hiệu làm đổi cả thư mục cài lẫn tên tệp database. Không có bước này thì
+    người dùng cập nhật xong mở app lên thấy TRỐNG RỖNG — ứng dụng lặng lẽ tạo database mới bên
+    cạnh database cũ, không báo lỗi gì, và mọi lịch sử nhập coi như biến mất.
+
+    Cả hai bước đều CHÉP chứ không xoá bản cũ: nếu có gì sai thì dữ liệu gốc vẫn nằm nguyên đó.
+    """
+    # 1. Thư mục cài đổi tên: bản cài mới trỏ vào thư mục trống, dữ liệu nằm ở thư mục cũ.
+    thu_muc_cu = data_dir.parent.parent / LEGACY_DATA_DIR_NAME / "data"
+    if thu_muc_cu.is_dir() and thu_muc_cu != data_dir and not any(data_dir.iterdir()):
+        print(f"Di tru du lieu tu {thu_muc_cu} sang {data_dir}")
+        shutil.copytree(thu_muc_cu, data_dir, dirs_exist_ok=True)
+
+    # 2. Tệp database đổi tên trong cùng một thư mục.
+    cu, moi = data_dir / LEGACY_DATABASE_NAME, data_dir / DATABASE_NAME
+    if cu.is_file() and not moi.exists():
+        print(f"Doi ten database {cu.name} -> {moi.name}")
+        shutil.copy2(cu, moi)
+
+
 def main() -> None:
     bundle_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     run_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else bundle_dir
     data_dir = run_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _di_tru_du_lieu(data_dir)
+    except OSError as exc:
+        # Không được chặn khởi động vì việc này: app vẫn mở được với dữ liệu sẵn có.
+        print(f"Di tru du lieu that bai, bo qua: {exc}")
     if getattr(sys, "frozen", False):
         log = (data_dir / "launcher.log").open("a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stderr = log
@@ -246,7 +279,7 @@ def main() -> None:
     url = f"http://{HOST}:{port}"
     os.chdir(run_dir)
     os.environ["AUTH_MODE"] = "local"
-    os.environ["DATABASE_URL"] = f"sqlite:///{(data_dir / 'tiktok_affiliate_report.db').as_posix()}"
+    os.environ["DATABASE_URL"] = f"sqlite:///{(data_dir / DATABASE_NAME).as_posix()}"
     os.environ["DESKTOP_CONTROL_TOKEN"] = secrets.token_urlsafe(32)
     os.environ["WEB_APP_URL"] = url
     os.environ["WEB_STATIC_DIR"] = str(bundle_dir / "web")

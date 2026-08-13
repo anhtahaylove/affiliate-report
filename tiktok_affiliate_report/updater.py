@@ -27,6 +27,11 @@ from .version import APP_VERSION
 # Bản 2.0.10 trở về trước ghim URL cũ, nên repo cũ phải sống tới khi mọi máy đã lên >= 2.0.11.
 DEFAULT_UPDATE_FEED_URL = "https://raw.githubusercontent.com/anhtahaylove/tiktok-affiliate-report/main/stable.json"
 DEFAULT_UPDATE_REPO = "anhtahaylove/tiktok-affiliate-report"
+# Địa chỉ dự phòng cho lúc đổi tên repo. Repo sẽ đổi thành affiliate-report; bản này biết trước
+# cả hai nên dù chuyển hướng của GitHub có hoạt động hay không thì máy vẫn tìm được feed.
+FALLBACK_UPDATE_FEED_URLS = (
+    "https://raw.githubusercontent.com/anhtahaylove/affiliate-report/main/stable.json",
+)
 UPDATE_SCHEMA = "tiktok-affiliate-report.update.v1"
 UPDATE_APP_ID = "tiktok-affiliate-report"
 UPDATE_CHANNEL = "stable"
@@ -42,11 +47,18 @@ MAX_BOOTSTRAP_BYTES = 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_CHECKSUM_BYTES = MAX_MANIFEST_BYTES
 VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-INSTALLER_RE = re.compile(r"^TikTokAffiliateReportSetup-v(\d+\.\d+\.\d+)\.exe$")
+# Chấp nhận CẢ tên cũ lẫn tên sau khi đổi thương hiệu.
+#
+# Đây là bản lề của cả đợt đổi tên. Bản đang chạy trên máy người dùng tự kiểm tên tệp tải về
+# trước khi cho chạy; nếu nó chỉ biết tên cũ thì bản phát hành đầu tiên mang tên mới sẽ bị
+# chính nó từ chối, và máy kẹt vĩnh viễn ở phiên bản cũ — không sửa được bằng auto-update vì
+# đường cập nhật đã đứt. Vì vậy phải phát hành bản nới lỏng này TRƯỚC, đợi mọi máy lên tới
+# đây, rồi mới đổi tên. Sau khi không còn máy nào chạy bản cũ hơn thì thu hẹp lại được.
+INSTALLER_RE = re.compile(r"^(?:TikTok)?AffiliateReportSetup-v(\d+\.\d+\.\d+)\.exe$")
 UPDATE_BOOTSTRAP_PROTOCOL = 1
 UPDATE_BOOTSTRAP_VERSION = "1.0.0"
 UPDATE_BOOTSTRAP_NAME = f"TikTokAffiliateUpdater-v{UPDATE_BOOTSTRAP_VERSION}.ps1"
-BOOTSTRAP_RE = re.compile(r"^TikTokAffiliateUpdater-v(\d+\.\d+\.\d+)\.ps1$")
+BOOTSTRAP_RE = re.compile(r"^(?:TikTok)?AffiliateUpdater-v(\d+\.\d+\.\d+)\.ps1$")
 BOOTSTRAP_ACK_SCHEMA = "tiktok-affiliate-report.update-bootstrap-ack.v1"
 SHA256_RE = re.compile(r"^[0-9A-Fa-f]{64}$")
 TRUSTED_UPDATE_KEYS = {
@@ -79,8 +91,31 @@ def github_token() -> None:
     return None
 
 
+def _latest_release_with_fallback() -> dict[str, Any]:
+    """Đọc feed ở nguồn chính, hỏng thì thử nguồn dự phòng.
+
+    Đổi tên repo GitHub làm URL feed đổi theo. Tài liệu GitHub nói rõ git clone/fetch/push được
+    chuyển hướng, nhưng KHÔNG nói gì về raw.githubusercontent.com — mà đó chính là đường app đọc
+    feed. Đặt cược vào một chuyển hướng không được ghi nhận, để đổi lấy nguy cơ mọi máy mất khả
+    năng tự cập nhật, là canh bạc không đáng.
+
+    Chữ ký Ed25519 vẫn được kiểm y hệt ở cả hai nguồn, nên nguồn dự phòng không nới lỏng bảo mật
+    — nó chỉ là địa chỉ thứ hai để tìm cùng một tệp đã ký. Xoá được sau khi đổi tên xong xuôi.
+    """
+    urls = [configured_feed_url()]
+    if not os.getenv("TIKTOK_REPORT_UPDATE_FEED_URL", "").strip():
+        urls.extend(url for url in FALLBACK_UPDATE_FEED_URLS if url not in urls)
+    loi: Exception | None = None
+    for url in urls:
+        try:
+            return _latest_release(url)
+        except (UpdateError, OSError) as exc:
+            loi = exc
+    raise loi if loi is not None else UpdateError("Không đọc được nguồn cập nhật.")
+
+
 def check_for_update(*, current_version: str = APP_VERSION, token: str | None = None) -> dict[str, Any]:
-    manifest = _latest_release(configured_feed_url())
+    manifest = _latest_release_with_fallback()
     latest_version = _parse_version(str(manifest["version"]))
     current = _parse_version(current_version)
     installer = manifest["installer"]

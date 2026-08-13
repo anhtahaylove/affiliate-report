@@ -85,3 +85,65 @@ def test_windows_mutex_allows_only_one_instance(monkeypatch):
     finally:
         desktop_launcher._release_single_instance(second)
         desktop_launcher._release_single_instance(first)
+
+
+def test_di_tru_doi_ten_tep_database_va_giu_lai_ban_cu(tmp_path):
+    """Đổi tên tệp database mà không di trú = người dùng mở app thấy trống rỗng.
+
+    Ứng dụng sẽ lặng lẽ tạo database mới bên cạnh database cũ, không báo lỗi gì. Bỏ phần thân
+    của _di_tru_du_lieu thì test này ĐỎ.
+    """
+    data_dir = tmp_path / "AffiliateReport" / "data"
+    data_dir.mkdir(parents=True)
+    cu = data_dir / desktop_launcher.LEGACY_DATABASE_NAME
+    cu.write_bytes(b"du lieu that cua nguoi dung")
+
+    desktop_launcher._di_tru_du_lieu(data_dir)
+
+    moi = data_dir / desktop_launcher.DATABASE_NAME
+    assert moi.read_bytes() == b"du lieu that cua nguoi dung"
+    assert cu.exists(), "phải giữ bản cũ làm dự phòng, không xoá"
+
+
+def test_di_tru_khong_ghi_de_database_moi_da_co(tmp_path):
+    """Chạy lại lần hai không được đè lên dữ liệu đang dùng."""
+    data_dir = tmp_path / "AffiliateReport" / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / desktop_launcher.LEGACY_DATABASE_NAME).write_bytes(b"cu")
+    (data_dir / desktop_launcher.DATABASE_NAME).write_bytes(b"moi, dang dung")
+
+    desktop_launcher._di_tru_du_lieu(data_dir)
+
+    assert (data_dir / desktop_launcher.DATABASE_NAME).read_bytes() == b"moi, dang dung"
+
+
+def test_di_tru_chep_du_lieu_khi_thu_muc_cai_doi_ten(tmp_path):
+    """Thư mục cài đổi tên thì bản mới trỏ vào thư mục trống, dữ liệu nằm ở thư mục cũ."""
+    goc = tmp_path / "AppData" / "Local"
+    thu_muc_cu = goc / desktop_launcher.LEGACY_DATA_DIR_NAME / "data"
+    thu_muc_cu.mkdir(parents=True)
+    (thu_muc_cu / desktop_launcher.LEGACY_DATABASE_NAME).write_bytes(b"lich su nhap")
+    (thu_muc_cu / "inbox").mkdir()
+    data_dir = goc / "AffiliateReport" / "data"
+    data_dir.mkdir(parents=True)
+
+    desktop_launcher._di_tru_du_lieu(data_dir)
+
+    assert (data_dir / desktop_launcher.DATABASE_NAME).read_bytes() == b"lich su nhap"
+    assert (data_dir / "inbox").is_dir()
+    assert (thu_muc_cu / desktop_launcher.LEGACY_DATABASE_NAME).exists(), "không được xoá thư mục cũ"
+
+
+def test_di_tru_khong_dung_toi_thu_muc_da_co_du_lieu(tmp_path):
+    """Thư mục mới đã có dữ liệu thì đừng chép đè từ thư mục cũ."""
+    goc = tmp_path / "AppData" / "Local"
+    thu_muc_cu = goc / desktop_launcher.LEGACY_DATA_DIR_NAME / "data"
+    thu_muc_cu.mkdir(parents=True)
+    (thu_muc_cu / desktop_launcher.DATABASE_NAME).write_bytes(b"cu")
+    data_dir = goc / "AffiliateReport" / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / desktop_launcher.DATABASE_NAME).write_bytes(b"dang dung")
+
+    desktop_launcher._di_tru_du_lieu(data_dir)
+
+    assert (data_dir / desktop_launcher.DATABASE_NAME).read_bytes() == b"dang dung"

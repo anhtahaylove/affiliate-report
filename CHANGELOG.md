@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.25 - 2026-08-13
+
+**Cảnh báo “110 vấn đề” thật ra không có vấn đề nào.** Trang Phân tích lâu nay đếm mọi đơn chưa được TikTok quyết toán là “vấn đề dữ liệu”. Đó là tình trạng bình thường — TikTok để trống ngày quyết toán cho tới khi trả tiền. Kiểm trên toàn bộ dữ liệu của bạn: cả 1.171 dòng bị cảnh báo đều thuộc loại này, không có lỗi thật nào.
+
+Nay ô Chất lượng dữ liệu chỉ đếm những thứ thật sự bất thường, còn số đơn đang chờ hiện riêng như một thông tin. Con số ở đầu trang cũng bằng đúng tổng các mục liệt kê bên dưới — trước đây hai chỗ tính theo hai cách khác nhau nên không bao giờ khớp.
+
+**Chuẩn bị đổi tên ứng dụng.** Bản này chưa đổi gì bạn nhìn thấy, nhưng nó dạy ứng dụng cách nhận ra chính mình sau khi đổi tên, và tự chuyển dữ liệu sang chỗ mới khi cần. Cần cài bản này trước khi bản đổi tên đến, nếu không máy sẽ không cập nhật được nữa.
+
 ## v2.0.24 - 2026-08-13
 
 **Bảng nội dung giờ mới dùng được.** Bảng “Nội dung chuyển đổi” ở trang Phân tích trước đây hiện 20 dòng đều ghi “Video”, không phân biệt được dòng nào với dòng nào. Nay mỗi dòng hiện đúng ID nội dung, đối chiếu được với TikTok.
