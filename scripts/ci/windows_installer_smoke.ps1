@@ -21,9 +21,40 @@ if ($env:GITHUB_ACTIONS -ne 'true') {
     throw 'This destructive installer smoke script only runs on an ephemeral GitHub Actions runner.'
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA 'AffiliateReport'
-$appExe = Join-Path $installDir 'AffiliateReport.exe'
+# Thư mục cài KHÔNG đoán được, phải hỏi Windows.
+#
+# Lane nâng cấp cài bản nền trước — bản đó phát hành trước khi đổi tên nên nằm ở thư mục cũ.
+# Rồi cài bản mới đè lên: vì AppId giữ nguyên và .iss đặt UsePreviousAppDir=yes, Inno cài vào
+# ĐÚNG THƯ MỤC CŨ chứ không phải DefaultDirName mới. Đó là hành vi cố ý và đúng đắn — nó giữ
+# cho dữ liệu người dùng không bị bỏ lại — nhưng nó khiến mọi đường dẫn ghim cứng ở đây sai.
+# Inno ghi InstallLocation vào khoá gỡ cài đặt; đọc từ đó là nguồn sự thật duy nhất.
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E729344A-643D-4B99-98B4-455B79060530}_is1'
+$thuMucCoThe = @(
+    (Join-Path $env:LOCALAPPDATA 'AffiliateReport'),
+    (Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport')
+)
+$tenExeCoThe = @('AffiliateReport.exe', 'TikTokAffiliateReport.exe')
+
+function Get-InstallDir() {
+    try {
+        $noi = (Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction Stop).InstallLocation
+        if ($noi) { return $noi.TrimEnd('\') }
+    } catch { }
+    foreach ($d in $thuMucCoThe) { if (Test-Path -LiteralPath $d) { return $d } }
+    return $thuMucCoThe[0]
+}
+
+function Get-AppExe() {
+    $d = Get-InstallDir
+    foreach ($ten in $tenExeCoThe) {
+        $duongDan = Join-Path $d $ten
+        if (Test-Path -LiteralPath $duongDan -PathType Leaf) { return $duongDan }
+    }
+    return (Join-Path $d $tenExeCoThe[0])
+}
+
+$installDir = Get-InstallDir
+$appExe = Get-AppExe
 $routes = @('/', '/accounts', '/analytics', '/imports', '/orders', '/targets', '/settings/data', '/settings/update', '/settings/users')
 
 function Assert-Version([string]$Version) {
@@ -74,8 +105,12 @@ function Install-App([string]$Path) {
     if ($process.ExitCode -ne 0) {
         throw "Installer exited with code $($process.ExitCode): $Path"
     }
+    # Tính lại sau khi cài: lần cài đầu tiên mới tạo khoá registry, và bản nâng cấp có thể nằm
+    # ở thư mục của bản trước.
+    $script:installDir = Get-InstallDir
+    $script:appExe = Get-AppExe
     if (!(Test-Path -LiteralPath $appExe -PathType Leaf)) {
-        throw "Installed app not found: $appExe"
+        throw "Installed app not found: $appExe (install dir: $installDir)"
     }
 }
 
@@ -111,7 +146,8 @@ function Start-App([int]$Port) {
 
 function Stop-App {
     for ($attempt = 1; $attempt -le 20; $attempt++) {
-        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'AffiliateReport.exe'" |
+        $tenTienTrinh = Split-Path -Leaf $appExe
+        $processes = @(Get-CimInstance Win32_Process -Filter "Name = '$tenTienTrinh'" |
             Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($appExe) })
         if ($processes.Count -eq 0) { return }
         $processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
@@ -149,8 +185,9 @@ function Assert-Target([string]$BaseUrl, [string]$Account, [string]$Month, [int6
     }
 }
 
-if ((Test-Path -LiteralPath $installDir) -or (Test-Path -LiteralPath $uninstallKey)) {
-    throw "Runner is not clean: $installDir already exists."
+$daCo = @($thuMucCoThe | Where-Object { Test-Path -LiteralPath $_ })
+if ($daCo.Count -gt 0 -or (Test-Path -LiteralPath $uninstallKey)) {
+    throw "Runner is not clean: $($daCo -join ', ') already exists."
 }
 
 Assert-Installer $CurrentInstaller $CurrentVersion $CurrentChecksumFile

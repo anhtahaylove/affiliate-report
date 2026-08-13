@@ -16,10 +16,36 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'This destructive updater UI smoke only runs on an ephemeral GitHub Actions runner.'
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA 'AffiliateReport'
-$appExe = Join-Path $installDir 'AffiliateReport.exe'
-$dataDir = Join-Path $installDir 'data'
+# Không đoán thư mục cài — xem ghi chú cùng lý do ở windows_installer_smoke.ps1. Lane này cài
+# một bản công khai đã phát hành, mà bản đó có thể ra đời trước khi đổi tên nên nằm ở thư mục cũ.
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E729344A-643D-4B99-98B4-455B79060530}_is1'
+$thuMucCoThe = @(
+    (Join-Path $env:LOCALAPPDATA 'AffiliateReport'),
+    (Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport')
+)
+$tenExeCoThe = @('AffiliateReport.exe', 'TikTokAffiliateReport.exe')
+
+function Get-InstallDir() {
+    try {
+        $noi = (Get-ItemProperty -LiteralPath $uninstallKey -ErrorAction Stop).InstallLocation
+        if ($noi) { return $noi.TrimEnd('\') }
+    } catch { }
+    foreach ($d in $thuMucCoThe) { if (Test-Path -LiteralPath $d) { return $d } }
+    return $thuMucCoThe[0]
+}
+
+function Get-AppExe() {
+    $d = Get-InstallDir
+    foreach ($ten in $tenExeCoThe) {
+        $duongDan = Join-Path $d $ten
+        if (Test-Path -LiteralPath $duongDan -PathType Leaf) { return $duongDan }
+    }
+    return (Join-Path $d $tenExeCoThe[0])
+}
+
+$installDir = Get-InstallDir
+$appExe = Get-AppExe
+$dataDir = Join-Path $installDir 'data'
 $markerCode = 'UPDATER_SMOKE'
 $markerMonth = '2099-11'
 $markerValue = 246813579
@@ -50,7 +76,10 @@ function Install-App([string]$Path) {
         throw 'Previous installer timed out.'
     }
     if ($process.ExitCode -ne 0) { throw "Previous installer failed with exit code $($process.ExitCode)." }
-    if (!(Test-Path -LiteralPath $appExe -PathType Leaf)) { throw 'Installed application was not found.' }
+    $script:installDir = Get-InstallDir
+    $script:appExe = Get-AppExe
+    $script:dataDir = Join-Path $installDir 'data'
+    if (!(Test-Path -LiteralPath $appExe -PathType Leaf)) { throw "Installed application was not found: $appExe" }
 }
 
 function Assert-InstalledVersion([string]$Version) {
@@ -146,7 +175,7 @@ Assert-Installer $CurrentInstaller $CurrentVersion $CurrentChecksumFile
 if ([version]$PreviousVersion -ge [version]$CurrentVersion) {
     throw 'PreviousVersion must be lower than CurrentVersion for updater UI smoke.'
 }
-if ((Test-Path -LiteralPath $installDir) -or (Test-Path -LiteralPath $uninstallKey)) {
+if (@($thuMucCoThe | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0 -or (Test-Path -LiteralPath $uninstallKey)) {
     throw 'Ephemeral runner is not clean.'
 }
 
