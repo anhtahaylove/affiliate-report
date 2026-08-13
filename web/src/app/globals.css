@@ -2085,7 +2085,9 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .pairing-body { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
 /* Nền trắng cố định: bộ đọc QR cần tương phản tối trên sáng, kể cả khi app đang ở chế độ tối. */
 .pairing-qr { padding: 10px; border-radius: var(--radius); background: #fff; line-height: 0; }
-.pairing-qr svg { display: block; width: 168px; height: 168px; }
+/* 41 ô mỗi cạnh; 240px cho mỗi ô gần 6px, đủ dày để camera điện thoại bắt được. SVG phải có
+   viewBox thì đặt kích thước ở đây mới thu nhỏ — thiếu nó là ảnh bị cắt cụt. */
+.pairing-qr svg { display: block; width: 240px; height: 240px; max-width: 100%; }
 .pairing-meta { flex: 1 1 240px; min-width: 0; }
 .pairing-meta p { margin: 0 0 6px; font-size: 0.88rem; line-height: 1.55; }
 .pairing-url {

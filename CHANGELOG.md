@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.22 - 2026-08-13
+
+**Sửa lỗi: mã QR không quét được.** Ảnh mã QR bị cắt mất phần rìa phải và rìa dưới, trong đó có những ô vuông định vị mà camera dựa vào để nhận ra đây là mã QR. Nhìn bằng mắt vẫn giống một mã QR bình thường nên rất khó nhận ra, nhưng điện thoại quét mãi không lên.
+
+Nay ảnh hiển thị đầy đủ và to hơn cho dễ quét. Nếu vẫn không quét được, bạn có thể gõ tay địa chỉ hiện ngay dưới mã.
+
 ## v2.0.21 - 2026-08-13
 
 **Sửa lỗi: cổng ghép cặp không tự đóng.** Ở v2.0.20, khi mã QR hết hạn, đường nhận tệp chỉ được đóng vào lúc bạn mở lại trang Nhập dữ liệu. Đóng tab trình duyệt là không còn gì kích hoạt việc dọn, nên cổng đó nằm mở trên mạng cho tới khi tắt ứng dụng — trái với điều bản trước mô tả.

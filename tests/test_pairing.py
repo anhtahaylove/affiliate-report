@@ -140,6 +140,9 @@ def test_dia_chi_ghep_cap_va_ma_qr(state):
     assert url == f"http://192.168.1.50:8765/pair/{state.session.token}"
     svg = ma_qr_svg(url)
     assert svg.startswith("<svg") and "path" in svg
+    # Không có viewBox thì đặt kích thước bằng CSS sẽ CẮT ảnh chứ không thu nhỏ: mất ô định vị
+    # ở góc và điện thoại không nhận ra mã. Đúng lỗi gặp ở v2.0.21.
+    assert "viewBox=" in svg
 
 
 def test_dia_chi_ghep_cap_bao_loi_khi_chua_bat(state):

@@ -13,6 +13,7 @@ Vé vào cửa là token 32 ký tự hex, dùng một lần, sống 5 phút.
 
 from __future__ import annotations
 
+import re
 import secrets
 import socket
 import threading
@@ -113,12 +114,22 @@ def dia_chi_ghep_cap(state: PairingState, *, host: str | None = None) -> str:
 
 
 def ma_qr_svg(url: str) -> str:
-    """QR dạng SVG nhúng thẳng vào trang, không cần tệp ảnh hay route riêng."""
+    """QR dạng SVG nhúng thẳng vào trang, không cần tệp ảnh hay route riêng.
+
+    segno chỉ ghi width/height chứ không ghi viewBox. SVG thiếu viewBox thì đặt kích thước bằng
+    CSS sẽ CẮT CỤT ảnh chứ không thu nhỏ — mất mấy ô định vị ở góc là điện thoại không nhận ra
+    mã nữa. Đã gặp thật ở v2.0.21. Nên phải tự thêm viewBox vào.
+    """
     import segno
 
     buf = BytesIO()
     segno.make(url, error="m").save(buf, kind="svg", scale=6, border=2, xmldecl=False, svgns=True)
-    return buf.getvalue().decode("utf-8")
+    svg = buf.getvalue().decode("utf-8")
+
+    canh = re.search(r'width="(\d+(?:\.\d+)?)"', svg)
+    if canh and "viewBox=" not in svg:
+        svg = svg.replace("<svg ", f'<svg viewBox="0 0 {canh.group(1)} {canh.group(1)}" ', 1)
+    return svg
 
 
 def create_pair_app(
