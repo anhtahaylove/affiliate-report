@@ -59,6 +59,15 @@ Mobile is a first-class composition, not the desktop grid stacked into one colum
 - Accounts: active/archive grouping and explicit permission-aware actions.
 - Settings: Giao diện, Dữ liệu, Cập nhật and Người dùng.
 
+## Dashboard reference translation
+
+The production dashboard remains Momentum Canvas. External references are used as bounded pattern libraries, not as a second visual system:
+
+- Linear informs the compact, quiet information density: neutral surfaces, clear grouping and controls that stay visually subordinate to the work.
+- Stripe informs financial hierarchy: tabular numerals, one clearly prioritized result, restrained status signals and hairline separation instead of stacked cards.
+- Brand assets, proprietary typography and page compositions from either reference are not copied.
+- On the Dashboard, the first viewport should answer three questions in order: what happened, whether the month is on pace and what needs attention next.
+
 ## Accessibility and motion
 
 - Target WCAG 2.2 AA.

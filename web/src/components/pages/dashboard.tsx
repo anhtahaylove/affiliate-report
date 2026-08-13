@@ -110,15 +110,22 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
       <DashboardCustomizer compact={compactDashboard} preferences={preferences} onPreferencesChange={onPreferencesChange} />
       <section className="today-pulse" style={widgetStyle("today_pulse")} data-widget-id="today_pulse" aria-labelledby="today-pulse-title">
         <div className="pulse-heading">
-          <div>
-            <p className="section-label">Nhịp hôm nay</p>
-            <h2 id="today-pulse-title">Nhịp kinh doanh đang diễn ra</h2>
-            <p>{selectedLabel} · so với kỳ liền trước trên cùng độ dài thời gian.</p>
+          <div className="pulse-title-stack">
+            <p className="section-label">Tóm tắt hiệu suất</p>
+            <h2 id="today-pulse-title">Kết quả trong phạm vi đang xem</h2>
+            <div className="pulse-context" aria-label="Phạm vi so sánh">
+              <strong>{selectedLabel}</strong>
+              <span>So với kỳ trước cùng độ dài</span>
+            </div>
           </div>
-          <span className="freshness-chip">Cập nhật {formatDateTime(analytics.data_quality.latest_import_at)}</span>
+          <span className="freshness-chip">
+            <span className="freshness-dot" aria-hidden="true" />
+            <span>Dữ liệu cập nhật</span>
+            <strong>{formatDateTime(analytics.data_quality.latest_import_at)}</strong>
+          </span>
         </div>
         <div className="pulse-metrics">
-          <PulseMetric label="Hoa hồng thực tế" value={formatMoney(summary.actual_commission)} delta={commissionDelta == null ? "Chưa có kỳ so sánh" : deltaMoney(commissionDelta)} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
+          <PulseMetric primary label="Hoa hồng thực tế" value={formatMoney(summary.actual_commission)} delta={commissionDelta == null ? "Chưa có kỳ so sánh" : deltaMoney(commissionDelta)} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
           <PulseMetric label="GMV thực tế" value={formatMoney(summary.actual_gmv ?? total?.actual_gmv)} delta={`Tỷ lệ HH ${percent(summary.effective_commission_rate)}`} />
           <PulseMetric label="Đơn hàng" value={integer.format(summary.orders)} delta={orderDelta == null ? `${integer.format(summary.order_lines)} dòng` : deltaCount(orderDelta)} tone={orderDelta != null && orderDelta < 0 ? "danger" : "success"} />
           <PulseMetric label="Đã nhận cuối cùng" value={formatMoney(summary.final_received)} delta={`Chênh ${formatMoney(summary.final_received_variance)}`} />
@@ -126,28 +133,30 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
       </section>
 
       <section className="momentum-grid target-grid" style={widgetStyle("target_progress")} data-widget-id="target_progress" aria-label="Mục tiêu và dự báo">
-        <article className="canvas-panel target-canvas">
+        <article className="canvas-panel target-briefing">
           <div className="panel-heading">
-            <div><p className="section-label">Tiến độ</p><h2>Mục tiêu tháng</h2></div>
+            <div><p className="section-label">Mục tiêu và dự báo</p><h2>Khả năng cán đích tháng này</h2></div>
             <Link className="text-action" href="/targets">Điều chỉnh mục tiêu</Link>
           </div>
-          <div className="target-body">
-            <ProgressRing value={progress} tone={achievementTone(targetAchievement)} />
-            <div className="target-figures">
-              <strong>{formatMoney(analytics.target?.actual_commission ?? summary.actual_commission)}</strong>
-              <span>trên {formatMoney(analytics.target?.monthly_target ?? activeKpi?.monthly_target)} mục tiêu</span>
-              <div className="target-track" role="progressbar" aria-label="Tiến độ mục tiêu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div>
+          <div className="target-briefing-body">
+            <div className="target-achievement">
+              <ProgressRing value={progress} tone={achievementTone(targetAchievement)} />
+              <div className="target-figures">
+                <strong>{formatMoney(analytics.target?.actual_commission ?? summary.actual_commission)}</strong>
+                <span>trên {formatMoney(analytics.target?.monthly_target ?? activeKpi?.monthly_target)} mục tiêu</span>
+                <div className="target-track" role="progressbar" aria-label="Tiến độ mục tiêu" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(progress.toFixed(1))}><span style={{ width: `${progress}%` }} /></div>
+              </div>
+            </div>
+            <div className="target-pace">
+              <p className="section-label">Nhịp cần duy trì</p>
+              <dl className="pace-list">
+                <PaceRow label="Dự báo cuối tháng" value={formatMoney(analytics.target?.projected_month_end)} />
+                <PaceRow label="Còn thiếu" value={formatMoney(analytics.target?.remaining)} tone="warning" />
+                <PaceRow label="Cần đạt mỗi ngày" value={formatMoney(analytics.target?.required_per_remaining_day)} />
+                <PaceRow label="Ngày còn lại" value={analytics.target ? integer.format(analytics.target.remaining_days) : "—"} />
+              </dl>
             </div>
           </div>
-        </article>
-        <article className="canvas-panel pace-canvas">
-          <div className="panel-heading"><div><p className="section-label">Nhịp mục tiêu</p><h2>Khả năng cán đích</h2></div></div>
-          <dl className="pace-list">
-            <PaceRow label="Dự báo cuối tháng" value={formatMoney(analytics.target?.projected_month_end)} />
-            <PaceRow label="Còn thiếu" value={formatMoney(analytics.target?.remaining)} tone="warning" />
-            <PaceRow label="Cần đạt mỗi ngày" value={formatMoney(analytics.target?.required_per_remaining_day)} />
-            <PaceRow label="Ngày còn lại" value={analytics.target ? integer.format(analytics.target.remaining_days) : "—"} />
-          </dl>
         </article>
       </section>
 
@@ -246,7 +255,7 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
 }
 
 const WIDGET_LABELS: Record<DashboardWidget, string> = {
-  today_pulse: "Nhịp hôm nay",
+  today_pulse: "Tóm tắt hiệu suất",
   target_progress: "Mục tiêu và dự báo",
   action_alerts: "Trung tâm hành động",
   trend: "Xu hướng hoa hồng",
@@ -367,8 +376,8 @@ function DashboardDisclosure({
   );
 }
 
-function PulseMetric({ label, value, delta, tone = "neutral" }: { label: string; value: string; delta: string; tone?: "neutral" | "success" | "warning" | "danger" }) {
-  return <article className="pulse-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{delta}</small></article>;
+function PulseMetric({ label, value, delta, tone = "neutral", primary = false }: { label: string; value: string; delta: string; tone?: "neutral" | "success" | "warning" | "danger"; primary?: boolean }) {
+  return <article className="pulse-metric" data-tone={tone} data-primary={primary ? "true" : undefined}><span>{label}</span><strong>{value}</strong><small><span className="metric-signal" aria-hidden="true" />{delta}</small></article>;
 }
 
 function PaceRow({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "warning" }) {
