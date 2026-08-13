@@ -7,11 +7,11 @@ on:
       previous_version:
         description: Public version installed before using the in-app updater
         required: true
-        default: "2.0.18"
+        default: "2.0.19"
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.0.19"
+        default: "2.0.20"
       release_sha:
         description: Exact trusted source commit for release-gated runs
         required: false

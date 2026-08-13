@@ -71,6 +71,10 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert "--hidden-import tiktok_affiliate_report.updater" in batch
     assert "--hidden-import tiktok_affiliate_report.version" in batch
     assert "--hidden-import pystray._win32" in batch
+    # segno chỉ được nhập BÊN TRONG hàm ma_qr_svg, và pairing được nhập gián tiếp qua api.
+    # Thiếu hai dòng này thì gói vẫn dựng xong, chỉ vỡ lúc người dùng bấm bật ghép cặp.
+    assert "--hidden-import segno" in batch
+    assert "--hidden-import tiktok_affiliate_report.pairing" in batch
     assert '--add-data "%CD%\\packaging\\app.ico;packaging"' in batch
     assert 'pystray==0.19.5; sys_platform == "win32"' in Path("requirements-api.txt").read_text(encoding="utf-8")
     assert "TikTokAffiliateReport.SingleInstance" in Path("desktop_launcher.py").read_text(encoding="utf-8")
@@ -186,8 +190,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.19"
-    assert 'default: "2.0.18"' in workflow
+    assert APP_VERSION == "2.0.20"
+    assert 'default: "2.0.19"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -296,8 +300,8 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
+    assert 'default: "2.0.20"' in updater_ui
     assert 'default: "2.0.19"' in updater_ui
-    assert 'default: "2.0.18"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui

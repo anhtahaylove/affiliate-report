@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.20 - 2026-08-13
+
+**Gửi tệp từ điện thoại bằng mã QR.** Bản trước đã có thư mục nhập tự động; bản này giải quyết nốt trường hợp không dùng dịch vụ đồng bộ nào. Vào trang **Nhập dữ liệu**, bật **Gửi tệp từ điện thoại**, quét mã QR, chọn tệp Excel — tệp đi thẳng vào máy tính, không phải chép qua cáp hay gửi qua Zalo.
+
+Mặc định tắt, và tắt nghĩa là không có cổng nào mở trên mạng. Khi bật, ứng dụng dựng một đường nhận tệp riêng, tách khỏi ứng dụng chính: mã QR chứa vé dùng **một lần**, sống **5 phút**, và ngoài đường nhận tệp thì không có gì khác lộ ra mạng. Tệp gửi lên đi qua đúng đường nhập cũ nên vẫn giới hạn 20 MB, vẫn chặn tệp trùng.
+
+Điện thoại cần cùng mạng Wi-Fi với máy tính.
+
+**Database nhẹ đi 41%.** Mỗi đơn hàng trước đây được lưu nguyên chuỗi dữ liệu gốc ở hai nơi khác nhau, giống hệt nhau từng ký tự. Nay chỉ giữ một bản. Database 45,7 MB rút còn 26,3 MB mà không mất gì: số đơn, doanh thu, hoa hồng, lịch sử phiên bản và chức năng hoàn tác lần nhập đều nguyên vẹn. Ứng dụng tự dọn khi mở lần đầu sau khi cập nhật.
+
 ## v2.0.19 - 2026-08-13
 
 **Thả tệp vào thư mục, ứng dụng tự nhập.** Bạn xuất tệp TikTok trên điện thoại rồi phải chuyển sang máy tính mới nhập được — đó là bước cực nhất trong cả quy trình. Nay có thêm một thư mục nhập tự động:
