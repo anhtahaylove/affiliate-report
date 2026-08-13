@@ -230,7 +230,6 @@ jobs:
         shell: pwsh
         run: |
           $previousVersion = $env:PREVIOUS_STABLE_VERSION
-          $previousInstaller = Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$previousVersion.exe"
           $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
           # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
           # nên GitHub trả 503 cho vài job là chuyện sẽ xảy ra. Tải một phát không thử lại biến
@@ -247,7 +246,25 @@ jobs:
               }
             }
           }
-          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/AffiliateReportSetup-v$previousVersion.exe" $previousInstaller
+          # Bản trước có thể đã phát hành TRƯỚC khi đổi tên, nên asset của nó mang tên cũ.
+          # windows_installer_smoke.ps1 so tên tệp cục bộ với dòng trong SHA256SUMS.txt nên phải
+          # giữ đúng tên gốc. Thử tên mới trước, không có thì lùi về tên cũ — cùng nguyên tắc
+          # chuyển tiếp mà bản cài trên máy người dùng đang dùng.
+          function Get-PreviousInstaller([string]$Repo, [string]$Version) {
+            foreach ($name in @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")) {
+              $dich = Join-Path $env:RUNNER_TEMP $name
+              try {
+                Get-PublicAsset "https://github.com/$Repo/releases/download/v$Version/$name" $dich
+                Write-Host "Previous installer asset: $name"
+                return $dich
+              } catch {
+                Write-Host "Khong co asset $name, thu ten tiep theo"
+              }
+            }
+            throw "Khong tim thay installer cua v$Version duoi bat ky ten nao"
+          }
+          $previousInstaller = Get-PreviousInstaller $env:PUBLIC_UPDATE_REPO $previousVersion
+          "PREVIOUS_INSTALLER=$previousInstaller" >> $env:GITHUB_ENV
           Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/SHA256SUMS.txt" $previousChecksums
       - name: Smoke candidate upgrade and data preservation
         shell: pwsh
@@ -258,7 +275,7 @@ jobs:
             -CurrentInstaller (Join-Path $PWD "candidate\AffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $PWD "candidate\SHA256SUMS.txt") `
-            -PreviousInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$previousVersion.exe") `
+            -PreviousInstaller $env:PREVIOUS_INSTALLER `
             -PreviousVersion $previousVersion `
             -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt")
           "- Upgrade $previousVersion -> ${currentVersion}: PASS" >> $env:GITHUB_STEP_SUMMARY
@@ -379,7 +396,6 @@ jobs:
           if ($previousVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid previous_version: $previousVersion" }
           if ([version]$previousVersion -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
           $currentInstaller = Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe"
-          $previousInstaller = Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$previousVersion.exe"
           $currentChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
           $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
           # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
@@ -399,7 +415,25 @@ jobs:
           }
           Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/AffiliateReportSetup-v$currentVersion.exe" $currentInstaller
           Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" $currentChecksums
-          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/AffiliateReportSetup-v$previousVersion.exe" $previousInstaller
+          # Bản trước có thể đã phát hành TRƯỚC khi đổi tên, nên asset của nó mang tên cũ.
+          # windows_installer_smoke.ps1 so tên tệp cục bộ với dòng trong SHA256SUMS.txt nên phải
+          # giữ đúng tên gốc. Thử tên mới trước, không có thì lùi về tên cũ — cùng nguyên tắc
+          # chuyển tiếp mà bản cài trên máy người dùng đang dùng.
+          function Get-PreviousInstaller([string]$Repo, [string]$Version) {
+            foreach ($name in @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")) {
+              $dich = Join-Path $env:RUNNER_TEMP $name
+              try {
+                Get-PublicAsset "https://github.com/$Repo/releases/download/v$Version/$name" $dich
+                Write-Host "Previous installer asset: $name"
+                return $dich
+              } catch {
+                Write-Host "Khong co asset $name, thu ten tiep theo"
+              }
+            }
+            throw "Khong tim thay installer cua v$Version duoi bat ky ten nao"
+          }
+          $previousInstaller = Get-PreviousInstaller $env:PUBLIC_UPDATE_REPO $previousVersion
+          "PREVIOUS_INSTALLER=$previousInstaller" >> $env:GITHUB_ENV
           Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$previousVersion/SHA256SUMS.txt" $previousChecksums
       - name: Smoke upgrade and data preservation
         shell: pwsh
@@ -410,6 +444,6 @@ jobs:
             -CurrentInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt") `
-            -PreviousInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$previousVersion.exe") `
+            -PreviousInstaller $env:PREVIOUS_INSTALLER `
             -PreviousVersion $previousVersion `
             -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt")
