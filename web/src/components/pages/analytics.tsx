@@ -43,11 +43,24 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
 
   return (
     <div className="intelligence-page">
-      <section className="analytics-pulse" aria-label="Tóm tắt phân tích">
-        <InsightMetric label="Hoa hồng thực tế" value={formatMoney(data.summary.actual_commission)} note={commissionDelta == null ? "Chưa có kỳ so sánh" : `${commissionDelta >= 0 ? "+" : "−"}${formatMoney(Math.abs(commissionDelta))} so kỳ trước`} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
-        <InsightMetric label="Tỷ lệ hoa hồng" value={percent(data.summary.effective_commission_rate)} note={`${integer.format(data.summary.orders)} đơn`} />
-        <InsightMetric label="Dòng tiền đã nhận" value={formatMoney(data.summary.final_received)} note={`Chênh ${formatMoney(data.summary.final_received_variance)}`} />
-        <InsightMetric label="Chất lượng dữ liệu" value={qualityIssues ? `${integer.format(qualityIssues)} vấn đề` : "Sạch"} note={`Cập nhật ${formatDateTime(data.data_quality.latest_import_at)}`} tone={qualityIssues ? "warning" : "success"} />
+      <section className="analytics-summary" aria-labelledby="analytics-summary-title">
+        <div className="analytics-summary-heading">
+          <div>
+            <p className="section-label">Tóm tắt phân tích</p>
+            <h2 id="analytics-summary-title">Kết quả và độ tin cậy</h2>
+          </div>
+          <span className="freshness-chip">
+            <span className="freshness-dot" aria-hidden="true" />
+            <span>Dữ liệu cập nhật</span>
+            <strong>{formatDateTime(data.data_quality.latest_import_at)}</strong>
+          </span>
+        </div>
+        <div className="analytics-pulse">
+          <InsightMetric primary signal label="Hoa hồng thực tế" value={formatMoney(data.summary.actual_commission)} note={commissionDelta == null ? "Chưa có kỳ so sánh" : `${commissionDelta >= 0 ? "+" : "−"}${formatMoney(Math.abs(commissionDelta))} so kỳ trước`} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
+          <InsightMetric signal label="Tỷ lệ hoa hồng" value={percent(data.summary.effective_commission_rate)} note={`${integer.format(data.summary.orders)} đơn trong phạm vi`} />
+          <InsightMetric signal label="Đã nhận cuối cùng" value={formatMoney(data.summary.final_received)} note={`Chênh ${formatMoney(data.summary.final_received_variance)}`} />
+          <InsightMetric signal label="Chất lượng dữ liệu" value={qualityIssues ? `${integer.format(qualityIssues)} vấn đề` : "Sạch"} note={qualityIssues ? "Có dòng cần kiểm tra" : "Không có ngoại lệ trong phạm vi"} tone={qualityIssues ? "warning" : "success"} />
+        </div>
       </section>
 
       <Tabs.Root className="analytics-tabs" defaultValue="finance">
@@ -61,7 +74,11 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
 
         <Tabs.Content value="finance" className="analytics-tab-panel">
           <section className="canvas-panel analytics-chart-panel">
-            <div className="panel-heading"><div><p className="section-label">Đà tài chính</p><h2>Hoa hồng và dòng tiền theo kỳ</h2></div><span>{data.filters.group_by === "day" ? "Theo ngày" : data.filters.group_by === "week" ? "Theo tuần" : "Theo tháng"}</span></div>
+            <div className="panel-heading"><div><p className="section-label">Đà tài chính</p><h2>Hoa hồng và dòng tiền theo thời gian</h2></div><span className="analytics-cadence">{data.filters.group_by === "day" ? "Theo ngày" : data.filters.group_by === "week" ? "Theo tuần" : "Theo tháng"}</span></div>
+            <div className="analytics-legend" aria-label="Chú giải biểu đồ">
+              <span data-series="commission">Hoa hồng thực tế</span>
+              <span data-series="received">Tiền đã nhận</span>
+            </div>
             {data.trend.length ? <CommissionTrendChart rows={data.trend} /> : <p className="empty">Chưa có dữ liệu xu hướng.</p>}
             <ChartDataTable rows={data.trend} />
           </section>
@@ -86,9 +103,9 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
         </Tabs.Content>
 
         <Tabs.Content value="commerce" className="analytics-tab-panel">
-          <DimensionLeaderboard title="Sản phẩm dẫn đầu" eyebrow="Product momentum" rows={data.products} />
-          <DimensionLeaderboard title="Cửa hàng tạo doanh thu" eyebrow="Shop contribution" rows={data.shops} />
-          <DimensionLeaderboard title="Nội dung chuyển đổi" eyebrow="Content performance" rows={data.content} />
+          <DimensionLeaderboard title="Sản phẩm dẫn đầu" eyebrow="Hiệu suất sản phẩm" rows={data.products} />
+          <DimensionLeaderboard title="Cửa hàng tạo doanh thu" eyebrow="Đóng góp cửa hàng" rows={data.shops} />
+          <DimensionLeaderboard title="Nội dung chuyển đổi" eyebrow="Hiệu suất nội dung" rows={data.content} />
         </Tabs.Content>
 
         <Tabs.Content value="settlement" className="analytics-tab-panel">
@@ -103,8 +120,8 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
   );
 }
 
-function InsightMetric({ label, value, note, tone = "neutral" }: { label: string; value: string; note: string; tone?: "neutral" | "success" | "warning" | "danger" }) {
-  return <article className="insight-metric" data-tone={tone}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>;
+function InsightMetric({ label, value, note, tone = "neutral", primary = false, signal = false }: { label: string; value: string; note: string; tone?: "neutral" | "success" | "warning" | "danger"; primary?: boolean; signal?: boolean }) {
+  return <article className="insight-metric" data-tone={tone} data-primary={primary ? "true" : undefined}><span>{label}</span><strong>{value}</strong><small>{signal ? <span className="metric-signal" aria-hidden="true" /> : null}{note}</small></article>;
 }
 
 function BreakdownList({ rows, mode, directory }: { rows: AnalyticsBreakdownRow[]; mode: "status" | "account"; directory?: AccountDirectory }) {
@@ -142,10 +159,10 @@ function SettlementStudio({ data }: { data: AnalyticsResponse }) {
   return (
     <div className="settlement-studio">
       <section className="settlement-hero canvas-panel">
-        <div><p className="section-label">Receivables</p><h2>{formatMoney(data.summary.final_received)}</h2><p>Tiền đã nhận cuối cùng trong phạm vi đang xem.</p></div>
+        <div><p className="section-label">Dòng tiền nhận về</p><h2>{formatMoney(data.summary.final_received)}</h2><p>Tiền đã nhận cuối cùng trong phạm vi đang xem.</p></div>
         <div className="settlement-kpis"><InsightMetric label="Đã quyết toán" value={integer.format(data.settlement.settled_lines)} note={`Trung vị ${data.settlement.median_lag_days ?? "—"} ngày`} /><InsightMetric label="Đang chờ" value={integer.format(data.settlement.pending_lines)} note="Theo dõi các bucket bên dưới" tone={data.settlement.pending_lines ? "warning" : "success"} /><InsightMetric label="Chênh tiền về" value={formatMoney(data.summary.final_received_variance)} note="So với hoa hồng thực tế" tone={data.summary.final_received_variance < 0 ? "danger" : "neutral"} /></div>
       </section>
-      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Pending aging</p><h2>Tuổi khoản đang chờ</h2></div></div>{data.settlement.pending_aging.length ? <div className="aging-grid">{data.settlement.pending_aging.map((row) => <article key={row.bucket}><span>{row.bucket}</span><strong>{integer.format(row.count)}</strong><small>dòng đang chờ</small></article>)}</div> : <p className="empty">Không có khoản đang chờ trong phạm vi này.</p>}</section>
+      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Tuổi khoản chờ</p><h2>Khoản chưa quyết toán theo thời gian</h2></div></div>{data.settlement.pending_aging.length ? <div className="aging-grid">{data.settlement.pending_aging.map((row) => <article key={row.bucket}><span>{row.bucket}</span><strong>{integer.format(row.count)}</strong><small>dòng đang chờ</small></article>)}</div> : <p className="empty">Không có khoản đang chờ trong phạm vi này.</p>}</section>
     </div>
   );
 }
@@ -163,8 +180,8 @@ function QualityStudio({ data }: { data: AnalyticsResponse }) {
   ] as const;
   return (
     <div className="quality-studio">
-      <section className="canvas-panel quality-summary"><div className="panel-heading"><div><p className="section-label">Data lineage</p><h2>Lịch sử xử lý dữ liệu</h2></div><span>Cập nhật {formatDateTime(quality.latest_import_at)}</span></div><div className="quality-flow"><InsightMetric label="Lượt import" value={integer.format(quality.import_batches)} note="batch nguồn bất biến" /><InsightMetric label="Dòng mới" value={integer.format(quality.import_inserted)} note="được thêm vào lịch sử" tone="success" /><InsightMetric label="Đã cập nhật" value={integer.format(quality.import_updated)} note="snapshot mới hơn" /><InsightMetric label="Không thay đổi" value={integer.format(quality.import_unchanged)} note="đã chống trùng" /></div></section>
-      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Exceptions</p><h2>Vấn đề cần làm sạch</h2></div><Link className="text-action" href="/imports">Mở lịch sử import</Link></div><div className="exception-list">{issues.map(([label, value, help]) => <article data-tone={value ? "warning" : "success"} key={label}><div><strong>{label}</strong><p>{help}</p></div><span>{integer.format(value)}</span></article>)}</div></section>
+      <section className="canvas-panel quality-summary"><div className="panel-heading"><div><p className="section-label">Dòng dữ liệu</p><h2>Lịch sử xử lý dữ liệu</h2></div><span>Cập nhật {formatDateTime(quality.latest_import_at)}</span></div><div className="quality-flow"><InsightMetric label="Lượt import" value={integer.format(quality.import_batches)} note="batch nguồn bất biến" /><InsightMetric label="Dòng mới" value={integer.format(quality.import_inserted)} note="được thêm vào lịch sử" tone="success" /><InsightMetric label="Đã cập nhật" value={integer.format(quality.import_updated)} note="snapshot mới hơn" /><InsightMetric label="Không thay đổi" value={integer.format(quality.import_unchanged)} note="đã chống trùng" /></div></section>
+      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Ngoại lệ dữ liệu</p><h2>Vấn đề cần làm sạch</h2></div><Link className="text-action" href="/imports">Mở lịch sử import</Link></div><div className="exception-list">{issues.map(([label, value, help]) => <article data-tone={value ? "warning" : "success"} key={label}><div><strong>{label}</strong><p>{help}</p></div><span>{integer.format(value)}</span></article>)}</div></section>
     </div>
   );
 }

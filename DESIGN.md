@@ -68,6 +68,13 @@ The production dashboard remains Momentum Canvas. External references are used a
 - Brand assets, proprietary typography and page compositions from either reference are not copied.
 - On the Dashboard, the first viewport should answer three questions in order: what happened, whether the month is on pace and what needs attention next.
 
+## Analytics reference translation
+
+- PostHog is the primary bounded reference for Analytics: analysis modes stay easy to switch, chart context is explicit and dense evidence is grouped for scanning rather than decorated.
+- Stripe remains a secondary reference for financial figures, comparison language and quiet tabular hierarchy.
+- Binance was reviewed but deliberately not adopted: trading-terminal contrast and market-status conventions would overstate urgency in an affiliate performance report.
+- The first Analytics viewport should answer what changed, whether the data is trustworthy and which analysis mode the user is viewing. Tabs behave like navigation, not a second card toolbar.
+
 ## Accessibility and motion
 
 - Target WCAG 2.2 AA.
