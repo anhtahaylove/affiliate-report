@@ -683,6 +683,28 @@ export async function loadImportHistory(limit = 10, accounts?: string[]) {
   return request<ListResponse<ImportHistoryRow> & { limit: number }>(`/api/v1/imports${queryString({ limit, account: accounts })}`);
 }
 
+export type PairingStatus = {
+  enabled: boolean;
+  account?: string;
+  url?: string;
+  qr_svg?: string;
+  expires_in?: number;
+};
+
+export async function loadPairingStatus() {
+  return request<PairingStatus>("/api/v1/pairing");
+}
+
+export async function startPairing(account: string) {
+  const body = new FormData();
+  body.append("account", account);
+  return request<PairingStatus>("/api/v1/pairing", { method: "POST", body });
+}
+
+export async function stopPairing() {
+  return request<PairingStatus>("/api/v1/pairing", { method: "DELETE" });
+}
+
 export async function previewUndoImport(batchId: number) {
   return request<UndoImportPreview>(`/api/v1/imports/${batchId}/undo-preview`);
 }

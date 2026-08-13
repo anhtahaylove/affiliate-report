@@ -2074,3 +2074,23 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .inbox-hint p:last-child { margin-bottom: 0; }
 .inbox-hint code { font-family: var(--font-mono); font-size: 0.84rem; overflow-wrap: anywhere; }
 .inbox-hint .subtle { color: var(--ink-soft); font-size: 0.84rem; }
+
+/* Ghép cặp điện thoại: mã QR để gửi tệp từ điện thoại sang máy tính qua mạng LAN. */
+.pairing-panel { margin-top: 14px; }
+.pairing-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.pairing-head h2 { margin: 0 0 4px; font-size: 1rem; }
+.pairing-head p { margin: 0; max-width: 62ch; font-size: 0.88rem; line-height: 1.55; }
+.pairing-head button { min-height: 44px; }
+
+.pairing-body { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+/* Nền trắng cố định: bộ đọc QR cần tương phản tối trên sáng, kể cả khi app đang ở chế độ tối. */
+.pairing-qr { padding: 10px; border-radius: var(--radius); background: #fff; line-height: 0; }
+.pairing-qr svg { display: block; width: 168px; height: 168px; }
+.pairing-meta { flex: 1 1 240px; min-width: 0; }
+.pairing-meta p { margin: 0 0 6px; font-size: 0.88rem; line-height: 1.55; }
+.pairing-url {
+  display: block; margin-top: 8px; padding: 8px 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-soft); font-family: var(--font-mono); font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}

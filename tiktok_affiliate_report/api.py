@@ -42,6 +42,7 @@ from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .db import accounts as account_registry
 from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
 from .imports import order_line_history, undo_import, undo_preview
+from .pairing import PairingRunner
 from .parser import read_xlsx
 from .reports import (
     ORDER_EXPORT_COLUMNS,
@@ -970,6 +971,62 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "rejected": int(result.get("rejected", 0)),
             "rejected_rows": result.get("rejected_rows", []),
         }
+
+    # --- Ghép cặp điện thoại ---------------------------------------------------------------
+    # Ba endpoint này nằm trên app chính nên vẫn đi qua principal + loopback guard như mọi
+    # route khác. Chúng chỉ điều khiển listener LAN chứ không nhận tệp; tệp đi vào qua listener
+    # riêng ở pairing.py, nơi không có route nào ngoài đường nhận tệp.
+
+    def _pairing(app: FastAPI) -> PairingRunner:
+        runner = getattr(app.state, "pairing", None)
+        if runner is None:
+            def nhan_tep(account: str, filename: str, data: bytes) -> dict[str, Any]:
+                # Đúng đường nhập của máy tính: cùng read_xlsx, cùng import_rows, nên chống
+                # trùng SHA-256 và mọi kiểm tra dữ liệu giữ nguyên.
+                return import_rows(
+                    _engine(app),
+                    filename=filename,
+                    file_bytes=data,
+                    account=account,
+                    rows=read_xlsx(BytesIO(data), account),
+                    uploaded_by_label="Điện thoại đã ghép cặp",
+                    auth_method="pairing",
+                    auth_subject=account,
+                )
+
+            runner = PairingRunner(nhan_tep=nhan_tep, max_upload_mb=MAX_UPLOAD_MB)
+            app.state.pairing = runner
+        return runner
+
+    @app.get("/api/v1/pairing")
+    def pairing_status_endpoint(current: Principal = Depends(principal)) -> dict[str, Any]:
+        runner = _pairing(app)
+        runner.don_neu_het_han()
+        return runner.trang_thai()
+
+    @app.post("/api/v1/pairing")
+    def pairing_start_endpoint(
+        account: str = Form(...),
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        if current.role not in {"owner", "operator"}:
+            raise HTTPException(status_code=403, detail="Ghép cặp cần quyền nhập dữ liệu")
+        account = account.strip().upper()
+        if not account or account == "ALL":
+            raise HTTPException(status_code=422, detail="Hãy chọn một tài khoản TikTok cụ thể")
+        permitted_accounts(current, [account])
+        runner = _pairing(app)
+        runner.bat(account)
+        return runner.trang_thai()
+
+    @app.delete("/api/v1/pairing")
+    def pairing_stop_endpoint(
+        _: None = Depends(csrf),
+        current: Principal = Depends(principal),
+    ) -> dict[str, Any]:
+        _pairing(app).tat()
+        return {"enabled": False}
 
     @app.get("/api/v1/imports")
     def imports_history_endpoint(
