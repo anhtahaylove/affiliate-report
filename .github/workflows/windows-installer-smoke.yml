@@ -142,12 +142,12 @@ jobs:
         shell: pwsh
         run: |
           $currentVersion = "${{ steps.version.outputs.current_version }}"
-          $installer = "artifacts\installer\AffiliateReportSetup-v$currentVersion.exe"
+          $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$currentVersion.exe"
           $checksum = "artifacts\installer\SHA256SUMS.txt"
           .\packaging\assert_no_embedded_database.ps1 -Path "build\installer-app\AffiliateReport"
           $bootstrap = "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1"
           $actualFiles = @(Get-ChildItem -LiteralPath "artifacts\installer" -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "AffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
           if (Compare-Object $actualFiles $expectedFiles) { throw "Candidate artifact directory must contain only installer, updater bootstrap and SHA256SUMS.txt" }
           $checksumLines = @(Get-Content -LiteralPath $checksum | Where-Object { $_.Trim() })
           $checksumNames = @($checksumLines | ForEach-Object {
@@ -155,9 +155,9 @@ jobs:
             if (!$match.Success) { throw "Candidate SHA256SUMS contains a malformed or unexpected entry" }
             $match.Groups[2].Value
           } | Sort-Object)
-          $expectedChecksumNames = @("AffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
+          $expectedChecksumNames = @("TikTokAffiliateReportSetup-v$currentVersion.exe", "TikTokAffiliateUpdater-v1.0.0.ps1") | Sort-Object
           if ($checksumLines.Count -ne 2 -or (Compare-Object $checksumNames $expectedChecksumNames)) { throw "Candidate SHA256SUMS must contain exactly the installer and updater bootstrap" }
-          $installerLine = @(Get-Content -LiteralPath $checksum | Where-Object { $_ -match ([regex]::Escape("AffiliateReportSetup-v$currentVersion.exe") + '$') })
+          $installerLine = @(Get-Content -LiteralPath $checksum | Where-Object { $_ -match ([regex]::Escape("TikTokAffiliateReportSetup-v$currentVersion.exe") + '$') })
           if ($installerLine.Count -ne 1) { throw "Candidate installer checksum entry is missing" }
           $expectedHash = ([regex]::Match($installerLine[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
           $actualHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
@@ -208,7 +208,7 @@ jobs:
         run: |
           $currentVersion = "${{ needs.candidate-build.outputs.current_version }}"
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Fresh `
-            -CurrentInstaller (Join-Path $PWD "candidate\AffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentInstaller (Join-Path $PWD "candidate\TikTokAffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $PWD "candidate\SHA256SUMS.txt")
           "- Fresh install: PASS" >> $env:GITHUB_STEP_SUMMARY
@@ -251,7 +251,7 @@ jobs:
           # giữ đúng tên gốc. Thử tên mới trước, không có thì lùi về tên cũ — cùng nguyên tắc
           # chuyển tiếp mà bản cài trên máy người dùng đang dùng.
           function Get-PreviousInstaller([string]$Repo, [string]$Version) {
-            foreach ($name in @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")) {
+            foreach ($name in @("TikTokAffiliateReportSetup-v$Version.exe", "AffiliateReportSetup-v$Version.exe")) {
               $dich = Join-Path $env:RUNNER_TEMP $name
               try {
                 Get-PublicAsset "https://github.com/$Repo/releases/download/v$Version/$name" $dich
@@ -272,7 +272,7 @@ jobs:
           $currentVersion = "${{ needs.candidate-build.outputs.current_version }}"
           $previousVersion = $env:PREVIOUS_STABLE_VERSION
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Upgrade `
-            -CurrentInstaller (Join-Path $PWD "candidate\AffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentInstaller (Join-Path $PWD "candidate\TikTokAffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $PWD "candidate\SHA256SUMS.txt") `
             -PreviousInstaller $env:PREVIOUS_INSTALLER `
@@ -298,7 +298,7 @@ jobs:
         run: |
           $currentVersion = "${{ needs.candidate-build.outputs.current_version }}"
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Bootstrap `
-            -CurrentInstaller (Join-Path $PWD "candidate\AffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentInstaller (Join-Path $PWD "candidate\TikTokAffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $PWD "candidate\SHA256SUMS.txt") `
             -BootstrapPath (Join-Path $PWD "candidate\TikTokAffiliateUpdater-v1.0.0.ps1")
@@ -349,7 +349,7 @@ jobs:
         run: |
           $currentVersion = $env:CURRENT_VERSION
           if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid current_version: $currentVersion" }
-          $installer = Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe"
+          $installer = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe"
           $checksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
           # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
           # nên GitHub trả 503 cho vài job là chuyện sẽ xảy ra. Tải một phát không thử lại biến
@@ -366,14 +366,14 @@ jobs:
               }
             }
           }
-          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/AffiliateReportSetup-v$currentVersion.exe" $installer
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" $installer
           Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" $checksums
       - name: Smoke fresh install
         shell: pwsh
         run: |
           $currentVersion = $env:CURRENT_VERSION
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Fresh `
-            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt")
 
@@ -395,7 +395,7 @@ jobs:
           if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid current_version: $currentVersion" }
           if ($previousVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid previous_version: $previousVersion" }
           if ([version]$previousVersion -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
-          $currentInstaller = Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe"
+          $currentInstaller = Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe"
           $currentChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt"
           $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
           # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
@@ -413,14 +413,14 @@ jobs:
               }
             }
           }
-          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/AffiliateReportSetup-v$currentVersion.exe" $currentInstaller
+          Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/TikTokAffiliateReportSetup-v$currentVersion.exe" $currentInstaller
           Get-PublicAsset "https://github.com/$env:PUBLIC_UPDATE_REPO/releases/download/v$currentVersion/SHA256SUMS.txt" $currentChecksums
           # Bản trước có thể đã phát hành TRƯỚC khi đổi tên, nên asset của nó mang tên cũ.
           # windows_installer_smoke.ps1 so tên tệp cục bộ với dòng trong SHA256SUMS.txt nên phải
           # giữ đúng tên gốc. Thử tên mới trước, không có thì lùi về tên cũ — cùng nguyên tắc
           # chuyển tiếp mà bản cài trên máy người dùng đang dùng.
           function Get-PreviousInstaller([string]$Repo, [string]$Version) {
-            foreach ($name in @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")) {
+            foreach ($name in @("TikTokAffiliateReportSetup-v$Version.exe", "AffiliateReportSetup-v$Version.exe")) {
               $dich = Join-Path $env:RUNNER_TEMP $name
               try {
                 Get-PublicAsset "https://github.com/$Repo/releases/download/v$Version/$name" $dich
@@ -441,7 +441,7 @@ jobs:
           $currentVersion = $env:CURRENT_VERSION
           $previousVersion = $env:PREVIOUS_VERSION
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Upgrade `
-            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "TikTokAffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-current.txt") `
             -PreviousInstaller $env:PREVIOUS_INSTALLER `

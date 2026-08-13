@@ -75,7 +75,7 @@ function Assert-Installer([string]$Path, [string]$Version, [string]$ChecksumFile
     # Bản phát hành TRƯỚC khi đổi thương hiệu mang tên cũ, và tên đó là vĩnh viễn — asset trên
     # GitHub không đổi tên được. Nên chấp nhận cả hai, rồi kiểm checksum theo đúng tên thật của
     # tệp đang cầm. Vẫn không nhận bừa: tên phải khớp trọn một trong hai dạng, kèm đúng phiên bản.
-    $tenHopLe = @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")
+    $tenHopLe = @("TikTokAffiliateReportSetup-v$Version.exe", "AffiliateReportSetup-v$Version.exe")
     $actualName = Split-Path -Leaf $Path
     if ($tenHopLe -notcontains $actualName) {
         throw "Installer filename is $actualName, expected one of: $($tenHopLe -join ', ')"

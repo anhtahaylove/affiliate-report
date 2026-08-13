@@ -97,7 +97,7 @@ jobs:
           # tương ứng trong SHA256SUMS.txt.
           foreach ($version in @($env:PREVIOUS_VERSION, $env:CURRENT_VERSION)) {
             $daTai = $null
-            foreach ($ten in @("AffiliateReportSetup-v$version.exe", "TikTokAffiliateReportSetup-v$version.exe")) {
+            foreach ($ten in @("TikTokAffiliateReportSetup-v$version.exe", "AffiliateReportSetup-v$version.exe")) {
               try {
                 Get-PublicAsset "https://github.com/$repo/releases/download/v$version/$ten" (Join-Path $env:RUNNER_TEMP $ten)
                 $daTai = Join-Path $env:RUNNER_TEMP $ten
