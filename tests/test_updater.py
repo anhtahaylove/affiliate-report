@@ -1303,3 +1303,21 @@ def test_ca_hai_nguon_hong_thi_bao_loi_chu_khong_im_lang(monkeypatch):
 
     with pytest.raises(updater.UpdateError, match="khong voi toi"):
         updater._latest_release_with_fallback()
+
+
+def test_ten_installer_chi_khai_o_dung_mot_cho():
+    """Sự cố khi đổi tên: có HAI chỗ kiểm tên installer, nới một chỗ mà quên chỗ kia.
+
+    Hậu quả là bản v2.0.25 nhận manifest mang tên mới rồi tự từ chối với "Installer cập nhật
+    không hợp lệ" — đúng thứ mà bản chuyển tiếp sinh ra để ngăn, và không vá được từ xa vì bản
+    đó đã nằm trên máy người dùng.
+
+    Khoá bài học: tên installer chỉ được khai một lần, ở INSTALLER_RE. Viết thêm một biểu thức
+    nội tuyến ở chỗ khác trong updater.py thì test này ĐỎ.
+    """
+    from pathlib import Path
+
+    nguon = Path("affiliate_report/updater.py").read_text(encoding="utf-8")
+    so_lan = nguon.count("AffiliateReportSetup")
+    assert so_lan == 1, f"tên installer phải khai đúng một lần trong INSTALLER_RE, đang có {so_lan}"
+    assert "INSTALLER_RE.fullmatch(installer_path.name)" in nguon, "chỗ kiểm trước khi chạy phải dùng chung INSTALLER_RE"

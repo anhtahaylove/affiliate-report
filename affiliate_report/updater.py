@@ -671,10 +671,10 @@ def _launch_update_bootstrap(
 ) -> subprocess.Popen[Any]:
     if not _windows_frozen():
         raise UpdateError("Cập nhật tự động chỉ chạy trong bản cài Windows.")
-    if not installer_path.is_file() or not re.fullmatch(
-        r"AffiliateReportSetup-v\d+\.\d+\.\d+\.exe",
-        installer_path.name,
-    ):
+    # Kiểm tên lần thứ hai, độc lập với INSTALLER_RE ở đầu tệp. Chính chỗ này bị bỏ sót khi làm
+    # bản chuyển tiếp v2.0.25: nới một chỗ mà quên chỗ kia, nên v2.0.25 vẫn từ chối gói mang tên
+    # mới. Hai chỗ kiểm cùng một thứ mà không dùng chung hằng số là cái bẫy tự đặt ra cho mình.
+    if not installer_path.is_file() or not INSTALLER_RE.fullmatch(installer_path.name):
         raise UpdateError("Installer cập nhật không hợp lệ.")
     try:
         actual_sha256 = _file_sha256(installer_path)

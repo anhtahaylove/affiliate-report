@@ -14,7 +14,12 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\artifacts\installer
-OutputBaseFilename=AffiliateReportSetup-v{#MyAppVersion}
+; Tên tệp cài đặt PHẢI giữ nguyên tên cũ ở bản này.
+; Bản v2.0.25 đang chạy trên máy người dùng có hai chỗ kiểm tên installer, và bản chuyển tiếp
+; mới nới được một chỗ — regex nội tuyến trong updater.py vẫn chỉ nhận tên cũ. Không vá được từ
+; xa. Đổi tên tệp ở bản này là mọi máy ở v2.0.25 từ chối gói cập nhật và kẹt lại vĩnh viễn.
+; Đổi được sau khi mọi máy đã lên >= v2.0.27, vì bản đó nới cả hai chỗ.
+OutputBaseFilename=TikTokAffiliateReportSetup-v{#MyAppVersion}
 SetupIconFile=app.ico
 UninstallDisplayIcon={app}\AffiliateReport.exe
 Compression=lzma2/max

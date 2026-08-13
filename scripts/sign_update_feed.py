@@ -47,9 +47,11 @@ def main() -> int:
     installer = args.installer.resolve()
     if not installer.is_file():
         raise SystemExit(f"Missing installer: {installer}")
-    expected_name = f"AffiliateReportSetup-v{args.version}.exe"
-    if installer.name != expected_name:
-        raise SystemExit(f"Installer must be named {expected_name}")
+    # Chấp nhận cả hai đời tên: bản v2.0.25 trên máy người dùng chỉ nhận tên cũ, nên gói phát
+    # hành phải giữ tên cũ cho tới khi mọi máy lên >= v2.0.27. Xem ghi chú trong AffiliateReport.iss.
+    ten_hop_le = (f"AffiliateReportSetup-v{args.version}.exe", f"TikTokAffiliateReportSetup-v{args.version}.exe")
+    if installer.name not in ten_hop_le:
+        raise SystemExit(f"Installer must be named one of: {', '.join(ten_hop_le)}")
 
     digest = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     bootstrap = args.bootstrap.resolve()
