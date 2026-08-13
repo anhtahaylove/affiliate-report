@@ -151,7 +151,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir }
             <p className="subtle">Cắm thư mục này vào Google Drive, OneDrive hoặc Syncthing là điện thoại lưu tệp xong máy tính tự nhập, khỏi phải chuyển tệp sang.</p>
           </div>
         ) : null}
-        <PairingPanel account={selectedAccount} />
+        <PairingPanel account={selectedAccount} onNhanTep={refreshHistory} />
         {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có account khả dụng</p><h3>{isOwner(user) ? "Tạo account trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp account"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một account để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi account được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo account đầu tiên</Link> : null}</div> : <>
         <ol className="workflow-steps" aria-label="Quy trình nhập dữ liệu">
           {IMPORT_STEPS.map((step, index) => <li key={step} data-state={index < activeStep ? "done" : index === activeStep ? "active" : "pending"}>{step}</li>)}

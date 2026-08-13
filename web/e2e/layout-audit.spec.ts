@@ -71,3 +71,22 @@ test("các điều khiển mobile trọng yếu có vùng chạm tối thiểu 4
   expect(summaryBox).not.toBeNull();
   expect(summaryBox!.height).toBeGreaterThanOrEqual(44);
 });
+
+test("hộp xác nhận hiện giữa màn hình chứ không dồn về góc", async ({ page }) => {
+  // Lỗi thật ở v2.0.22: hộp xác nhận cài bản cập nhật nằm ở góc trái trên, đo được (0, 0).
+  // Trình duyệt căn giữa dialog modal bằng inset:0 + margin:auto mặc định, nhưng giá trị đó
+  // bị mất nên phải nói thẳng trong CSS. Bỏ hai dòng đó ra thì test này đỏ.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/settings/update/");
+
+  const hop = page.locator("dialog.confirm-dialog").first();
+  await expect(hop).toHaveCount(1);
+  const o = await hop.evaluate((el: HTMLDialogElement) => {
+    if (!el.open) el.showModal();
+    const r = el.getBoundingClientRect();
+    return { top: r.top, left: r.left, w: r.width, h: r.height, vw: innerWidth, vh: innerHeight };
+  });
+
+  expect(Math.abs((o.vw - o.w) / 2 - o.left)).toBeLessThan(2);
+  expect(Math.abs((o.vh - o.h) / 2 - o.top)).toBeLessThan(2);
+});

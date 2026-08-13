@@ -1371,6 +1371,11 @@ tbody tr:last-child td { border-bottom: 0; }
 th[aria-sort] .sort-button span { color: var(--teal); }
 
 .confirm-dialog {
+  /* Căn giữa tường minh. Trình duyệt căn giữa dialog modal bằng `inset: 0` + `margin: auto`
+     trong bảng kiểu mặc định, nhưng ở đây giá trị đó bị mất nên hộp dồn về góc trái trên —
+     đo được ở v2.0.22: vị trí (0, 0) thay vì (345, 515). Nói thẳng ra thì không phụ thuộc nữa. */
+  inset: 0;
+  margin: auto;
   width: min(560px, calc(100vw - 32px));
   padding: 24px;
   border: 1px solid var(--line);

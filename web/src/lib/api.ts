@@ -689,6 +689,7 @@ export type PairingStatus = {
   url?: string;
   qr_svg?: string;
   expires_in?: number;
+  so_lan_nhan?: number;
 };
 
 export async function loadPairingStatus() {

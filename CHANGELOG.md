@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.23 - 2026-08-13
+
+**Gửi tệp từ điện thoại xong, máy tính tự hiện ngay.** Trước đây phải tự tải lại trang mới thấy lần nhập vừa rồi trong danh sách. Nay trang Nhập dữ liệu tự cập nhật trong vòng vài giây sau khi điện thoại gửi xong.
+
+**Sửa lỗi hộp xác nhận nằm lệch góc.** Hộp hỏi trước khi cài bản cập nhật hiện ở góc trái trên màn hình thay vì giữa. Nay căn giữa đúng, và có phép kiểm tự động canh chừng để không lệch lại.
+
 ## v2.0.22 - 2026-08-13
 
 **Sửa lỗi: mã QR không quét được.** Ảnh mã QR bị cắt mất phần rìa phải và rìa dưới, trong đó có những ô vuông định vị mà camera dựa vào để nhận ra đây là mã QR. Nhìn bằng mắt vẫn giống một mã QR bình thường nên rất khó nhận ra, nhưng điện thoại quét mãi không lên.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { loadPairingStatus, startPairing, stopPairing, type PairingStatus } from "@/lib/api";
 import { errorMessage } from "@/lib/format";
 
@@ -10,17 +10,30 @@ import { errorMessage } from "@/lib/format";
  * Mặc định TẮT, và tắt nghĩa là không có cổng nào mở trên mạng LAN. Khi bật, ứng dụng dựng
  * một listener riêng chỉ nhận tệp — không route nào khác được phục vụ ra ngoài loopback.
  */
-export function PairingPanel({ account }: { account: string }) {
+export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTep?: () => void }) {
   const [status, setStatus] = useState<PairingStatus>({ enabled: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [conLai, setConLai] = useState(0);
+  const daNhan = useRef<number | null>(null);
+
+  // Giữ callback trong ref theo đúng khuôn useApi: ghi trong effect chứ không trong lúc
+  // render, và hiệu ứng hỏi trạng thái khỏi phải dựng lại mỗi lần trang cha render.
+  const onNhanTepRef = useRef(onNhanTep);
+  useEffect(() => {
+    onNhanTepRef.current = onNhanTep;
+  });
 
   const dongBo = useCallback(async () => {
     try {
       const moi = await loadPairingStatus();
       setStatus(moi);
       setConLai(moi.expires_in ?? 0);
+      // Bộ đếm tăng nghĩa là điện thoại vừa gửi xong một tệp. Báo cho trang cha làm mới danh
+      // sách; không có bước này thì người dùng phải tự tải lại trang mới thấy lần nhập.
+      const truoc = daNhan.current;
+      daNhan.current = moi.so_lan_nhan ?? 0;
+      if (truoc !== null && (moi.so_lan_nhan ?? 0) > truoc) onNhanTepRef.current?.();
     } catch {
       // Không báo lỗi cho việc dò trạng thái nền: người dùng chưa làm gì cả.
     }
@@ -48,7 +61,9 @@ export function PairingPanel({ account }: { account: string }) {
     const dinh_gio = setTimeout(() => {
       const moi = conLai - 1;
       setConLai(moi);
-      if (moi <= 0) void dongBo();
+      // Hỏi lại mỗi 2 giây chứ không chỉ lúc hết giờ: điện thoại gửi xong thì trang này phải
+      // biết ngay để làm mới danh sách lần nhập.
+      if (moi <= 0 || moi % 2 === 0) void dongBo();
     }, 1000);
     return () => clearTimeout(dinh_gio);
   }, [status.enabled, conLai, dongBo]);

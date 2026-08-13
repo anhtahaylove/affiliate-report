@@ -170,7 +170,7 @@ def test_ghep_cap_mac_dinh_tat_va_khong_mo_cong_nao(tmp_path):
     r = client.get("/api/v1/pairing")
 
     assert r.status_code == 200
-    assert r.json() == {"enabled": False}
+    assert r.json() == {"enabled": False, "so_lan_nhan": 0}
     # Mặc định TẮT nghĩa là chưa có gì nghe trên LAN, không phải "có nghe nhưng từ chối".
     assert getattr(app.state, "pairing").state.port == 0
 

@@ -56,6 +56,9 @@ class PairingState:
 
     session: PairingSession | None = None
     port: int = 0
+    # Đếm số tệp đã nhận. Trang Nhập dữ liệu so số này giữa hai lần hỏi để biết điện thoại vừa
+    # gửi xong mà tự làm mới danh sách, thay vì bắt người dùng F5.
+    so_lan_nhan: int = 0
     _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
 
     def bat(self, account: str, *, ttl: float = TOKEN_TTL_SECONDS) -> PairingSession:
@@ -88,6 +91,7 @@ class PairingState:
 
     def danh_dau_da_dung(self, phien: PairingSession) -> None:
         phien.used_at = self._clock()
+        self.so_lan_nhan += 1
 
 
 def dia_chi_lan() -> str:
@@ -239,7 +243,7 @@ class PairingRunner:
     def trang_thai(self) -> dict[str, Any]:
         phien = self.state.session
         if phien is None or not self.state.dang_bat():
-            return {"enabled": False}
+            return {"enabled": False, "so_lan_nhan": self.state.so_lan_nhan}
         url = dia_chi_ghep_cap(self.state)
         return {
             "enabled": True,
@@ -247,6 +251,7 @@ class PairingRunner:
             "url": url,
             "qr_svg": ma_qr_svg(url),
             "expires_in": max(0, int(phien.expires_at - time.monotonic())),
+            "so_lan_nhan": self.state.so_lan_nhan,
         }
 
     # --- phần điều khiển uvicorn ---------------------------------------------------------

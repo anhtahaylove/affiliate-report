@@ -6,11 +6,11 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.22"
+        default: "2.0.23"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
-        default: "2.0.21"
+        default: "2.0.22"
   pull_request:
     branches: [main]
     paths:
