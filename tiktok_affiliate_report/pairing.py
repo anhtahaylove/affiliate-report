@@ -45,6 +45,9 @@ class PairingSession:
     account: str
     expires_at: float
     used_at: float | None = None
+    # Ảnh QR dựng một lần rồi dùng lại: trang Nhập dữ liệu hỏi trạng thái mỗi 2 giây, mà mã
+    # không đổi trong suốt phiên. Đo được dựng lại mỗi lần tốn 7,15 ms — 150 lần một phiên.
+    qr_svg: str = ""
 
     def con_hieu_luc(self, now: float) -> bool:
         return self.used_at is None and now < self.expires_at
@@ -245,11 +248,13 @@ class PairingRunner:
         if phien is None or not self.state.dang_bat():
             return {"enabled": False, "so_lan_nhan": self.state.so_lan_nhan}
         url = dia_chi_ghep_cap(self.state)
+        if not phien.qr_svg:
+            phien.qr_svg = ma_qr_svg(url)
         return {
             "enabled": True,
             "account": phien.account,
             "url": url,
-            "qr_svg": ma_qr_svg(url),
+            "qr_svg": phien.qr_svg,
             "expires_in": max(0, int(phien.expires_at - time.monotonic())),
             "so_lan_nhan": self.state.so_lan_nhan,
         }
