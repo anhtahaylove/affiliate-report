@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from tiktok_affiliate_report.accounts import (
+from affiliate_report.accounts import (
     active_account_codes,
     can_hard_delete_accounts,
     create_account,
@@ -16,7 +16,7 @@ from tiktok_affiliate_report.accounts import (
     list_accounts,
     update_account,
 )
-from tiktok_affiliate_report.db import accounts, get_engine, import_batches, import_rows, init_db, monthly_targets, order_line_versions, raw_import_rows
+from affiliate_report.db import accounts, get_engine, import_batches, import_rows, init_db, monthly_targets, order_line_versions, raw_import_rows
 from tests.test_imports import raw_row
 
 

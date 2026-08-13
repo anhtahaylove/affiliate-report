@@ -1,6 +1,6 @@
 """Chặn bộ test chạm vào database thật.
 
-db.py đặt DEFAULT_DATABASE_URL = "sqlite:///data/tiktok_affiliate_report.db", đường dẫn
+db.py đặt DEFAULT_DATABASE_URL = "sqlite:///data/affiliate_report.db", đường dẫn
 tương đối so với thư mục làm việc. Chạy pytest từ gốc repo thì get_engine() không có
 DATABASE_URL sẽ mở đúng database thật, và init_db() chạy migration lên nó. Đã xảy ra thật:
 một migration DROP COLUMN chạy vào dữ liệu 5.508 dòng của người dùng.
@@ -15,7 +15,7 @@ import os
 import tempfile
 from pathlib import Path
 
-REAL_DATABASE_PATH = "data/tiktok_affiliate_report.db"
+REAL_DATABASE_PATH = "data/affiliate_report.db"
 
 
 def _huong_ra_ngoai_db_that() -> None:

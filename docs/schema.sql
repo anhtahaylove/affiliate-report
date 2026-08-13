@@ -1,4 +1,4 @@
--- SQLite reference schema for the local TikTok Affiliate Report.
+-- SQLite reference schema for the local Affiliate Report.
 -- The application applies the tables and indexes through versioned SQLAlchemy migrations.
 -- The two views below are optional reference queries.
 

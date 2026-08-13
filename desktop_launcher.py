@@ -15,11 +15,11 @@ from typing import Callable
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
-from tiktok_affiliate_report.version import APP_VERSION
+from affiliate_report.version import APP_VERSION
 
 
 HOST = "127.0.0.1"
-MUTEX_NAME = r"Local\TikTokAffiliateReport.SingleInstance"
+MUTEX_NAME = r"Local\AffiliateReport.SingleInstance"
 ERROR_ALREADY_EXISTS = 183
 
 
@@ -169,12 +169,12 @@ def _start_tray(icon_path: Path, url: str, shutdown: Callable[[], None]):
     with Image.open(icon_path) as source:
         image = source.convert("RGBA")
     tray = pystray.Icon(
-        "TikTokAffiliateReport",
+        "AffiliateReport",
         image,
-        "TikTok Affiliate Report",
+        "Affiliate Report",
         menu=pystray.Menu(
             pystray.MenuItem(
-                "Mở TikTok Affiliate Report",
+                "Mở Affiliate Report",
                 lambda _icon, _item: webbrowser.open(url, new=2),
                 default=True,
             ),
@@ -199,8 +199,8 @@ def _start_inbox_watcher(app: object, data_dir: Path) -> None:
     Có để người dùng xuất tệp trên điện thoại rồi lưu vào một thư mục được đồng bộ (Drive,
     OneDrive, Syncthing) là máy tính tự nhập, khỏi phải chuyển tệp sang rồi mở trình duyệt.
     """
-    from tiktok_affiliate_report.accounts import active_account_codes
-    from tiktok_affiliate_report.inbox import ensure_inbox, scan_inbox
+    from affiliate_report.accounts import active_account_codes
+    from affiliate_report.inbox import ensure_inbox, scan_inbox
 
     def loop() -> None:
         engine = app.state.engine  # type: ignore[attr-defined]
@@ -222,6 +222,9 @@ def _start_inbox_watcher(app: object, data_dir: Path) -> None:
     threading.Thread(target=loop, name="inbox-watcher", daemon=True).start()
 
 
+# Hai hằng số LEGACY_* phải giữ NGUYÊN VĂN tên cũ — chúng là thứ duy nhất còn biết dữ liệu của
+# người dùng đang nằm ở đâu trước khi đổi tên. Đổi chúng theo là di trú thành vô nghĩa và người
+# dùng mở app lên thấy trống rỗng. Một lần thay chuỗi hàng loạt đã suýt làm đúng điều đó.
 LEGACY_DATA_DIR_NAME = "TikTokAffiliateReport"
 LEGACY_DATABASE_NAME = "tiktok_affiliate_report.db"
 DATABASE_NAME = "affiliate_report.db"
@@ -297,7 +300,7 @@ def main() -> None:
 
         import uvicorn
 
-        from tiktok_affiliate_report.api import app
+        from affiliate_report.api import app
 
         _start_inbox_watcher(app, data_dir)
 

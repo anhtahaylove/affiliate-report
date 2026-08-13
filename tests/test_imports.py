@@ -8,10 +8,10 @@ import pytest
 import pandas as pd
 from sqlalchemy import select
 
-from tiktok_affiliate_report.accounts import create_account
-from tiktok_affiliate_report.db import get_engine, import_rows, init_db, monthly_targets, order_line_versions, raw_import_rows
-from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
-from tiktok_affiliate_report.reports import analytics, count_orders, daily_report, monthly_kpi, orders, overview, sheets_output
+from affiliate_report.accounts import create_account
+from affiliate_report.db import get_engine, import_rows, init_db, monthly_targets, order_line_versions, raw_import_rows
+from affiliate_report.parser import EXPECTED_HEADERS, normalize_row
+from affiliate_report.reports import analytics, count_orders, daily_report, monthly_kpi, orders, overview, sheets_output
 
 
 def raw_row(
@@ -496,7 +496,7 @@ def test_dong_bi_tu_choi_khong_thuoc_ve_ky_nao():
     Riêng dòng bị từ chối thì còn không có ngày đặt đơn nào cả vì chúng chưa từng đọc được.
     Giao diện vì thế phải hiện chúng riêng kèm nhãn "từ trước tới nay".
     """
-    from tiktok_affiliate_report.reports import analytics
+    from affiliate_report.reports import analytics
 
     e = engine()
     import_rows(

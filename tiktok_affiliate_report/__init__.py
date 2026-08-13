@@ -1,1 +1,0 @@
-"""TikTok affiliate report prototype."""

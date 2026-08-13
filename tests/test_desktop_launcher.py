@@ -74,7 +74,7 @@ def test_exit_keeps_the_last_url_but_drops_the_pid(tmp_path):
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows named mutex")
 def test_windows_mutex_allows_only_one_instance(monkeypatch):
-    monkeypatch.setattr(desktop_launcher, "MUTEX_NAME", f"Local\\TikTokAffiliateReport.Tests.{os.getpid()}")
+    monkeypatch.setattr(desktop_launcher, "MUTEX_NAME", f"Local\\AffiliateReport.Tests.{os.getpid()}")
     first, first_is_primary = desktop_launcher._acquire_single_instance()
     second = None
     try:

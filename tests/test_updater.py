@@ -18,7 +18,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-import tiktok_affiliate_report.updater as updater
+import affiliate_report.updater as updater
 from scripts import sign_update_feed
 
 TEST_KEY_ID = "test-key"
@@ -54,7 +54,7 @@ def stable_feed(
     key_id: str = TEST_KEY_ID,
     **overrides,
 ):
-    name = overrides.pop("name", f"TikTokAffiliateReportSetup-v{version}.exe")
+    name = overrides.pop("name", f"AffiliateReportSetup-v{version}.exe")
     installer_info = overrides.pop("installer_info", None)
     bootstrap_info = overrides.pop("bootstrap_info", None)
     manifest = {
@@ -63,10 +63,10 @@ def stable_feed(
         "channel": updater.UPDATE_CHANNEL,
         "version": version,
         "published_at": "2026-08-04T00:00:00Z",
-        "release_url": f"https://github.com/anhtahaylove/tiktok-affiliate-report/releases/tag/v{version}",
+        "release_url": f"https://github.com/anhtahaylove/affiliate-report/releases/tag/v{version}",
         "installer": installer_info or {
             "name": name,
-            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v{version}/{name}",
+            "url": f"https://github.com/anhtahaylove/affiliate-report/releases/download/v{version}/{name}",
             "size": len(installer),
             "sha256": hashlib.sha256(installer).hexdigest().upper(),
         },
@@ -74,7 +74,7 @@ def stable_feed(
             "protocol": updater.UPDATE_BOOTSTRAP_PROTOCOL,
             "version": updater.UPDATE_BOOTSTRAP_VERSION,
             "name": updater.UPDATE_BOOTSTRAP_NAME,
-            "url": f"https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v{version}/{updater.UPDATE_BOOTSTRAP_NAME}",
+            "url": f"https://github.com/anhtahaylove/affiliate-report/releases/download/v{version}/{updater.UPDATE_BOOTSTRAP_NAME}",
             "size": len(installer),
             "sha256": hashlib.sha256(installer).hexdigest().upper(),
         },
@@ -123,7 +123,7 @@ def write_bootstrap_asset(tmp_path: Path, content: bytes = b"bootstrap") -> tupl
 
 
 def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     bootstrap = tmp_path / "TikTokAffiliateUpdater-v1.0.0.ps1"
     bootstrap.write_bytes(b"bootstrap")
@@ -140,11 +140,11 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
             "--bootstrap",
             str(bootstrap),
             "--asset-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v1.2.1/TikTokAffiliateReportSetup-v1.2.1.exe",
+            "https://github.com/anhtahaylove/affiliate-report/releases/download/v1.2.1/AffiliateReportSetup-v1.2.1.exe",
             "--bootstrap-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
+            "https://github.com/anhtahaylove/affiliate-report/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
             "--release-url",
-            "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/tag/v1.2.1",
+            "https://github.com/anhtahaylove/affiliate-report/releases/tag/v1.2.1",
             "--key-id",
             TEST_KEY_ID,
             "--output-dir",
@@ -167,7 +167,7 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
         "protocol": 1,
         "version": "1.0.0",
         "name": "TikTokAffiliateUpdater-v1.0.0.ps1",
-        "url": "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
+        "url": "https://github.com/anhtahaylove/affiliate-report/releases/download/v1.2.1/TikTokAffiliateUpdater-v1.0.0.ps1",
         "size": len(b"bootstrap"),
         "sha256": hashlib.sha256(b"bootstrap").hexdigest().upper(),
     }
@@ -184,7 +184,7 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     assert set(json.loads(manifest)) == {"schema", "app_id", "channel", "version", "published_at", "release_url", "installer", "bootstrap"}
     assert checked["available"] is True
     assert checked["installable"] is True
-    assert checked["source_repo"] == "anhtahaylove/tiktok-affiliate-report"
+    assert checked["source_repo"] == "anhtahaylove/affiliate-report"
     assert downloaded["sha256"] == hashlib.sha256(installer).hexdigest().upper()
     assert Path(downloaded["installer_path"]).read_bytes() == installer
     assert downloaded["bootstrap_protocol"] == 1
@@ -204,7 +204,7 @@ def test_manifest_accepts_new_bootstrap_version_within_supported_protocol(monkey
             "version": bootstrap_version,
             "name": bootstrap_name,
             "url": (
-                "https://github.com/anhtahaylove/tiktok-affiliate-report/releases/"
+                "https://github.com/anhtahaylove/affiliate-report/releases/"
                 f"download/v1.2.1/{bootstrap_name}"
             ),
             "size": len(bootstrap),
@@ -331,8 +331,8 @@ def test_manifest_rejects_non_https_bad_filename_size_and_tag(monkeypatch):
 
     manifest, signature, installer = stable_feed(
         installer_info={
-            "name": "TikTokAffiliateReportSetup-v1.2.1.exe",
-            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.1.exe",
+            "name": "AffiliateReportSetup-v1.2.1.exe",
+            "url": "https://example.test/AffiliateReportSetup-v1.2.1.exe",
             "size": 0,
             "sha256": "0" * 64,
         }
@@ -343,8 +343,8 @@ def test_manifest_rejects_non_https_bad_filename_size_and_tag(monkeypatch):
 
     manifest, signature, installer = stable_feed(
         installer_info={
-            "name": "TikTokAffiliateReportSetup-v1.2.1.exe",
-            "url": "https://example.test/TikTokAffiliateReportSetup-v1.2.1.exe",
+            "name": "AffiliateReportSetup-v1.2.1.exe",
+            "url": "https://example.test/AffiliateReportSetup-v1.2.1.exe",
             "size": updater.MAX_INSTALLER_BYTES + 1,
             "sha256": "0" * 64,
         }
@@ -407,14 +407,14 @@ def test_public_update_path_does_not_use_github_token_or_gh_cli(monkeypatch):
 
 
 def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     bootstrap, bootstrap_sha256 = write_bootstrap_asset(
         tmp_path,
         Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_bytes(),
     )
-    app = tmp_path / "TikTokAffiliateReport.exe"
+    app = tmp_path / "AffiliateReport.exe"
     app.write_bytes(b"app")
     system_root = tmp_path / "Windows"
     powershell = system_root / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
@@ -495,7 +495,7 @@ def test_windows_update_helper_waits_verifies_installs_and_restarts(tmp_path, mo
 
 
 def test_launch_rejects_bootstrap_changed_after_download(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v2.0.7.exe"
+    installer = tmp_path / "AffiliateReportSetup-v2.0.7.exe"
     installer.write_bytes(b"installer")
     bootstrap, expected_bootstrap_sha256 = write_bootstrap_asset(tmp_path, b"verified-bootstrap")
     bootstrap.write_bytes(b"tampered-bootstrap")
@@ -522,7 +522,7 @@ def test_launch_rejects_bootstrap_changed_after_download(tmp_path, monkeypatch):
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
 def test_windows_update_helper_replaces_existing_status_file(tmp_path):
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"not-an-installer")
     helper = Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").resolve()
     status_path = tmp_path / "update-status.json"
@@ -551,7 +551,7 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
             "-ExpectedSha256",
             "0" * 64,
             "-AppExe",
-            str(tmp_path / "TikTokAffiliateReport.exe"),
+            str(tmp_path / "AffiliateReport.exe"),
             "-LogPath",
             str(tmp_path / "updater.log"),
             "-InstallerLog",
@@ -602,7 +602,7 @@ def test_windows_bootstrap_executes_a_newer_asset_version_on_same_protocol(tmp_p
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     helper = tmp_path / "TikTokAffiliateUpdater-v1.1.0.ps1"
     helper.write_bytes(Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").read_bytes())
-    installer = tmp_path / "TikTokAffiliateReportSetup-v2.0.8.exe"
+    installer = tmp_path / "AffiliateReportSetup-v2.0.8.exe"
     installer.write_bytes(b"not-an-installer")
     status_path = tmp_path / "update-status.json"
     ack_path = tmp_path / "bootstrap-ack.json"
@@ -611,7 +611,7 @@ def test_windows_bootstrap_executes_a_newer_asset_version_on_same_protocol(tmp_p
         [
             str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
             "-File", str(helper), "-ParentPid", str(2_147_483_647), "-Installer", str(installer),
-            "-ExpectedSha256", "0" * 64, "-AppExe", str(tmp_path / "TikTokAffiliateReport.exe"),
+            "-ExpectedSha256", "0" * 64, "-AppExe", str(tmp_path / "AffiliateReport.exe"),
             "-LogPath", str(tmp_path / "updater.log"), "-InstallerLog", str(tmp_path / "installer.log"),
             "-StatusPath", str(status_path), "-TargetVersion", "2.0.8", "-InstallerSize", str(installer.stat().st_size),
             "-InstanceStatePath", str(tmp_path / "instance.json"), "-BootstrapProtocol", "1",
@@ -643,7 +643,7 @@ def test_wait_file_unlocked_detects_a_file_still_held_open_by_another_process(tm
     assert match, "Wait-FileUnlocked function not found in generated helper script"
     probe = tmp_path / "probe.ps1"
     probe.write_text(match.group(0) + "\nWrite-Output (Wait-FileUnlocked $args[0] ([int]$args[1]))\n", encoding="utf-8-sig")
-    target = tmp_path / "TikTokAffiliateReport.exe"
+    target = tmp_path / "AffiliateReport.exe"
     target.write_bytes(b"app")
 
     def run_probe(timeout_ms):
@@ -732,7 +732,7 @@ def test_wait_app_healthy_polls_instance_state_and_health_endpoint(tmp_path):
 
 
 def test_scheduled_installer_rechecks_sha256_before_launch(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"tampered")
     log_path = tmp_path / "updater.log"
     shutdown = threading.Event()
@@ -805,7 +805,7 @@ def test_update_status_is_atomic_validated_and_normalizes_installed(tmp_path):
 
 
 def test_schedule_installer_waits_for_helper_handshake_before_shutdown(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     status_path = tmp_path / "update-status.json"
@@ -855,7 +855,7 @@ def test_schedule_installer_waits_for_helper_handshake_before_shutdown(tmp_path,
 
 
 def test_schedule_installer_fails_without_helper_handshake(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     shutdown = threading.Event()
@@ -927,7 +927,7 @@ def test_stop_update_helper_escalates_when_terminate_fails():
 
 
 def test_schedule_installer_preserves_handshake_error_when_helper_cannot_stop(tmp_path, monkeypatch):
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"installer")
     expected = hashlib.sha256(installer.read_bytes()).hexdigest().upper()
     log_path = tmp_path / "updater.log"
@@ -1260,9 +1260,9 @@ def test_chap_nhan_ca_ten_asset_cu_lan_moi():
     phát hành đầu tiên mang tên mới bị chính nó từ chối, và máy kẹt vĩnh viễn ở phiên bản cũ —
     không sửa được bằng auto-update vì đường cập nhật đã đứt. Thu hẹp lại regex thì test này ĐỎ.
     """
-    from tiktok_affiliate_report.updater import BOOTSTRAP_RE, INSTALLER_RE
+    from affiliate_report.updater import BOOTSTRAP_RE, INSTALLER_RE
 
-    assert INSTALLER_RE.match("TikTokAffiliateReportSetup-v2.0.25.exe")
+    assert INSTALLER_RE.match("AffiliateReportSetup-v2.0.25.exe")
     assert INSTALLER_RE.match("AffiliateReportSetup-v2.0.26.exe")
     assert BOOTSTRAP_RE.match("TikTokAffiliateUpdater-v1.0.0.ps1")
     assert BOOTSTRAP_RE.match("AffiliateUpdater-v1.0.0.ps1")
@@ -1277,7 +1277,7 @@ def test_feed_hong_o_nguon_chinh_thi_thu_nguon_du_phong(monkeypatch):
 
     Bỏ vòng lặp dự phòng trong _latest_release_with_fallback thì test này ĐỎ.
     """
-    from tiktok_affiliate_report import updater
+    from affiliate_report import updater
 
     da_goi: list[str] = []
 
@@ -1294,7 +1294,7 @@ def test_feed_hong_o_nguon_chinh_thi_thu_nguon_du_phong(monkeypatch):
 
 
 def test_ca_hai_nguon_hong_thi_bao_loi_chu_khong_im_lang(monkeypatch):
-    from tiktok_affiliate_report import updater
+    from affiliate_report import updater
 
     def luon_hong(url: str, token: str | None = None) -> dict[str, object]:
         raise updater.UpdateError("khong voi toi")

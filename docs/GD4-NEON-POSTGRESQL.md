@@ -68,10 +68,10 @@ Google được bình thường, và chế độ `local` hiện tại không đ�
 
 ```powershell
 # Sao lưu trước, luôn luôn.
-Copy-Item data\tiktok_affiliate_report.db data\truoc-khi-chuyen-neon.db
+Copy-Item data\affiliate_report.db data\truoc-khi-chuyen-neon.db
 
 .\.venv\Scripts\python.exe scripts\migrate_sqlite_to_postgres.py `
-  --source data\tiktok_affiliate_report.db `
+  --source data\affiliate_report.db `
   --target "<chuoi-ket-noi-neon>"
 ```
 

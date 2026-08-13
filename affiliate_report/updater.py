@@ -25,12 +25,14 @@ from .version import APP_VERSION
 
 # Feed chuyển về chính repo nguồn (nay đã public) để bỏ bớt một repo phải trông.
 # Bản 2.0.10 trở về trước ghim URL cũ, nên repo cũ phải sống tới khi mọi máy đã lên >= 2.0.11.
-DEFAULT_UPDATE_FEED_URL = "https://raw.githubusercontent.com/anhtahaylove/tiktok-affiliate-report/main/stable.json"
-DEFAULT_UPDATE_REPO = "anhtahaylove/tiktok-affiliate-report"
-# Địa chỉ dự phòng cho lúc đổi tên repo. Repo sẽ đổi thành affiliate-report; bản này biết trước
-# cả hai nên dù chuyển hướng của GitHub có hoạt động hay không thì máy vẫn tìm được feed.
+DEFAULT_UPDATE_FEED_URL = "https://raw.githubusercontent.com/anhtahaylove/affiliate-report/main/stable.json"
+DEFAULT_UPDATE_REPO = "anhtahaylove/affiliate-report"
+# Địa chỉ cũ, giữ lại làm dự phòng sau khi repo đã đổi tên thành affiliate-report. Máy nào còn
+# ở bản trước v2.0.25 vẫn đọc địa chỉ này, và bản v2.0.25 biết cả hai — nên dù chuyển hướng của
+# GitHub cho raw.githubusercontent.com có hoạt động hay không thì vẫn tìm được feed. Xoá được
+# khi chắc chắn không còn máy nào chạy bản cũ hơn v2.0.26.
 FALLBACK_UPDATE_FEED_URLS = (
-    "https://raw.githubusercontent.com/anhtahaylove/affiliate-report/main/stable.json",
+    "https://raw.githubusercontent.com/anhtahaylove/tiktok-affiliate-report/main/stable.json",
 )
 UPDATE_SCHEMA = "tiktok-affiliate-report.update.v1"
 UPDATE_APP_ID = "tiktok-affiliate-report"
@@ -548,7 +550,7 @@ def public_update_issue(phase: str, error: str | None) -> tuple[str | None, str 
     if phase == "installed":
         return (
             "Đã cài bản cập nhật nhưng ứng dụng chưa tự mở lại.",
-            "Mở TikTok Affiliate Report từ Desktop hoặc Start Menu, sau đó kiểm tra lại phiên bản.",
+            "Mở Affiliate Report từ Desktop hoặc Start Menu, sau đó kiểm tra lại phiên bản.",
         )
     if any(token in normalized for token in ("sha-256", "checksum", "signature", "chữ ký", "tamper", "changed", "kích thước")):
         return (
@@ -670,7 +672,7 @@ def _launch_update_bootstrap(
     if not _windows_frozen():
         raise UpdateError("Cập nhật tự động chỉ chạy trong bản cài Windows.")
     if not installer_path.is_file() or not re.fullmatch(
-        r"TikTokAffiliateReportSetup-v\d+\.\d+\.\d+\.exe",
+        r"AffiliateReportSetup-v\d+\.\d+\.\d+\.exe",
         installer_path.name,
     ):
         raise UpdateError("Installer cập nhật không hợp lệ.")
@@ -869,7 +871,7 @@ def _parse_version(value: str) -> tuple[int, int, int]:
 def _headers(token: str | None, accept: str) -> dict[str, str]:
     headers = {
         "Accept": accept,
-        "User-Agent": f"TikTokAffiliateReport/{APP_VERSION}",
+        "User-Agent": f"AffiliateReport/{APP_VERSION}",
         "X-GitHub-Api-Version": "2026-03-10",
     }
     if token:

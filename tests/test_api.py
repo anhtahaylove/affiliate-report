@@ -12,11 +12,11 @@ import pandas as pd
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-import tiktok_affiliate_report.api as api_module
-import tiktok_affiliate_report.reset_data as reset_data_module
-from tiktok_affiliate_report.accounts import create_account
-from tiktok_affiliate_report.api import create_app
-from tiktok_affiliate_report.db import (
+import affiliate_report.api as api_module
+import affiliate_report.reset_data as reset_data_module
+from affiliate_report.accounts import create_account
+from affiliate_report.api import create_app
+from affiliate_report.db import (
     accounts,
     get_engine,
     import_batches,
@@ -24,8 +24,8 @@ from tiktok_affiliate_report.db import (
     monthly_targets,
     order_line_versions,
 )
-from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
-from tiktok_affiliate_report.version import APP_VERSION
+from affiliate_report.parser import EXPECTED_HEADERS, normalize_row
+from affiliate_report.version import APP_VERSION
 
 
 def api(tmp_path):
@@ -104,7 +104,7 @@ def test_fresh_database_has_no_user_specific_accounts_or_targets(tmp_path):
 
 def test_local_owner_can_check_and_schedule_verified_update(tmp_path, monkeypatch):
     client, _ = api(tmp_path)
-    installer = tmp_path / "TikTokAffiliateReportSetup-v1.2.1.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
     installer.write_bytes(b"verified")
     bootstrap = tmp_path / "TikTokAffiliateUpdater-v1.0.0.ps1"
     bootstrap.write_bytes(b"bootstrap")

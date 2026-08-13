@@ -11,7 +11,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
-from tiktok_affiliate_report.updater import (
+from affiliate_report.updater import (
     UPDATE_APP_ID,
     UPDATE_BOOTSTRAP_NAME,
     UPDATE_BOOTSTRAP_PROTOCOL,
@@ -47,7 +47,7 @@ def main() -> int:
     installer = args.installer.resolve()
     if not installer.is_file():
         raise SystemExit(f"Missing installer: {installer}")
-    expected_name = f"TikTokAffiliateReportSetup-v{args.version}.exe"
+    expected_name = f"AffiliateReportSetup-v{args.version}.exe"
     if installer.name != expected_name:
         raise SystemExit(f"Installer must be named {expected_name}")
 

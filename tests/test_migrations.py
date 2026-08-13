@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import inspect, select, text
 
-from tiktok_affiliate_report.api import _runtime_capabilities
-from tiktok_affiliate_report.auth import AuthService, AuthSettings
-from tiktok_affiliate_report.db import (
+from affiliate_report.api import _runtime_capabilities
+from affiliate_report.auth import AuthService, AuthSettings
+from affiliate_report.db import (
     accounts,
     get_engine,
     import_batches,
@@ -19,7 +19,7 @@ from tiktok_affiliate_report.db import (
     saved_report_views,
     user_ui_preferences,
 )
-from tiktok_affiliate_report.migrations import schema_migrations
+from affiliate_report.migrations import schema_migrations
 from tests.test_imports import raw_row
 
 

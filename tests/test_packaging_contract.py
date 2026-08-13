@@ -1,12 +1,12 @@
 import re
 from pathlib import Path
 
-from tiktok_affiliate_report.version import APP_VERSION
+from affiliate_report.version import APP_VERSION
 
 
 def test_full_installer_preserves_data_and_excludes_portable_release():
     launcher = Path("desktop_launcher.py").read_text(encoding="utf-8")
-    installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")
+    installer = Path("packaging/AffiliateReport.iss").read_text(encoding="utf-8")
     build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
     readme = Path("README.md").read_text(encoding="utf-8")
 
@@ -15,7 +15,7 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert 'Name: "{app}\\data"; Flags: uninsneveruninstall' in installer
     assert "[UninstallDelete]" not in installer
     assert ".db" not in installer
-    assert "dist\\TikTokAffiliateReport.exe" not in installer + build + readme
+    assert "dist\\AffiliateReport.exe" not in installer + build + readme
     assert "Get-FileHash -Algorithm SHA256 $setupExe, $bootstrapFile" in build
     assert "Get-FileHash -Algorithm SHA256 $appExe, $setupExe" not in build
     assert "$staleMetadata = @($checksumFile, (Join-Path $outputDir 'stable.json'), (Join-Path $outputDir 'stable.json.sig'))" in build
@@ -26,17 +26,17 @@ def test_app_ships_as_onedir_so_first_launch_never_unpacks_to_temp():
     """Bản onefile giải nén runtime ra %TEMP% mỗi lần chạy; ngay sau khi cài, antivirus quét đống
     file vừa rơi xuống và làm hỏng bước nạp python3xx.dll. onedir bỏ hẳn bước giải nén đó."""
     batch = Path("BUILD_EXE.bat").read_text(encoding="utf-8")
-    installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")
-    updater = Path("tiktok_affiliate_report/updater.py").read_text(encoding="utf-8")
+    installer = Path("packaging/AffiliateReport.iss").read_text(encoding="utf-8")
+    updater = Path("affiliate_report/updater.py").read_text(encoding="utf-8")
 
     assert "--onedir" in batch
     assert "--onefile" not in batch
     # onedir xuất ra một THƯ MỤC. Cổng riêng tư phải trỏ vào thư mục đó, không phải file .exe —
     # đổi --onedir mà quên dòng này thì build đỏ ngay ở bước cuối, đúng như đã xảy ra ở v1.3.2.
-    assert '-Path "%APP_STAGE%\\TikTokAffiliateReport"' in batch
-    assert '-Path "%APP_STAGE%\\TikTokAffiliateReport.exe"' not in batch
+    assert '-Path "%APP_STAGE%\\AffiliateReport"' in batch
+    assert '-Path "%APP_STAGE%\\AffiliateReport.exe"' not in batch
     # Installer phải chép cả thư mục, và dọn runtime cũ để không sót .dll lệch phiên bản.
-    assert 'Source: "..\\build\\installer-app\\TikTokAffiliateReport\\*"' in installer
+    assert 'Source: "..\\build\\installer-app\\AffiliateReport\\*"' in installer
     assert "recursesubdirs" in installer
     assert 'Type: filesandordirs; Name: "{app}\\_internal"' in installer
     # Dữ liệu người dùng không bao giờ nằm trong diện dọn dẹp.
@@ -48,7 +48,7 @@ def test_app_ships_as_onedir_so_first_launch_never_unpacks_to_temp():
 
 def test_v124_installer_and_release_workflow_support_verified_auto_update():
     batch = Path("BUILD_EXE.bat").read_text(encoding="utf-8")
-    installer = Path("packaging/TikTokAffiliateReport.iss").read_text(encoding="utf-8")
+    installer = Path("packaging/AffiliateReport.iss").read_text(encoding="utf-8")
     build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
 
@@ -57,27 +57,27 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert f"[string]$AppVersion = '{APP_VERSION}'" in build
     assert f'#define MyAppVersion "{APP_VERSION}"' in installer
     readme = Path("README.md").read_text(encoding="utf-8")
-    assert f"TikTokAffiliateReportSetup-v{APP_VERSION}.exe" in readme
+    assert f"AffiliateReportSetup-v{APP_VERSION}.exe" in readme
     stale = {
         line.strip()
         for line in readme.splitlines()
-        if "TikTokAffiliateReportSetup-v" in line and f"v{APP_VERSION}.exe" not in line
+        if "AffiliateReportSetup-v" in line and f"v{APP_VERSION}.exe" not in line
     }
     assert not stale, f"README còn nhắc phiên bản cũ: {stale}"
     assert "actions/checkout@v7" in workflow
     assert "actions/setup-python@v7" in workflow
     assert "pnpm/action-setup@v6" in workflow
     assert "actions/setup-node@v7" in workflow
-    assert "--hidden-import tiktok_affiliate_report.updater" in batch
-    assert "--hidden-import tiktok_affiliate_report.version" in batch
+    assert "--hidden-import affiliate_report.updater" in batch
+    assert "--hidden-import affiliate_report.version" in batch
     assert "--hidden-import pystray._win32" in batch
     # segno chỉ được nhập BÊN TRONG hàm ma_qr_svg, và pairing được nhập gián tiếp qua api.
     # Thiếu hai dòng này thì gói vẫn dựng xong, chỉ vỡ lúc người dùng bấm bật ghép cặp.
     assert "--hidden-import segno" in batch
-    assert "--hidden-import tiktok_affiliate_report.pairing" in batch
+    assert "--hidden-import affiliate_report.pairing" in batch
     assert '--add-data "%CD%\\packaging\\app.ico;packaging"' in batch
     assert 'pystray==0.19.5; sys_platform == "win32"' in Path("requirements-api.txt").read_text(encoding="utf-8")
-    assert "TikTokAffiliateReport.SingleInstance" in Path("desktop_launcher.py").read_text(encoding="utf-8")
+    assert "AffiliateReport.SingleInstance" in Path("desktop_launcher.py").read_text(encoding="utf-8")
     assert 'pystray.MenuItem("Thoát ứng dụng"' in Path("desktop_launcher.py").read_text(encoding="utf-8")
     assert "Flags: nowait postinstall skipifsilent" in installer
     assert 'tags:\n      - "v*.*.*"' in workflow
@@ -97,7 +97,7 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert r'--bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1"' in workflow
     # Một repo duy nhất từ v2.0.13: asset, feed và mã nguồn cùng chỗ. Vẫn canh để không ai
     # vô tình trỏ ngược về repo cũ.
-    assert '$repo = "anhtahaylove/tiktok-affiliate-report"' in workflow
+    assert '$repo = "anhtahaylove/affiliate-report"' in workflow
     assert "tiktok-affiliate-report-updates" not in workflow
     assert "stable.json.sig" in workflow
     assert "Downloaded release checksum mismatch" in workflow
@@ -178,7 +178,7 @@ def test_windows_installer_smoke_is_version_parameterized():
 
     assert "Assert-Installer $CurrentInstaller $CurrentVersion $CurrentChecksumFile" in smoke
     assert "Assert-Installer $PreviousInstaller $PreviousVersion $PreviousChecksumFile" in smoke
-    assert 'TikTokAffiliateReportSetup-v$Version.exe' in smoke
+    assert 'AffiliateReportSetup-v$Version.exe' in smoke
     assert "Get-Content -LiteralPath $ChecksumFile" in smoke
     assert "Get-FileHash -LiteralPath $Path -Algorithm SHA256" in smoke
     assert "'/settings/preferences'" in smoke
@@ -190,13 +190,13 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.25"
-    assert 'default: "2.0.24"' in workflow
+    assert APP_VERSION == "2.0.26"
+    assert 'default: "2.0.25"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
-    assert "TikTokAffiliateReportSetup-v$currentVersion.exe" in workflow
-    assert "TikTokAffiliateReportSetup-v$previousVersion.exe" in workflow
+    assert "AffiliateReportSetup-v$currentVersion.exe" in workflow
+    assert "AffiliateReportSetup-v$previousVersion.exe" in workflow
     assert "SHA256SUMS-current.txt" in workflow
     assert "SHA256SUMS-previous.txt" in workflow
     assert "-CurrentVersion $currentVersion" in workflow
@@ -229,7 +229,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "push:" in candidate
     assert "branches: [main]" in candidate
     for runtime_path in (
-        '"tiktok_affiliate_report/**"',
+        '"affiliate_report/**"',
         '"web/**"',
         '"packaging/**"',
         '"scripts/**"',
@@ -260,7 +260,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "$currentVersion: PASS" not in candidate
     assert "Run exact-head Windows updater helper runtime tests" in candidate
     assert "tests/test_updater.py tests/test_updater_diagnostics.py" in candidate
-    assert "TikTokAffiliateReportSetup-v*.exe" in candidate
+    assert "AffiliateReportSetup-v*.exe" in candidate
     assert "TikTokAffiliateUpdater-v1.0.0.ps1" in candidate
     assert "SHA256SUMS.txt" in candidate
     assert "stable.json" not in candidate
@@ -300,8 +300,8 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
+    assert 'default: "2.0.26"' in updater_ui
     assert 'default: "2.0.25"' in updater_ui
-    assert 'default: "2.0.24"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui

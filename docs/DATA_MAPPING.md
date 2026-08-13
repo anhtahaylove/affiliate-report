@@ -1,4 +1,4 @@
-# Mapping dữ liệu — TikTok export → TikTok Affiliate Report
+# Mapping dữ liệu — TikTok export → Affiliate Report
 
 ## 1. Grain và khoá
 

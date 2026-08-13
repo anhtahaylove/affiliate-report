@@ -6,10 +6,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, func, select
 
 from tests.test_api_auth import login, oidc_api
-from tiktok_affiliate_report.api import create_app
-from tiktok_affiliate_report.auth import AuthService, AuthSettings
-from tiktok_affiliate_report.db import app_users, get_engine, saved_report_views, user_ui_preferences
-from tiktok_affiliate_report.reset_data import (
+from affiliate_report.api import create_app
+from affiliate_report.auth import AuthService, AuthSettings
+from affiliate_report.db import app_users, get_engine, saved_report_views, user_ui_preferences
+from affiliate_report.reset_data import (
     RESTORE_CONFIRMATION_PHRASE,
     backup_sqlite_before_change,
     restore_sqlite_business_backup,

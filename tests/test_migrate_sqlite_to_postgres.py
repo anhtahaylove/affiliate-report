@@ -11,7 +11,7 @@ from sqlalchemy import select, text
 
 from scripts.migrate_sqlite_to_postgres import mask_secret, migrate
 from tests.test_imports import raw_row
-from tiktok_affiliate_report.db import (
+from affiliate_report.db import (
     accounts,
     app_users,
     get_engine,

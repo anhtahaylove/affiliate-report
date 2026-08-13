@@ -197,7 +197,7 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
 
       <ConfirmDialog
         open={askExit}
-        title="Thoát hoàn toàn TikTok Affiliate Report?"
+        title="Thoát hoàn toàn Affiliate Report?"
         confirmLabel="Thoát ứng dụng"
         busy={exiting}
         onCancel={() => setAskExit(false)}
@@ -214,7 +214,7 @@ export function AuthCard({ message }: { message: string }) {
     <main className="auth-shell">
       <section className="auth-card panel">
         <div className="brand-badge">AFF</div>
-        <h1>TikTok Affiliate Report</h1>
+        <h1>Affiliate Report</h1>
         <p>Vui lòng đăng nhập để mở trung tâm báo cáo vận hành.</p>
         <a className="button-link" href={`${apiUrl()}/auth/login`}>Đăng nhập</a>
         <p className="hint">{message}</p>

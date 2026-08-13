@@ -1,4 +1,4 @@
-# TikTok Affiliate Report
+# Affiliate Report
 
 Web app local cho Windows để import Excel export từ TikTok Affiliate, chống double-count khi file bị overlap và theo dõi hiệu suất theo từng affiliate account. UI production là **Next.js Momentum Canvas**; Python/FastAPI giữ toàn bộ parser, dedupe, versioning và công thức báo cáo.
 
@@ -16,9 +16,9 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/tiktok-affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `TikTokAffiliateReportSetup-v2.0.25.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.0.26.exe`.
 
-Installer cài theo user vào `%LOCALAPPDATA%\TikTokAffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
+Installer cài theo user vào `%LOCALAPPDATA%\AffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
 1. khởi động FastAPI trên một cổng loopback còn trống;
 2. phục vụ Next.js đã bundle cùng EXE;
@@ -33,12 +33,12 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\TikTokAffiliateReportSetup-v2.0.25.exe -Algorithm SHA256
+   Get-FileHash .\AffiliateReportSetup-v2.0.26.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
 3. Double-click setup. Vì app chưa có Authenticode, nếu SmartScreen hiện cảnh báo thì chọn **More info** → **Run anyway** sau khi đã kiểm tra hash.
-4. Giữ tuỳ chọn tạo shortcut Desktop, hoàn tất cài đặt rồi mở **TikTok Affiliate Report** từ Desktop hoặc Start Menu.
+4. Giữ tuỳ chọn tạo shortcut Desktop, hoàn tất cài đặt rồi mở **Affiliate Report** từ Desktop hoặc Start Menu.
 5. Chờ vài giây; app tự mở trình duyệt tại một địa chỉ `http://127.0.0.1:<port>` chỉ truy cập được trên chính máy đó.
 
 Lần đầu sử dụng: vào **Accounts** tạo account, vào **Imports** chọn account và upload file TikTok `.xlsx`, sau đó xem **Dashboard**/**Analytics** và đặt KPI tại **Targets**. Scope **ALL** tự tổng hợp các account; không upload file vào **ALL**.
@@ -49,21 +49,21 @@ Lần đầu sử dụng: vào **Accounts** tạo account, vào **Imports** ch�
 - App không có cửa sổ desktop riêng; trình duyệt chính là giao diện. Đóng tab trình duyệt không dừng backend.
 - Muốn dừng hoàn toàn: dùng nút **Thoát ứng dụng** trên web app, hoặc nhấp phải biểu tượng tray và chọn **Thoát ứng dụng**.
 - Muốn mở lại dashboard khi app đang chạy: double-click biểu tượng tray hoặc mở shortcut lần nữa.
-- Nếu trình duyệt không tự mở: mở shortcut lần nữa hoặc chọn **Mở TikTok Affiliate Report** trong tray. Log chẩn đoán nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\launcher.log`.
+- Nếu trình duyệt không tự mở: mở shortcut lần nữa hoặc chọn **Mở Affiliate Report** trong tray. Log chẩn đoán nằm tại `%LOCALAPPDATA%\AffiliateReport\data\launcher.log`.
 - Nếu app bị chặn khi cài/chạy: kiểm tra SmartScreen/antivirus và xác minh SHA-256 trước khi cho phép.
 - Update hoặc cài lại giữ nguyên database. Muốn xoá lịch sử, dùng **Settings → Data → Reset Data** để app backup trước; không dùng reinstall để reset.
 
-Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\tiktok_affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
+Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\AffiliateReport\data\affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
 
 Mỗi máy cài đặt hoạt động độc lập với database riêng. Người dùng chỉ cần cài full installer rồi chạy local; domain, Cloudflare Tunnel, OIDC và PostgreSQL chỉ cần khi chủ động chuyển sang mô hình dùng chung nhiều người.
 
-Owner có thể dùng mục **Reset Data** trong dashboard local. App bắt buộc nhập cụm xác nhận, tạo backup đầy đủ tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\backups`, kiểm tra backup rồi mới xoá lịch sử import và đơn hàng. Account, target, cấu hình đăng nhập và tùy chọn giao diện được giữ nguyên.
+Owner có thể dùng mục **Reset Data** trong dashboard local. App bắt buộc nhập cụm xác nhận, tạo backup đầy đủ tại `%LOCALAPPDATA%\AffiliateReport\data\backups`, kiểm tra backup rồi mới xoá lịch sử import và đơn hàng. Account, target, cấu hình đăng nhập và tùy chọn giao diện được giữ nguyên.
 
 Mục **Khôi phục backup** liệt kê thời gian, dung lượng và row counts để xem trước. Restore chỉ thay các bảng dữ liệu báo cáo, giữ nguyên user/session đang dùng và luôn tạo thêm một safety backup của trạng thái hiện tại trước khi ghi đè.
 
-Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. App đọc public feed `stable.json` + `stable.json.sig` từ `anhtahaylove/tiktok-affiliate-report`, xác minh chữ ký Ed25519 bằng public key ghim trong app, rồi mới tải installer HTTPS đúng tên/kích thước/SHA-256. Không cần GitHub token trên máy người dùng; biến `TIKTOK_REPORT_UPDATE_FEED_URL` chỉ dùng được khi chạy source/dev, không dùng trong bản cài frozen.
+Mục **Cập nhật phiên bản** tự check một lần khi owner mở dashboard và có nút kiểm tra lại. App đọc public feed `stable.json` + `stable.json.sig` từ `anhtahaylove/affiliate-report`, xác minh chữ ký Ed25519 bằng public key ghim trong app, rồi mới tải installer HTTPS đúng tên/kích thước/SHA-256. Không cần GitHub token trên máy người dùng; biến `TIKTOK_REPORT_UPDATE_FEED_URL` chỉ dùng được khi chạy source/dev, không dùng trong bản cài frozen.
 
-Kết quả helper/installer được ghi tại `%LOCALAPPDATA%\TikTokAffiliateReport\data\updater.log` và thư mục `data\updates\v<version>` để chẩn đoán nếu update bị Windows hoặc antivirus chặn.
+Kết quả helper/installer được ghi tại `%LOCALAPPDATA%\AffiliateReport\data\updater.log` và thư mục `data\updates\v<version>` để chẩn đoán nếu update bị Windows hoặc antivirus chặn.
 
 Artifact hiện cố ý **không code-sign**; Windows SmartScreen có thể cảnh báo và làm gián đoạn bước cài tự động cho tới khi người dùng chấp thuận. SHA-256 xác minh integrity, không thay thế publisher trust.
 
@@ -104,7 +104,7 @@ Mở `http://127.0.0.1:3000`; API local ở `http://127.0.0.1:8000`. `AUTH_MODE=
 Shared multi-user cần PostgreSQL, OIDC provider thật, TLS/reverse proxy và secret injection ngoài Git:
 
 ```powershell
-$env:DATABASE_URL = 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/tiktok_affiliate_report'
+$env:DATABASE_URL = 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/affiliate_report'
 $env:AUTH_MODE = 'oidc'
 $env:OIDC_ISSUER = 'https://id.example.com'
 $env:OIDC_CLIENT_ID = '<CLIENT_ID>'
@@ -128,8 +128,8 @@ Chuyển database SQLite local sang PostgreSQL rỗng:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\migrate_sqlite_to_postgres.py `
-  --source data\tiktok_affiliate_report.db `
-  --target 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/tiktok_affiliate_report'
+  --source data\affiliate_report.db `
+  --target 'postgresql+psycopg://app:<PASSWORD>@127.0.0.1:5432/affiliate_report'
 ```
 
 Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy session/OIDC state, rồi kiểm tra row counts và PostgreSQL sequences.
@@ -143,7 +143,7 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\TikTokAffiliateReportSetup-v2.0.25.exe`
+- `artifacts\installer\AffiliateReportSetup-v2.0.26.exe`
 - `artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
@@ -159,7 +159,7 @@ winget install --id JRSoftware.InnoSetup --exact
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m compileall -q tiktok_affiliate_report scripts tests desktop_launcher.py
+.\.venv\Scripts\python.exe -m compileall -q affiliate_report scripts tests desktop_launcher.py
 .\.venv\Scripts\python.exe -m pip check
 pnpm --dir web lint
 pnpm --dir web test:unit

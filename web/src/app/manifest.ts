@@ -4,7 +4,7 @@ export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "TikTok Affiliate Report",
+    name: "Affiliate Report",
     short_name: "Affiliate Report",
     description: "Dashboard báo cáo TikTok Affiliate từ dữ liệu export",
     start_url: "/",

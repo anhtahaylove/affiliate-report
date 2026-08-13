@@ -147,7 +147,7 @@ export function OrdersPage({ filters, directory }: { filters: UrlFilters; direct
               {ORDER_PAGE_SIZES.map((size) => <option key={size} value={size}>{size}</option>)}
             </select>
           </label>
-          <a className="button-link" download="tiktok-affiliate-orders.xlsx" href={ordersExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end, search: filters.search })}>Xuất toàn bộ ra Excel</a>
+          <a className="button-link" download="affiliate-orders.xlsx" href={ordersExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end, search: filters.search })}>Xuất toàn bộ ra Excel</a>
           <button type="button" onClick={() => downloadCsv(`orders-${filters.start}-${filters.end}.csv`, orders)} disabled={!orders.length}>Xuất CSV trang này</button>
         </div>
         <details className="column-controls">

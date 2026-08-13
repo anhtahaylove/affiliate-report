@@ -10,11 +10,11 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
 
 from tests.test_api import normalized, raw_export_row, xlsx_bytes
-from tiktok_affiliate_report.accounts import create_account
-from tiktok_affiliate_report.api import create_app
-from tiktok_affiliate_report.auth import AuthService, AuthSettings
-import tiktok_affiliate_report.reset_data as reset_data_module
-from tiktok_affiliate_report.db import (
+from affiliate_report.accounts import create_account
+from affiliate_report.api import create_app
+from affiliate_report.auth import AuthService, AuthSettings
+import affiliate_report.reset_data as reset_data_module
+from affiliate_report.db import (
     app_users,
     auth_sessions,
     get_engine,
@@ -399,7 +399,7 @@ def test_reset_data_is_owner_only_and_rejects_shared_sqlite(tmp_path):
     assert blocked.status_code == 409
     assert "shared" in blocked.json()["detail"].lower()
 
-    capability = __import__("tiktok_affiliate_report.api", fromlist=["_runtime_capabilities"])._runtime_capabilities(shared_client.app)
+    capability = __import__("affiliate_report.api", fromlist=["_runtime_capabilities"])._runtime_capabilities(shared_client.app)
     assert capability["data_admin"]["available"] is False
     assert "shared sqlite" in capability["data_admin"]["reason"].lower()
     assert capability["update_check"]["available"] is False

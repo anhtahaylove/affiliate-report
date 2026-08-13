@@ -1,4 +1,4 @@
-# TikTok Affiliate Report PWA
+# Affiliate Report PWA
 
 Next.js/PWA Operations Cockpit cho FastAPI. Đây là UI production dùng chung cho browser, bộ cài Windows hiện tại và các wrapper Tauri/Capacitor khi có nhu cầu native thật.
 

@@ -16,8 +16,8 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
     throw 'This destructive updater UI smoke only runs on an ephemeral GitHub Actions runner.'
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport'
-$appExe = Join-Path $installDir 'TikTokAffiliateReport.exe'
+$installDir = Join-Path $env:LOCALAPPDATA 'AffiliateReport'
+$appExe = Join-Path $installDir 'AffiliateReport.exe'
 $dataDir = Join-Path $installDir 'data'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E729344A-643D-4B99-98B4-455B79060530}_is1'
 $markerCode = 'UPDATER_SMOKE'
@@ -33,7 +33,7 @@ function Assert-Installer([string]$Path, [string]$Version, [string]$ChecksumFile
     Assert-Version $Version
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Installer not found for v$Version." }
     if (!(Test-Path -LiteralPath $ChecksumFile -PathType Leaf)) { throw "Checksum file not found for v$Version." }
-    $expectedName = "TikTokAffiliateReportSetup-v$Version.exe"
+    $expectedName = "AffiliateReportSetup-v$Version.exe"
     if ((Split-Path -Leaf $Path) -ne $expectedName) { throw "Installer filename does not match v$Version." }
     $escapedName = [regex]::Escape($expectedName)
     $matches = @(Get-Content -LiteralPath $ChecksumFile | Where-Object { $_ -match "^([A-Fa-f0-9]{64})\s+\*?$escapedName$" })
@@ -82,7 +82,7 @@ function Start-App {
 
 function Stop-App {
     for ($attempt = 1; $attempt -le 20; $attempt++) {
-        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'TikTokAffiliateReport.exe'" |
+        $processes = @(Get-CimInstance Win32_Process -Filter "Name = 'AffiliateReport.exe'" |
             Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq [IO.Path]::GetFullPath($appExe) })
         if ($processes.Count -eq 0) { return }
         $processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }

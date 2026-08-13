@@ -441,7 +441,7 @@ def _xlsx_response(df: pd.DataFrame, filename: str, sheet_name: str) -> Streamin
 
 def create_app(engine: Engine | None = None, auth: AuthService | None = None) -> FastAPI:
     app = FastAPI(
-        title="TikTok Affiliate Report API",
+        title="Affiliate Report API",
         description="Phase-2 API with local-safe mode, OIDC sessions and account-scoped RBAC.",
         version=APP_VERSION,
     )
@@ -911,7 +911,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> StreamingResponse:
         accounts = permitted_accounts(current, _list(account))
         df = orders(_engine(app), accounts, start, end, _list(status), search)
-        return _xlsx_response(df[ORDER_EXPORT_COLUMNS], "tiktok-affiliate-orders.xlsx", "Orders")
+        return _xlsx_response(df[ORDER_EXPORT_COLUMNS], "affiliate-orders.xlsx", "Orders")
 
     @app.get("/api/v1/reports/daily.xlsx")
     def daily_export_endpoint(
@@ -923,7 +923,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     ) -> StreamingResponse:
         accounts = permitted_accounts(current, _list(account))
         df = sheets_output(_engine(app), accounts, start, end, _list(status))
-        return _xlsx_response(df, "tiktok-affiliate-daily-report.xlsx", "Daily report")
+        return _xlsx_response(df, "affiliate-daily-report.xlsx", "Daily report")
 
     @app.post("/api/v1/imports")
     async def imports_endpoint(

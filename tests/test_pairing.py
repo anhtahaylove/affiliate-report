@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from tiktok_affiliate_report.pairing import (
+from affiliate_report.pairing import (
     PairingError,
     PairingState,
     create_pair_app,
@@ -154,9 +154,9 @@ def test_dia_chi_ghep_cap_bao_loi_khi_chua_bat(state):
 
 
 def api_client(tmp_path):
-    from tiktok_affiliate_report.accounts import create_account
-    from tiktok_affiliate_report.api import create_app
-    from tiktok_affiliate_report.db import get_engine
+    from affiliate_report.accounts import create_account
+    from affiliate_report.api import create_app
+    from affiliate_report.db import get_engine
 
     engine = get_engine(f"sqlite:///{(tmp_path / 'pairing.db').as_posix()}")
     app = create_app(engine)
@@ -185,7 +185,7 @@ def test_cong_lan_tu_dong_dong_khi_ma_het_han_khong_can_ai_hoi(monkeypatch):
     import socket
     import time
 
-    from tiktok_affiliate_report.pairing import PairingRunner
+    from affiliate_report.pairing import PairingRunner
 
     def cong_dang_mo(port: int) -> bool:
         s = socket.socket()

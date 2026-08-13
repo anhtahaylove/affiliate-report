@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.26 - 2026-08-13
+
+**Ứng dụng đổi tên thành Affiliate Report.** Tên cũ chứa nhãn hiệu TikTok nên đổi sang tên trung tính. Ứng dụng vẫn đọc đúng tệp Excel TikTok Shop xuất ra như trước — không đổi gì về cách dùng.
+
+Thư mục cài, tên tệp cài đặt và tên tệp dữ liệu đều đổi theo. Dữ liệu của bạn được chuyển sang chỗ mới tự động khi mở app lần đầu, và bản cũ vẫn được giữ lại nguyên vẹn làm dự phòng — không xoá gì.
+
+Tệp Excel xuất ra từ trang Đơn hàng và Tổng quan cũng đổi tên tương ứng.
+
 ## v2.0.25 - 2026-08-13
 
 **Cảnh báo “110 vấn đề” thật ra không có vấn đề nào.** Trang Phân tích lâu nay đếm mọi đơn chưa được TikTok quyết toán là “vấn đề dữ liệu”. Đó là tình trạng bình thường — TikTok để trống ngày quyết toán cho tới khi trả tiền. Kiểm trên toàn bộ dữ liệu của bạn: cả 1.171 dòng bị cảnh báo đều thuộc loại này, không có lỗi thật nào.
@@ -51,7 +59,7 @@ Mặc định tắt, và tắt nghĩa là không có cổng nào mở trên mạ
 **Thả tệp vào thư mục, ứng dụng tự nhập.** Bạn xuất tệp TikTok trên điện thoại rồi phải chuyển sang máy tính mới nhập được — đó là bước cực nhất trong cả quy trình. Nay có thêm một thư mục nhập tự động:
 
 ```
-...\TikTokAffiliateReport\data\inbox\<MÃ ACCOUNT>```
+...\AffiliateReport\data\inbox\<MÃ ACCOUNT>```
 
 Chép tệp `.xlsx` vào thư mục con mang tên account là xong. Ứng dụng quét mỗi 15 giây, nhập rồi dời tệp sang `.done`; tệp lỗi sang `.failed` kèm ghi chú lý do. Đường dẫn thật hiện ngay trên trang **Nhập dữ liệu**.
 
@@ -342,7 +350,7 @@ Lỗi này chỉ ảnh hưởng phần hiển thị tiến độ; hoa hồng, GM
 
 ## v1.3.3 - 2026-08-11
 
-**Khi app đã đóng, màn hình không còn hiện "Failed to fetch".** Nếu bạn chọn Thoát ứng dụng từ biểu tượng khay hệ thống mà vẫn còn tab trình duyệt đang mở, tab đó mất kết nối và trước đây hiện đúng dòng chữ tiếng Anh của trình duyệt, không nói được phải làm gì. Giờ nó nói thẳng: hãy mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu rồi tải lại trang.
+**Khi app đã đóng, màn hình không còn hiện "Failed to fetch".** Nếu bạn chọn Thoát ứng dụng từ biểu tượng khay hệ thống mà vẫn còn tab trình duyệt đang mở, tab đó mất kết nối và trước đây hiện đúng dòng chữ tiếng Anh của trình duyệt, không nói được phải làm gì. Giờ nó nói thẳng: hãy mở lại Affiliate Report từ Desktop hoặc Start Menu rồi tải lại trang.
 
 **Chờ app mở lại sau khi cập nhật lâu hơn trước khi báo lỗi.** Đo trên máy thật: mở app ngay sau khi cài mất 2-4 giây, nhưng mở nguội (máy nghỉ lâu, phần mềm diệt virus quét lại gần 1.800 file) có lần mất tới 35 giây. Ngưỡng cũ 45 giây quá sát con số đó nên máy chậm hơn một chút là bị báo nhầm "chưa tự mở lại được" dù app vẫn đang khởi động bình thường. Nâng lên 90 giây; chờ lâu không còn gây hại gì kể từ khi bỏ việc mở app lần thứ hai ở v1.3.2.
 
@@ -466,7 +474,7 @@ Không có thay đổi tính năng so với v1.3.0 — toàn bộ nội dung bê
 
 - Auto-update chuyển sang public signed feed `stable.json` + `stable.json.sig`, không cần token ở máy người dùng.
 - App ghim Ed25519 `key_id`, chặn manifest sai chữ ký, downgrade, non-HTTPS, sai tên installer, sai kích thước hoặc sai SHA-256.
-- Release workflow tạo private release bốn asset rồi mirror installer, checksum và signed stable feed sang `anhtahaylove/tiktok-affiliate-report-updates`.
+- Release workflow tạo private release bốn asset rồi mirror installer, checksum và signed stable feed sang `anhtahaylove/affiliate-report-updates`.
 
 ## v1.1.1 - 2026-08-03
 

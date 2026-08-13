@@ -19,7 +19,7 @@ function updateErrorInfo(reason: unknown) {
     if (reason.status === 0) {
       return {
         message: "Không thể kết nối với ứng dụng để kiểm tra cập nhật.",
-        action: "Mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.",
+        action: "Mở lại Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.",
       };
     }
     if ([401, 403].includes(reason.status)) {
@@ -207,7 +207,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
             setInstalling(false);
             setBusy(false);
             setMessage("Ứng dụng chưa kết nối lại sau 90 giây.");
-            setNextAction("Mở TikTok Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.");
+            setNextAction("Mở Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.");
             return;
           }
           setMessage("Ứng dụng đang đóng để cài đặt. Đang chờ kết nối lại…");
@@ -315,7 +315,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
       <div className="update-release-row">
         <div>
           <p className="section-label">Bản phát hành</p>
-          <h3>{status?.release_name || (targetVersion ? `TikTok Affiliate Report ${targetVersion}` : "Chưa có thông tin bản phát hành")}</h3>
+          <h3>{status?.release_name || (targetVersion ? `Affiliate Report ${targetVersion}` : "Chưa có thông tin bản phát hành")}</h3>
           <p>{status?.published_at ? `Phát hành ${formatDateTime(status.published_at)}` : "Thông tin sẽ xuất hiện sau khi kiểm tra cập nhật."}</p>
           {status?.source_repo ? <p className="source-repo">Nguồn: {status.source_repo}</p> : null}
         </div>

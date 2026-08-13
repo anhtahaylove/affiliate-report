@@ -1,7 +1,7 @@
 import os
 
-from tiktok_affiliate_report.auth import is_loopback_host
-from tiktok_affiliate_report.api import app
+from affiliate_report.auth import is_loopback_host
+from affiliate_report.api import app
 
 if __name__ == "__main__":
     import uvicorn

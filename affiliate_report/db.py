@@ -34,7 +34,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .parser import file_sha256
 
-DEFAULT_DATABASE_URL = "sqlite:///data/tiktok_affiliate_report.db"
+DEFAULT_DATABASE_URL = "sqlite:///data/affiliate_report.db"
 ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_-]{1,64}$")
 ANALYTICS_RAW_FIELDS = {
     "product_id": "ID sản phẩm",

@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from tiktok_affiliate_report.accounts import create_account
-from tiktok_affiliate_report.db import get_engine, import_rows, init_db
-from tiktok_affiliate_report.imports import order_line_history, undo_import, undo_preview
-from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row
-from tiktok_affiliate_report.reports import orders, overview
+from affiliate_report.accounts import create_account
+from affiliate_report.db import get_engine, import_rows, init_db
+from affiliate_report.imports import order_line_history, undo_import, undo_preview
+from affiliate_report.parser import EXPECTED_HEADERS, normalize_row
+from affiliate_report.reports import orders, overview
 
 
 def raw_row(order="O1", sku="S1", gmv="100.000", commission="10.000", account="CHIISTORE", status="Đã quyết toán"):

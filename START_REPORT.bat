@@ -35,11 +35,11 @@ if not exist "web\out\index.html" (
 )
 
 if /i "%~1"=="--check" (
-    "%PYTHON%" -c "from pathlib import Path; from tiktok_affiliate_report.db import get_engine, init_db; init_db(get_engine('sqlite:///:memory:')); assert Path('web/out/index.html').is_file(); print('Local web app check OK')"
+    "%PYTHON%" -c "from pathlib import Path; from affiliate_report.db import get_engine, init_db; init_db(get_engine('sqlite:///:memory:')); assert Path('web/out/index.html').is_file(); print('Local web app check OK')"
     exit /b %errorlevel%
 )
 
-echo Dang mo TikTok Affiliate Report trong trinh duyet...
+echo Dang mo Affiliate Report trong trinh duyet...
 "%PYTHON%" desktop_launcher.py
 exit /b %errorlevel%
 

@@ -6,9 +6,9 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from sqlalchemy import select
 
-from tiktok_affiliate_report.accounts import create_account
-from tiktok_affiliate_report.auth import AuthService, AuthSettings, _hash
-from tiktok_affiliate_report.db import app_users, auth_sessions, get_engine, init_db, oidc_login_states
+from affiliate_report.accounts import create_account
+from affiliate_report.auth import AuthService, AuthSettings, _hash
+from affiliate_report.db import app_users, auth_sessions, get_engine, init_db, oidc_login_states
 
 
 def service(tmp_path, **updates):

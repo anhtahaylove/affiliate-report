@@ -1,8 +1,8 @@
-# PRD — TikTok Affiliate Report MVP
+# PRD — Affiliate Report MVP
 
 ## 1. Tóm tắt
 
-TikTok Affiliate Report là web app nội bộ chạy local trên Windows, giúp người vận hành upload các file Excel xuất từ TikTok, tự động loại trùng giữa các lần export bị chồng dữ liệu, và xem báo cáo ngày/tháng theo cùng logic đang dùng trong `REPORT AFF.xlsx`.
+Affiliate Report là web app nội bộ chạy local trên Windows, giúp người vận hành upload các file Excel xuất từ TikTok, tự động loại trùng giữa các lần export bị chồng dữ liệu, và xem báo cáo ngày/tháng theo cùng logic đang dùng trong `REPORT AFF.xlsx`.
 
 MVP production dùng Next.js Operations Cockpit do FastAPI phục vụ trên loopback và một cơ sở dữ liệu SQLite tại máy local. Không cần queue, microservice, data warehouse, Docker hay dịch vụ database riêng.
 
@@ -180,7 +180,7 @@ flowchart TB
     W --> A["FastAPI loopback"]
     A --> P["Parser + validation"]
     A --> R["Reporting queries"]
-    P --> DB[("SQLite local: data/tiktok_affiliate_report.db")]
+    P --> DB[("SQLite local: data/affiliate_report.db")]
     R --> DB
 ```
 
@@ -219,7 +219,7 @@ Migration chạy khi app khởi động. Bản đầu chỉ additive/adopt schem
 
 ### 7.8 Vận hành local
 
-- Database mặc định nằm tại `data/tiktok_affiliate_report.db`; không commit file database thật.
+- Database mặc định nằm tại `data/affiliate_report.db`; không commit file database thật.
 - Backup bằng cách copy file SQLite khi app đã tắt.
 - Không log toàn bộ row chứa dữ liệu nhạy cảm.
 

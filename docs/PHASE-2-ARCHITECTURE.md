@@ -54,7 +54,7 @@ Sở hữu render, filter, upload UI, navigation, responsive behavior và app-sh
 
 Python:
 
-- `tiktok_affiliate_report/api.py`
+- `affiliate_report/api.py`
 - `run_api.py`
 - `requirements-api.txt`
 - `tests/test_api.py`

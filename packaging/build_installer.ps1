@@ -1,20 +1,20 @@
 param(
     [switch]$SkipAppBuild,
-    [string]$AppVersion = '2.0.25'
+    [string]$AppVersion = '2.0.26'
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 # onedir: staging là một THƯ MỤC (exe + _internal), không còn là một file .exe đơn lẻ.
-$appDir = Join-Path $root 'build\installer-app\TikTokAffiliateReport'
+$appDir = Join-Path $root 'build\installer-app\AffiliateReport'
 $outputDir = Join-Path $root 'artifacts\installer'
-$setupExe = Join-Path $root "artifacts\installer\TikTokAffiliateReportSetup-v$AppVersion.exe"
+$setupExe = Join-Path $root "artifacts\installer\AffiliateReportSetup-v$AppVersion.exe"
 $checksumFile = Join-Path $root 'artifacts\installer\SHA256SUMS.txt'
 $bootstrapSource = Join-Path $root 'packaging\TikTokAffiliateUpdater-v1.0.0.ps1'
 $bootstrapFile = Join-Path $outputDir 'TikTokAffiliateUpdater-v1.0.0.ps1'
 $staleMetadata = @($checksumFile, (Join-Path $outputDir 'stable.json'), (Join-Path $outputDir 'stable.json.sig'))
-$installerScript = Join-Path $PSScriptRoot 'TikTokAffiliateReport.iss'
+$installerScript = Join-Path $PSScriptRoot 'AffiliateReport.iss'
 $privacyGate = Join-Path $PSScriptRoot 'assert_no_embedded_database.ps1'
 $iscc = @(
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
@@ -34,7 +34,7 @@ if (!(Test-Path -LiteralPath $bootstrapSource -PathType Leaf)) { throw "Missing 
 if (!$iscc) { throw 'Inno Setup 6 is required. Install it with: winget install --id JRSoftware.InnoSetup --exact' }
 
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-Get-ChildItem -LiteralPath $outputDir -Filter 'TikTokAffiliateReportSetup*.exe' -File | Remove-Item -Force
+Get-ChildItem -LiteralPath $outputDir -Filter 'AffiliateReportSetup*.exe' -File | Remove-Item -Force
 Get-ChildItem -LiteralPath $outputDir -Filter 'TikTokAffiliateUpdater-*.ps1' -File | Remove-Item -Force
 Remove-Item -LiteralPath $staleMetadata -Force -ErrorAction SilentlyContinue
 

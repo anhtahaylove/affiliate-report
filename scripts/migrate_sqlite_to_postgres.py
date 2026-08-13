@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tiktok_affiliate_report.db import (
+from affiliate_report.db import (
     accounts,
     app_users,
     get_engine,
@@ -24,7 +24,7 @@ from tiktok_affiliate_report.db import (
     raw_import_rows,
     user_account_access,
 )
-from tiktok_affiliate_report.migrations import apply_migrations
+from affiliate_report.migrations import apply_migrations
 
 COPY_TABLES = (
     accounts,

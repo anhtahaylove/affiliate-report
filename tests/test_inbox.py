@@ -11,10 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_api import raw_export_row  # noqa: E402
 
-from tiktok_affiliate_report import inbox  # noqa: E402
-from tiktok_affiliate_report.accounts import create_account  # noqa: E402
-from tiktok_affiliate_report.db import get_engine, init_db  # noqa: E402
-from tiktok_affiliate_report.parser import EXPECTED_HEADERS  # noqa: E402
+from affiliate_report import inbox  # noqa: E402
+from affiliate_report.accounts import create_account  # noqa: E402
+from affiliate_report.db import get_engine, init_db  # noqa: E402
+from affiliate_report.parser import EXPECTED_HEADERS  # noqa: E402
 
 
 def _engine(tmp_path: Path):

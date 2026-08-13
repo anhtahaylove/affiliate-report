@@ -437,7 +437,7 @@ export type DataQuality = {
 };
 
 export const NETWORK_ERROR_MESSAGE =
-  "Không kết nối được tới ứng dụng. Nếu bạn vừa chọn Thoát ứng dụng thì hãy mở lại TikTok Affiliate Report từ Desktop hoặc Start Menu, rồi tải lại trang này.";
+  "Không kết nối được tới ứng dụng. Nếu bạn vừa chọn Thoát ứng dụng thì hãy mở lại Affiliate Report từ Desktop hoặc Start Menu, rồi tải lại trang này.";
 
 export class ApiError extends Error {
   public readonly status: number;

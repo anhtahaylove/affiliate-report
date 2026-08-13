@@ -17,7 +17,7 @@ def test_updater_diagnostic_scrubber_removes_paths_and_complete_credentials(tmp_
     source.write_text(
         "\n".join(
             [
-                r"c:\users\RUNNER\appdata\local\tiktokaffiliatereport\data\updater.log",
+                r"c:\users\RUNNER\appdata\local\affiliatereport\data\updater.log",
                 f"Authorization: Bearer {secret_values[0]}",
                 f'{{"authorization":"Bearer {secret_values[1]}"}}',
                 f"UPDATE_FEED_TOKEN={secret_values[2]}",
@@ -32,7 +32,7 @@ def test_updater_diagnostic_scrubber_removes_paths_and_complete_credentials(tmp_
 param([string]$Scrubber, [string]$Source)
 . $Scrubber
 $text = [System.IO.File]::ReadAllText($Source)
-$paths = @{ 'C:\Users\runner\AppData\Local\TikTokAffiliateReport' = '[install dir]' }
+$paths = @{ 'C:\Users\runner\AppData\Local\AffiliateReport' = '[install dir]' }
 Write-Output (ConvertTo-ScrubbedUpdaterText -Text $text -PathReplacements $paths)
 ''',
         encoding="utf-8-sig",

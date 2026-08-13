@@ -5,7 +5,7 @@ from io import BytesIO
 import pandas as pd
 import pytest
 
-from tiktok_affiliate_report.parser import EXPECTED_HEADERS, normalize_row, normalize_status, parse_date, parse_int, read_xlsx
+from affiliate_report.parser import EXPECTED_HEADERS, normalize_row, normalize_status, parse_date, parse_int, read_xlsx
 
 
 def raw_row(**overrides):
@@ -119,7 +119,7 @@ def test_read_xlsx_rejects_excessive_row_count(monkeypatch):
         def __len__(self):
             return 50_001
 
-    monkeypatch.setattr("tiktok_affiliate_report.parser.pd.read_excel", lambda *args, **kwargs: OversizedSheet())
+    monkeypatch.setattr("affiliate_report.parser.pd.read_excel", lambda *args, **kwargs: OversizedSheet())
 
     with pytest.raises(ValueError, match="50,000"):
         read_xlsx(BytesIO(), "CHIISTORE")
