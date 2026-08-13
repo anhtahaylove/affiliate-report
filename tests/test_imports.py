@@ -458,7 +458,11 @@ def test_analytics_returns_finance_dimensions_settlement_quality_and_forecast():
     assert result["settlement"]["median_lag_days"] == 2
     assert result["settlement"]["pending_aging"][0] == {"bucket": "0-7", "count": 1}
     assert result["data_quality"]["import_batches"] == 2
+    # Hai dòng này chưa quyết toán nên TikTok để trống ngày — bình thường, không phải dữ liệu
+    # bẩn. Giao diện đếm chúng là "vấn đề" cho tới v2.0.24; nay chỉ đơn ĐÃ quyết toán mà vẫn
+    # thiếu ngày mới bị coi là bất thường.
     assert result["data_quality"]["missing_settlement_date_rows"] == 2
+    assert result["data_quality"]["settled_missing_settlement_rows"] == 0
     assert result["target"]["monthly_target"] == 31000
     assert result["target"]["projected_month_end"] == 108500
 
@@ -481,3 +485,36 @@ def test_khong_luu_trung_chuoi_json_goc_o_order_line_versions():
     # Bản gốc phải còn nguyên, vì hoàn tác lần nhập và audit đều dựa vào nó. So sánh sau khi
     # đưa qua JSON vì hai trường ngày được lưu thành chuỗi, phần còn lại giữ nguyên từng trường.
     assert goc == json.loads(json.dumps(raw_row(), default=str))
+
+
+def test_dong_bi_tu_choi_khong_thuoc_ve_ky_nao():
+    """import_* là số toàn thời gian, và điều đó là cố ý.
+
+    Từng có ý định lọc import_batches theo khoảng ngày đang xem cho "gọn". Nhưng bộ lọc trên
+    trang lọc theo NGÀY ĐẶT ĐƠN, còn created_at là LÚC NHẬP TỆP — nhập dữ liệu tháng 3 vào
+    tháng 8 là chuyện thường, lọc như vậy sẽ giấu mất chính lần nhập đã tạo ra dữ liệu đang xem.
+    Riêng dòng bị từ chối thì còn không có ngày đặt đơn nào cả vì chúng chưa từng đọc được.
+    Giao diện vì thế phải hiện chúng riêng kèm nhãn "từ trước tới nay".
+    """
+    from tiktok_affiliate_report.reports import analytics
+
+    e = engine()
+    import_rows(
+        e,
+        filename="mix.xlsx",
+        file_bytes=b"mix",
+        account="CHIISTORE",
+        rows=[
+            raw_row(order="O1", sku="S1") | {"_row_number": 2},
+            {"_row_number": 3, "_rejected": {"row_number": 3, "reason": "ngày sai định dạng"}},
+        ],
+    )
+
+    thang_ba = analytics(e, start=date(2026, 3, 1), end=date(2026, 3, 31))
+    thang_nam = analytics(e, start=date(2026, 5, 1), end=date(2026, 5, 31))
+
+    # Cùng một con số ở mọi phạm vi: nó không thuộc về kỳ nào.
+    assert thang_ba["data_quality"]["import_rejected"] == 1
+    assert thang_nam["data_quality"]["import_rejected"] == 1
+    # Còn chỉ số theo kỳ thì đúng là rỗng ở tháng không có đơn nào.
+    assert thang_nam["summary"]["orders"] == 0

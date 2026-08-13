@@ -638,6 +638,11 @@ def _data_quality(engine: Engine, df: pd.DataFrame, accounts: list[str] | None) 
     stmt = select(import_batches)
     if accounts is not None:
         stmt = stmt.where(import_batches.c.account.in_(accounts))
+    # KHÔNG lọc import_batches theo khoảng ngày đang xem, dù nhìn thì có vẻ nên làm. Bộ lọc
+    # trên trang lọc theo NGÀY ĐẶT ĐƠN, còn created_at là LÚC NHẬP TỆP — hai trục khác nhau,
+    # nhập dữ liệu tháng 3 vào tháng 8 là chuyện thường. Riêng dòng bị từ chối thì còn không có
+    # ngày đặt đơn nào cả vì chúng chưa từng phân tích được. Vì vậy các số import_* ở đây là
+    # số toàn thời gian, và giao diện phải nói rõ như vậy thay vì trộn vào chỉ số theo kỳ.
     imports = pd.read_sql(stmt, engine)
     latest_import = pd.to_datetime(imports["created_at"], errors="coerce").max() if not imports.empty else pd.NaT
     return {

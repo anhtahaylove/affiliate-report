@@ -417,20 +417,23 @@ export type AnalyticsResponse = {
     pending_lines: number;
     pending_aging: Array<{ bucket: string; count: number }>;
   };
-  data_quality: {
-    unknown_status_rows: number;
-    non_vnd_rows: number;
-    missing_order_date_rows: number;
-    missing_settlement_date_rows: number;
-    settled_missing_settlement_rows: number;
-    negative_settlement_lag_rows: number;
-    import_batches: number;
-    import_inserted: number;
-    import_updated: number;
-    import_unchanged: number;
-    import_rejected: number;
-    latest_import_at: string | null;
-  };
+  data_quality: DataQuality;
+};
+
+export type DataQuality = {
+  unknown_status_rows: number;
+  non_vnd_rows: number;
+  missing_order_date_rows: number;
+  /** Bao gồm mọi đơn chưa quyết toán — là thông tin, KHÔNG phải vấn đề. Xem lib/data-quality.ts */
+  missing_settlement_date_rows: number;
+  settled_missing_settlement_rows: number;
+  negative_settlement_lag_rows: number;
+  import_batches: number;
+  import_inserted: number;
+  import_updated: number;
+  import_unchanged: number;
+  import_rejected: number;
+  latest_import_at: string | null;
 };
 
 export const NETWORK_ERROR_MESSAGE =

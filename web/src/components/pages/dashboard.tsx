@@ -25,6 +25,7 @@ import { canWrite, isOwner, Notice, Skeleton } from "@/components/ui";
 import { RecentImports } from "@/components/recent-imports";
 import { AccountIdentity } from "@/components/account-identity";
 import { useApi } from "@/lib/use-api";
+import { qualityIssueCount } from "@/lib/data-quality";
 import { achievementTone, currentMonth, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
 import type { AccountDirectory } from "@/lib/account-directory";
 
@@ -96,8 +97,7 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
   const commissionDelta = previous ? summary.actual_commission - previous.actual_commission : null;
   const alerts = buildAlerts(analytics, filters, targetAchievement);
   // "Không có gì để nói" = mọi con số của khối đều bằng 0, chứ không phải thiếu dữ liệu.
-  const qualityIssues = analytics.data_quality.unknown_status_rows + analytics.data_quality.non_vnd_rows
-    + analytics.data_quality.missing_settlement_date_rows + analytics.data_quality.import_rejected;
+  const qualityIssues = qualityIssueCount(analytics.data_quality);
   const settlementQuiet = analytics.settlement.pending_lines === 0
     && !(summary.refund_rate ?? 0) && !(summary.ineligible_rate ?? 0);
   const allClear = alerts.length === 1 && alerts[0].tone === "success";
@@ -483,7 +483,6 @@ function deltaMoney(value: number) { return `${value >= 0 ? "+" : "−"}${format
 function deltaCount(value: number) { return `${value >= 0 ? "+" : "−"}${integer.format(Math.abs(value))} đơn so kỳ trước`; }
 function agingLabel(rows: AnalyticsResponse["settlement"]["pending_aging"]) { return rows.length ? rows.map((row) => `${row.bucket}: ${integer.format(row.count)}`).join(" · ") : "Không có tồn đọng"; }
 function qualitySummary(analytics: AnalyticsResponse) {
-  const quality = analytics.data_quality;
-  const issues = quality.unknown_status_rows + quality.non_vnd_rows + quality.missing_settlement_date_rows + quality.import_rejected;
+  const issues = qualityIssueCount(analytics.data_quality);
   return issues ? `${integer.format(issues)} điểm cần kiểm tra` : "Không có cảnh báo";
 }

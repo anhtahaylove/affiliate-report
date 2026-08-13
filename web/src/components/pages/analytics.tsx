@@ -7,6 +7,7 @@ import { AnalyticsBreakdownRow, AnalyticsDimensionRow, AnalyticsResponse, loadAn
 import { UrlFilters } from "@/components/filters";
 import { Notice, Skeleton, StateCard, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
+import { qualityIssueCount, qualityIssues, rejectedAllTime } from "@/lib/data-quality";
 import { formatDateTime, formatMoney, integer, percent, statusLabel } from "@/lib/format";
 import { AccountIdentity } from "@/components/account-identity";
 import type { AccountDirectory } from "@/lib/account-directory";
@@ -36,10 +37,7 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
 
   const previous = data.previous_period?.summary;
   const commissionDelta = previous ? data.summary.actual_commission - previous.actual_commission : null;
-  const qualityIssues = data.data_quality.unknown_status_rows
-    + data.data_quality.non_vnd_rows
-    + data.data_quality.missing_settlement_date_rows
-    + data.data_quality.import_rejected;
+  const soVanDe = qualityIssueCount(data.data_quality);
 
   return (
     <div className="intelligence-page">
@@ -59,7 +57,7 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
           <InsightMetric primary signal label="Hoa hồng thực tế" value={formatMoney(data.summary.actual_commission)} note={commissionDelta == null ? "Chưa có kỳ so sánh" : `${commissionDelta >= 0 ? "+" : "−"}${formatMoney(Math.abs(commissionDelta))} so kỳ trước`} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
           <InsightMetric signal label="Tỷ lệ hoa hồng" value={percent(data.summary.effective_commission_rate)} note={`${integer.format(data.summary.orders)} đơn trong phạm vi`} />
           <InsightMetric signal label="Đã nhận cuối cùng" value={formatMoney(data.summary.final_received)} note={`Chênh ${formatMoney(data.summary.final_received_variance)}`} />
-          <InsightMetric signal label="Chất lượng dữ liệu" value={qualityIssues ? `${integer.format(qualityIssues)} vấn đề` : "Sạch"} note={qualityIssues ? "Có dòng cần kiểm tra" : "Không có ngoại lệ trong phạm vi"} tone={qualityIssues ? "warning" : "success"} />
+          <InsightMetric signal label="Chất lượng dữ liệu" value={soVanDe ? `${integer.format(soVanDe)} vấn đề` : "Sạch"} note={soVanDe ? "Có dòng cần kiểm tra" : "Không có ngoại lệ trong phạm vi"} tone={soVanDe ? "warning" : "success"} />
         </div>
       </section>
 
@@ -177,19 +175,17 @@ function SettlementStudio({ data }: { data: AnalyticsResponse }) {
 
 function QualityStudio({ data }: { data: AnalyticsResponse }) {
   const quality = data.data_quality;
-  const issues = [
-    ["Trạng thái chưa xác định", quality.unknown_status_rows, "Cần cập nhật mapping trạng thái."],
-    ["Không phải VND", quality.non_vnd_rows, "Tách riêng trước khi cộng báo cáo VND."],
-    ["Thiếu ngày đơn", quality.missing_order_date_rows, "Không thể xếp đúng kỳ báo cáo."],
-    ["Thiếu ngày quyết toán", quality.missing_settlement_date_rows, "Không thể tính độ trễ quyết toán."],
-    ["Đã quyết toán nhưng thiếu ngày", quality.settled_missing_settlement_rows, "Dữ liệu trạng thái và ngày không nhất quán."],
-    ["Độ trễ quyết toán âm", quality.negative_settlement_lag_rows, "Ngày quyết toán trước ngày đặt đơn."],
-    ["Import bị từ chối", quality.import_rejected, "Dòng chưa được đưa vào báo cáo."],
-  ] as const;
+  // Cùng danh sách với con số ở đầu trang, nên hai chỗ không thể lệch nhau.
+  const issues = qualityIssues(quality);
   return (
     <div className="quality-studio">
       <section className="canvas-panel quality-summary"><div className="panel-heading"><div><p className="section-label">Dòng dữ liệu</p><h2>Lịch sử xử lý dữ liệu</h2></div><span>Cập nhật {formatDateTime(quality.latest_import_at)}</span></div><div className="quality-flow"><InsightMetric label="Lượt import" value={integer.format(quality.import_batches)} note="batch nguồn bất biến" /><InsightMetric label="Dòng mới" value={integer.format(quality.import_inserted)} note="được thêm vào lịch sử" tone="success" /><InsightMetric label="Đã cập nhật" value={integer.format(quality.import_updated)} note="snapshot mới hơn" /><InsightMetric label="Không thay đổi" value={integer.format(quality.import_unchanged)} note="đã chống trùng" /></div></section>
-      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Ngoại lệ dữ liệu</p><h2>Vấn đề cần làm sạch</h2></div><Link className="text-action" href="/imports">Mở lịch sử import</Link></div><div className="exception-list">{issues.map(([label, value, help]) => <article data-tone={value ? "warning" : "success"} key={label}><div><strong>{label}</strong><p>{help}</p></div><span>{integer.format(value)}</span></article>)}</div></section>
+      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Ngoại lệ dữ liệu</p><h2>Vấn đề cần làm sạch</h2></div><Link className="text-action" href="/imports">Mở lịch sử import</Link></div><div className="exception-list">{issues.map(({ label, value, help }) => <article data-tone={value ? "warning" : "success"} key={label}><div><strong>{label}</strong><p>{help}</p></div><span>{integer.format(value)}</span></article>)}</div>
+        {/* Cố ý nằm NGOÀI danh sách vấn đề: TikTok để trống ngày quyết toán cho mọi đơn chưa
+            được trả tiền, nên đây là tình trạng bình thường chứ không phải dữ liệu bẩn. */}
+        <p className="quality-note">Ngoài ra có <strong>{integer.format(quality.missing_settlement_date_rows)}</strong> dòng chưa có ngày quyết toán — đơn đang chờ TikTok trả tiền, không phải lỗi dữ liệu.</p>
+        <p className="quality-note"><strong>{integer.format(rejectedAllTime(quality))}</strong> dòng bị từ chối khi nhập, tính từ trước tới nay. Không xếp được vào phạm vi ngày nào vì chúng chưa bao giờ đọc được. <Link className="text-action" href="/imports">Xem lịch sử nhập</Link></p>
+      </section>
     </div>
   );
 }
