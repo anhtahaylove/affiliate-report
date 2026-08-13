@@ -91,8 +91,24 @@ jobs:
               }
             }
           }
+          # Tên asset của một bản đã phát hành là VĨNH VIỄN — GitHub không cho đổi tên tệp trong
+          # release đã có. Bản trước v2.0.26 mang tên cũ và sẽ mãi như vậy, nên phải thử cả hai
+          # dạng. Giữ đúng tên tải được, vì windows_updater_ui_smoke.ps1 so tên tệp với dòng
+          # tương ứng trong SHA256SUMS.txt.
           foreach ($version in @($env:PREVIOUS_VERSION, $env:CURRENT_VERSION)) {
-            Get-PublicAsset "https://github.com/$repo/releases/download/v$version/AffiliateReportSetup-v$version.exe" (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$version.exe")
+            $daTai = $null
+            foreach ($ten in @("AffiliateReportSetup-v$version.exe", "TikTokAffiliateReportSetup-v$version.exe")) {
+              try {
+                Get-PublicAsset "https://github.com/$repo/releases/download/v$version/$ten" (Join-Path $env:RUNNER_TEMP $ten)
+                $daTai = Join-Path $env:RUNNER_TEMP $ten
+                Write-Host "v${version}: asset $ten"
+                break
+              } catch {
+                Write-Host "v${version}: khong co $ten, thu ten tiep theo"
+              }
+            }
+            if (-not $daTai) { throw "Khong tim thay installer cua v$version duoi bat ky ten nao" }
+            "INSTALLER_V$($version -replace '\.','_')=$daTai" >> $env:GITHUB_ENV
             Get-PublicAsset "https://github.com/$repo/releases/download/v$version/SHA256SUMS.txt" (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$version.txt")
           }
       - name: Run real in-app updater flow
@@ -101,10 +117,10 @@ jobs:
           $previousVersion = $env:PREVIOUS_VERSION
           $currentVersion = $env:CURRENT_VERSION
           .\scripts\ci\windows_updater_ui_smoke.ps1 `
-            -PreviousInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$previousVersion.exe") `
+            -PreviousInstaller (Get-Item -LiteralPath ([Environment]::GetEnvironmentVariable("INSTALLER_V$($previousVersion -replace '\.','_')"))).FullName `
             -PreviousVersion $previousVersion `
             -PreviousChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$previousVersion.txt") `
-            -CurrentInstaller (Join-Path $env:RUNNER_TEMP "AffiliateReportSetup-v$currentVersion.exe") `
+            -CurrentInstaller (Get-Item -LiteralPath ([Environment]::GetEnvironmentVariable("INSTALLER_V$($currentVersion -replace '\.','_')"))).FullName `
             -CurrentVersion $currentVersion `
             -CurrentChecksumFile (Join-Path $env:RUNNER_TEMP "SHA256SUMS-v$currentVersion.txt") `
             -EvidenceDir (Join-Path $env:RUNNER_TEMP "updater-ui-evidence")

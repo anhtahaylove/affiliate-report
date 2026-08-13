@@ -59,8 +59,13 @@ function Assert-Installer([string]$Path, [string]$Version, [string]$ChecksumFile
     Assert-Version $Version
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Installer not found for v$Version." }
     if (!(Test-Path -LiteralPath $ChecksumFile -PathType Leaf)) { throw "Checksum file not found for v$Version." }
-    $expectedName = "AffiliateReportSetup-v$Version.exe"
-    if ((Split-Path -Leaf $Path) -ne $expectedName) { throw "Installer filename does not match v$Version." }
+    # Bản phát hành trước khi đổi thương hiệu mang tên cũ vĩnh viễn; chấp nhận cả hai dạng rồi
+    # kiểm checksum theo tên thật của tệp đang cầm. Cùng lý do đã ghi ở windows_installer_smoke.ps1.
+    $tenHopLe = @("AffiliateReportSetup-v$Version.exe", "TikTokAffiliateReportSetup-v$Version.exe")
+    $expectedName = Split-Path -Leaf $Path
+    if ($tenHopLe -notcontains $expectedName) {
+        throw "Installer filename $expectedName does not match v${Version}; expected one of: $($tenHopLe -join ', ')"
+    }
     $escapedName = [regex]::Escape($expectedName)
     $matches = @(Get-Content -LiteralPath $ChecksumFile | Where-Object { $_ -match "^([A-Fa-f0-9]{64})\s+\*?$escapedName$" })
     if ($matches.Count -ne 1) { throw "Checksum file must contain exactly one entry for v$Version." }
