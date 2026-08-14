@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Affiliate Report",
     short_name: "Affiliate Report",
-    description: "Dashboard báo cáo TikTok Affiliate từ dữ liệu export",
+    description: "Dashboard báo cáo affiliate từ dữ liệu export",
     start_url: "/",
     display: "standalone",
     background_color: "#f6f8fa",

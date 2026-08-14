@@ -122,7 +122,7 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
         <div className="sidebar-brand">
           <Image className="brand-mark" src="/icon-192.png" alt="" width={38} height={38} priority />
           <div>
-            <strong>TikTok Affiliate</strong>
+            <strong>Affiliate Report</strong>
             <span>{appVersion ? `Phiên bản ${appVersion}` : "Báo cáo vận hành"}</span>
           </div>
           <button className="sidebar-collapse" type="button" onClick={() => void toggleSidebar()} disabled={savingSidebar} aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"} title={collapsed ? "Mở rộng" : "Thu gọn"}>

@@ -123,7 +123,7 @@ jobs:
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/affiliate-report"
           $keyId = "tiktok-report-updates-2026-08"
-          $publicKey = .\.venv\Scripts\python.exe -m scripts.sign_update_feed --version $version --installer "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe" --bootstrap "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1" --asset-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe" --bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
+          $publicKey = .\.venv\Scripts\python.exe -m scripts.sign_update_feed --version $version --installer "artifacts\installer\AffiliateReportSetup-v$version.exe" --bootstrap "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1" --asset-url "https://github.com/$repo/releases/download/$tag/AffiliateReportSetup-v$version.exe" --bootstrap-url "https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1" --release-url "https://github.com/$repo/releases/tag/$tag" --key-id $keyId --output-dir "artifacts\installer" --print-public-key | Select-Object -First 1
           $pinned = .\.venv\Scripts\python.exe -c "from affiliate_report.updater import TRUSTED_UPDATE_KEYS; print(TRUSTED_UPDATE_KEYS['$keyId'])"
           if ($publicKey -ne $pinned) { throw "UPDATE_SIGNING_KEY_B64 does not match pinned updater public key" }
       - name: Create verified private release
@@ -134,7 +134,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
-          $installer = "artifacts\installer\TikTokAffiliateReportSetup-v$version.exe"
+          $installer = "artifacts\installer\AffiliateReportSetup-v$version.exe"
           $existingJson = gh release view $tag --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0) {
             $existing = $existingJson | ConvertFrom-Json
@@ -159,9 +159,9 @@ jobs:
           gh release download $tag --dir $verify
           if ($LASTEXITCODE -ne 0) { throw "Could not download private draft release" }
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig") | Sort-Object
+          $expectedFiles = @("SHA256SUMS.txt", "AffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig") | Sort-Object
           if (Compare-Object $actualFiles $expectedFiles) { throw "Release must contain exactly installer, updater bootstrap, SHA256SUMS.txt, stable.json and stable.json.sig" }
-          $installerName = "TikTokAffiliateReportSetup-v$version.exe"
+          $installerName = "AffiliateReportSetup-v$version.exe"
           $checksumLines = @(Get-Content (Join-Path $verify "SHA256SUMS.txt"))
           $checksumNames = @($checksumLines | ForEach-Object {
             $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  ((?:TikTok)?AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
@@ -190,7 +190,7 @@ jobs:
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/affiliate-report"
-          $assets = @("artifacts\installer\TikTokAffiliateReportSetup-v$version.exe", "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
+          $assets = @("artifacts\installer\AffiliateReportSetup-v$version.exe", "artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1", "artifacts\installer\SHA256SUMS.txt", "artifacts\installer\stable.json", "artifacts\installer\stable.json.sig")
           # Một repo duy nhất: bản nháp ở đây CHÍNH LÀ bản vừa tạo và xác minh ở bước trước, mang
           # đúng năm asset đó. Ở mô hình hai repo, bước này tạo một release mới tinh bên kho kia
           # nên xoá-rồi-tạo-lại là vô hại. Cùng một kho thì nó thành tạo → xoá → tạo lại trên
@@ -210,9 +210,9 @@ jobs:
           gh release download $tag --repo $repo --dir $verify
           if ($LASTEXITCODE -ne 0) { throw "Could not download public draft release" }
           $actualFiles = @(Get-ChildItem -LiteralPath $verify -File | ForEach-Object Name | Sort-Object)
-          $expectedFiles = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig") | Sort-Object
+          $expectedFiles = @("SHA256SUMS.txt", "AffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig") | Sort-Object
           if (Compare-Object $actualFiles $expectedFiles) { throw "Public mirror must contain exactly five verified assets" }
-          $installerName = "TikTokAffiliateReportSetup-v$version.exe"
+          $installerName = "AffiliateReportSetup-v$version.exe"
           $checksumLines = @(Get-Content (Join-Path $verify "SHA256SUMS.txt"))
           $checksumNames = @($checksumLines | ForEach-Object {
             $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  ((?:TikTok)?AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
@@ -230,7 +230,7 @@ jobs:
           $bootstrapExpected = ([regex]::Match($bootstrapEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
           $bootstrapActual = (Get-FileHash -Algorithm SHA256 (Join-Path $verify "TikTokAffiliateUpdater-v1.0.0.ps1")).Hash
           if ($bootstrapActual -ne $bootstrapExpected) { throw "Public mirror updater bootstrap checksum mismatch" }
-          .\.venv\Scripts\python.exe -c "from pathlib import Path; import hashlib; from affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$verify\TikTokAffiliateReportSetup-v$version.exe'); bootstrap=Path(r'$verify\TikTokAffiliateUpdater-v1.0.0.ps1'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'; assert m['bootstrap']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1'; assert m['bootstrap']['name'] == bootstrap.name; assert m['bootstrap']['size'] == bootstrap.stat().st_size; assert m['bootstrap']['sha256'] == hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()"
+          .\.venv\Scripts\python.exe -c "from pathlib import Path; import hashlib; from affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$verify\AffiliateReportSetup-v$version.exe'); bootstrap=Path(r'$verify\TikTokAffiliateUpdater-v1.0.0.ps1'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/AffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'; assert m['bootstrap']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1'; assert m['bootstrap']['name'] == bootstrap.name; assert m['bootstrap']['size'] == bootstrap.stat().st_size; assert m['bootstrap']['sha256'] == hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()"
           if ($LASTEXITCODE -ne 0) { throw "Public draft manifest verification failed" }
           $draft = gh release view $tag --repo $repo --json isDraft,isPrerelease,tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0 -or !$draft.isDraft -or $draft.isPrerelease -or $draft.tagName -ne $tag) { throw "Public release verification failed" }
@@ -258,7 +258,7 @@ jobs:
           $version = $tag.TrimStart("v")
           $repo = "anhtahaylove/affiliate-report"
           $feedRepo = $repo
-          $assetNames = @("SHA256SUMS.txt", "TikTokAffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig")
+          $assetNames = @("SHA256SUMS.txt", "AffiliateReportSetup-v$version.exe", "TikTokAffiliateUpdater-v1.0.0.ps1", "stable.json", "stable.json.sig")
           $stableCommitted = $false
           $stableCommit = ""
           $publicPublished = $false
@@ -356,7 +356,7 @@ jobs:
               if (!$rawReady) { Start-Sleep -Seconds 5 }
             }
             if (!$rawReady) { throw "Live raw feed does not match signed build artifacts" }
-            $installerName = "TikTokAffiliateReportSetup-v$version.exe"
+            $installerName = "AffiliateReportSetup-v$version.exe"
             $checksumLines = @(Get-Content (Join-Path $releaseVerify "SHA256SUMS.txt"))
             $checksumNames = @($checksumLines | ForEach-Object {
               $match = [regex]::Match($_, '^([A-Fa-f0-9]{64})  ((?:TikTok)?AffiliateReportSetup-v\d+\.\d+\.\d+\.exe|TikTokAffiliateUpdater-v\d+\.\d+\.\d+\.ps1)$')
@@ -374,7 +374,7 @@ jobs:
             $bootstrapExpected = ([regex]::Match($bootstrapEntry[0], '^([A-Fa-f0-9]{64})').Groups[1].Value).ToUpperInvariant()
             $bootstrapActual = (Get-FileHash -Algorithm SHA256 (Join-Path $releaseVerify "TikTokAffiliateUpdater-v1.0.0.ps1")).Hash
             if ($bootstrapActual -ne $bootstrapExpected) { throw "Live updater bootstrap checksum mismatch" }
-            .\.venv\Scripts\python.exe -c "from pathlib import Path; import hashlib; from affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$releaseVerify\TikTokAffiliateReportSetup-v$version.exe'); bootstrap=Path(r'$releaseVerify\TikTokAffiliateUpdater-v1.0.0.ps1'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'; assert m['bootstrap']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1'; assert m['bootstrap']['name'] == bootstrap.name; assert m['bootstrap']['size'] == bootstrap.stat().st_size; assert m['bootstrap']['sha256'] == hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()"
+            .\.venv\Scripts\python.exe -c "from pathlib import Path; import hashlib; from affiliate_report import updater; m=updater.verify_update_manifest_bytes(Path(r'$verify\stable.json').read_bytes(), Path(r'$verify\stable.json.sig').read_bytes()); installer=Path(r'$releaseVerify\AffiliateReportSetup-v$version.exe'); bootstrap=Path(r'$releaseVerify\TikTokAffiliateUpdater-v1.0.0.ps1'); assert m['version'] == '$version'; assert m['release_url'] == 'https://github.com/$repo/releases/tag/$tag'; assert m['installer']['url'] == 'https://github.com/$repo/releases/download/$tag/AffiliateReportSetup-v$version.exe'; assert m['installer']['name'] == installer.name; assert m['installer']['size'] == installer.stat().st_size; assert m['installer']['sha256'] == '$actual'; assert m['bootstrap']['url'] == 'https://github.com/$repo/releases/download/$tag/TikTokAffiliateUpdater-v1.0.0.ps1'; assert m['bootstrap']['name'] == bootstrap.name; assert m['bootstrap']['size'] == bootstrap.stat().st_size; assert m['bootstrap']['sha256'] == hashlib.sha256(bootstrap.read_bytes()).hexdigest().upper()"
             if ($LASTEXITCODE -ne 0) { throw "Live public updater verification failed" }
 
             # The feed is live and the public release is still a non-latest prerelease. Run five

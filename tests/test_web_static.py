@@ -10,6 +10,16 @@ def global_css_source() -> str:
     return (Path(__file__).parents[1] / "web" / "src" / "app" / "globals.css").read_text(encoding="utf-8")
 
 
+def test_production_ui_uses_affiliate_report_brand_only():
+    web_root = Path(__file__).parents[1] / "web" / "src"
+    shell = (web_root / "components" / "app-shell.tsx").read_text(encoding="utf-8")
+    layout = (web_root / "app" / "layout.tsx").read_text(encoding="utf-8")
+    manifest = (web_root / "app" / "manifest.ts").read_text(encoding="utf-8")
+
+    assert "<strong>Affiliate Report</strong>" in shell
+    assert "TikTok Affiliate" not in shell + layout + manifest
+
+
 def contrast_ratio(foreground: str, background: str) -> float:
     def luminance(color: str) -> float:
         channels = [int(color[index:index + 2], 16) / 255 for index in (1, 3, 5)]

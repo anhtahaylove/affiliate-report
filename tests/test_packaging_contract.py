@@ -22,6 +22,33 @@ def test_full_installer_preserves_data_and_excludes_portable_release():
     assert "Remove-Item -LiteralPath $staleMetadata" in build
 
 
+def test_visible_installer_and_shortcuts_use_affiliate_report_brand():
+    installer = Path("packaging/AffiliateReport.iss").read_text(encoding="utf-8")
+    build = Path("packaging/build_installer.ps1").read_text(encoding="utf-8")
+    readme = Path("README.md").read_text(encoding="utf-8")
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    candidate = Path(".github/workflows/windows-installer-smoke.yml").read_text(encoding="utf-8")
+
+    assert "OutputBaseFilename=AffiliateReportSetup-v{#MyAppVersion}" in installer
+    assert "OutputBaseFilename=TikTokAffiliateReportSetup" not in installer
+    assert 'UsePreviousGroup=no' in installer
+    assert 'Name: "{group}\\Affiliate Report"' in installer
+    assert 'Name: "{autodesktop}\\Affiliate Report"' in installer
+    assert 'Type: filesandordirs; Name: "{userprograms}\\TikTok Affiliate Report"' in installer
+    assert 'Type: files; Name: "{userdesktop}\\TikTok Affiliate Report.lnk"' in installer
+    assert 'Type: files; Name: "{userprograms}\\Affiliate Report\\TikTok Affiliate Report.lnk"' in installer
+
+    current_name = f"AffiliateReportSetup-v{APP_VERSION}.exe"
+    legacy_current_name = f"TikTok{current_name}"
+    assert current_name in readme
+    assert legacy_current_name not in readme
+    assert 'artifacts\\installer\\AffiliateReportSetup-v$version.exe' in release
+    assert 'artifacts\\installer\\TikTokAffiliateReportSetup-v$version.exe' not in release
+    assert 'artifacts\\installer\\AffiliateReportSetup-v$currentVersion.exe' in candidate
+    assert 'artifacts\\installer\\TikTokAffiliateReportSetup-v$currentVersion.exe' not in candidate
+    assert 'artifacts\\installer\\AffiliateReportSetup-v$AppVersion.exe' in build
+
+
 def test_app_ships_as_onedir_so_first_launch_never_unpacks_to_temp():
     """Bản onefile giải nén runtime ra %TEMP% mỗi lần chạy; ngay sau khi cài, antivirus quét đống
     file vừa rơi xuống và làm hỏng bước nạp python3xx.dll. onedir bỏ hẳn bước giải nén đó."""

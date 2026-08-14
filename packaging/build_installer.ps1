@@ -9,7 +9,7 @@ $root = Split-Path -Parent $PSScriptRoot
 # onedir: staging là một THƯ MỤC (exe + _internal), không còn là một file .exe đơn lẻ.
 $appDir = Join-Path $root 'build\installer-app\TikTokAffiliateReport'
 $outputDir = Join-Path $root 'artifacts\installer'
-$setupExe = Join-Path $root "artifacts\installer\TikTokAffiliateReportSetup-v$AppVersion.exe"
+$setupExe = Join-Path $root "artifacts\installer\AffiliateReportSetup-v$AppVersion.exe"
 $checksumFile = Join-Path $root 'artifacts\installer\SHA256SUMS.txt'
 $bootstrapSource = Join-Path $root 'packaging\TikTokAffiliateUpdater-v1.0.0.ps1'
 $bootstrapFile = Join-Path $outputDir 'TikTokAffiliateUpdater-v1.0.0.ps1'
