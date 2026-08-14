@@ -168,7 +168,7 @@ jobs:
             .\scripts\ci\build_android_candidate.ps1 -Variant arm64Release -SkipWebBuild
             .\scripts\ci\build_android_candidate.ps1 -Variant ciRelease -SkipWebBuild
 
-            if ($versionPy -notmatch 'APP_VERSION = "2\.1\.1"' -or $gradle -notmatch 'versionCode 2001002' -or $gradle -notmatch 'versionName "2\.1\.1"') {
+            if ($versionPy -notmatch 'APP_VERSION = "2\.1\.2"' -or $gradle -notmatch 'versionCode 2001002' -or $gradle -notmatch 'versionName "2\.1\.2"') {
               throw "Synthetic Android upgrade source is not the exact 2.1.2 candidate"
             }
             $versionPy.Replace('APP_VERSION = "2.1.2"', 'APP_VERSION = "2.1.3"') | Set-Content -Encoding utf8 $versionPath
@@ -199,7 +199,7 @@ jobs:
           if ($cert -ne $env:ANDROID_CERT_SHA256) { throw "Android signing certificate does not match the pinned release key" }
           $aapt2 = Join-Path $env:ANDROID_HOME "build-tools\36.0.0\aapt2.exe"
           $badging = (& $aapt2 dump badging $apk) -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $badging -notmatch "package: name='vn\.io\.huuhungn\.affiliatereport'.*versionCode='2001002'.*versionName='2\.1\.1'") {
+          if ($LASTEXITCODE -ne 0 -or $badging -notmatch "package: name='vn\.io\.huuhungn\.affiliatereport'.*versionCode='2001002'.*versionName='2\.1\.2'") {
             throw "APK package/version metadata is not the v2.1.2 release contract"
           }
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $apk).Hash

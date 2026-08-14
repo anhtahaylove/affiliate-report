@@ -449,7 +449,13 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "verify --verbose --print-certs $apk" in android
     assert "vn\\.io\\.huuhungn\\.affiliatereport" in android
     assert "versionCode='2001002'" in android
-    assert "versionName='2\\.1\\.1'" in android
+    # Các gate Android kiểm phiên bản bằng regex có escape dấu chấm. Bump bằng cách thay chuỗi
+    # "2.1.1" không chạm tới "2\.1\.1", nên workflow vẫn kiểm số cũ trong khi APK đã mang số mới
+    # — hỏng ở phút thứ 20 của CI thay vì ngay tại đây. Ràng chúng vào APP_VERSION.
+    escaped_version = APP_VERSION.replace(".", "\\.")
+    assert f'APP_VERSION = "{escaped_version}"' in android
+    assert f'versionName "{escaped_version}"' in android
+    assert f"versionName='{escaped_version}'" in android
     assert "affiliate-report-android-${{ github.sha }}" in android
     assert "actions/upload-artifact@v7" in android
     assert "signed-update-smoke:" in android
