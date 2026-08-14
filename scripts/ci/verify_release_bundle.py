@@ -5,14 +5,19 @@ import hashlib
 import re
 from pathlib import Path
 
-from affiliate_report import updater
-
-
 BOOTSTRAP_NAME = "TikTokAffiliateUpdater-v1.0.0.ps1"
 
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest().upper()
+
+
+def _verify_update_manifest_bytes(manifest_bytes: bytes, signature_bytes: bytes) -> dict:
+    # Keep CLI discovery and --help dependency-light for packaging contract jobs.
+    # The release job installs runtime dependencies before it verifies a bundle.
+    from affiliate_report import updater
+
+    return updater.verify_update_manifest_bytes(manifest_bytes, signature_bytes)
 
 
 def verify_bundle(directory: Path, manifest_directory: Path, version: str, repository: str) -> None:
@@ -50,7 +55,7 @@ def verify_bundle(directory: Path, manifest_directory: Path, version: str, repos
         if _sha256(directory / name) != expected_hash:
             raise SystemExit(f"Checksum mismatch for {name}")
 
-    manifest = updater.verify_update_manifest_bytes(
+    manifest = _verify_update_manifest_bytes(
         (manifest_directory / "stable.json").read_bytes(),
         (manifest_directory / "stable.json.sig").read_bytes(),
     )

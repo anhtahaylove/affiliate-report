@@ -48,8 +48,6 @@ jobs:
           if (-not (Test-Path -LiteralPath $sdkManager)) { throw "Android sdkmanager is unavailable" }
           & $sdkManager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
           if ($LASTEXITCODE -ne 0) { throw "Could not install the pinned Android SDK packages" }
-      - name: Verify Android scaffold contract
-        run: python scripts/ci/verify_android_scaffold.py
       - name: Build web bundle and x86_64 CI APK
         shell: pwsh
         run: |
@@ -58,6 +56,8 @@ jobs:
           pnpm --dir web build
           if ($LASTEXITCODE -ne 0) { throw "web production build failed" }
           .\scripts\ci\build_android_candidate.ps1 -Variant ciDebug -SkipWebBuild
+      - name: Verify generated Android scaffold contract
+        run: python scripts/ci/verify_android_scaffold.py
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ANDROID_CI_NAME }}

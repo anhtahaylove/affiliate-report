@@ -43,7 +43,7 @@ def _bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, dict
             "sha256": _sha(path),
         }
     manifest["android"].update(version=version, min_sdk=24, abis=["arm64-v8a"])
-    monkeypatch.setattr(verify_release_bundle.updater, "verify_update_manifest_bytes", lambda *_: manifest)
+    monkeypatch.setattr(verify_release_bundle, "_verify_update_manifest_bytes", lambda *_: manifest)
     return tmp_path, manifest
 
 
