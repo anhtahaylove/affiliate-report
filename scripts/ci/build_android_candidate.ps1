@@ -142,8 +142,14 @@ if ($isRelease) {
     })
     $fingerprints = @($certificateLines | ForEach-Object {
         $value = if ($_ -match ':') { ($_ -split ':', 2)[1] } else { $_ }
-        ([regex]::Replace($value, '[^0-9a-fA-F]', '')).ToLowerInvariant()
-    } | Where-Object { $_ -match '^[0-9a-f]{64}$' } | Select-Object -Unique)
+        $digestMatches = [regex]::Matches(
+            $value,
+            '(?i)(?<![0-9a-f])(?:[0-9a-f]{2}(?:[:\s-]?)){31}[0-9a-f]{2}(?![0-9a-f])'
+        )
+        foreach ($digestMatch in $digestMatches) {
+            ([regex]::Replace($digestMatch.Value, '[^0-9a-fA-F]', '')).ToLowerInvariant()
+        }
+    } | Select-Object -Unique)
     if ($fingerprints.Count -ne 1) {
         throw "Release APK signer fingerprint is missing or ambiguous (certificate SHA-256 fields: $($certificateLines.Count))."
     }

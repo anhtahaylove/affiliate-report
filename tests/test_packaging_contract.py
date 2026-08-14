@@ -283,7 +283,7 @@ def test_android_signer_fingerprint_parser_is_build_tools_tolerant():
 
     assert "SHA[^0-9]*256" in builder
     assert "[^0-9a-fA-F]" in builder
-    assert "^[0-9a-f]{64}$" in builder
+    assert "(?:[0-9a-f]{2}(?:[:\\s-]?)){31}[0-9a-f]{2}" in builder
     assert "certificate SHA-256 fields" in builder
     assert "Signer #1 certificate SHA-256 digest" not in builder
 
