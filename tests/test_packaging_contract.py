@@ -434,6 +434,8 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
         assert text.startswith("#!/usr/bin/env bash\nset -euo pipefail\n")
         assert "trap dump_diagnostics ERR" in text
         assert "cat cache/startup-error.txt" in text
+        assert "^[A-Za-z0-9_-]{43}$" in text
+        assert 'test "${#raw}" -eq 43' in text
     upgrade_smoke = Path("scripts/ci/android_signed_upgrade_smoke.sh").read_text(encoding="utf-8")
 
     assert "push:\n    branches: [main]" in android

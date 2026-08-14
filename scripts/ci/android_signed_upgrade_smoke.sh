@@ -16,13 +16,26 @@ dump_diagnostics() {
 }
 trap dump_diagnostics ERR
 
+read_token() {
+  local raw=""
+  for _ in $(seq 1 30); do
+    raw="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token 2>/dev/null | tr -d '\r\n' || true)"
+    if [[ "$raw" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
+      break
+    fi
+    raw=""
+    sleep 1
+  done
+  test "${#raw}" -eq 43
+  ANDROID_LOCAL_TOKEN="$raw"
+  echo "::add-mask::$ANDROID_LOCAL_TOKEN"
+  export ANDROID_LOCAL_TOKEN
+}
+
 adb install "$current"
 adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
 adb forward tcp:9876 tcp:8765
-ANDROID_LOCAL_TOKEN="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token | tr -d '\r\n')"
-test "${#ANDROID_LOCAL_TOKEN}" -ge 32
-echo "::add-mask::$ANDROID_LOCAL_TOKEN"
-export ANDROID_LOCAL_TOKEN
+read_token
 python scripts/ci/android_runtime_smoke.py --phase seed --package "$package" --expected-version 2.1.0
 adb install -r "$target"
 adb shell am force-stop vn.io.huuhungn.affiliatereport

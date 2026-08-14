@@ -17,8 +17,17 @@ dump_diagnostics() {
 trap dump_diagnostics ERR
 
 read_token() {
-  ANDROID_LOCAL_TOKEN="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token | tr -d '\r\n')"
-  test "${#ANDROID_LOCAL_TOKEN}" -ge 32
+  local raw=""
+  for _ in $(seq 1 30); do
+    raw="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token 2>/dev/null | tr -d '\r\n' || true)"
+    if [[ "$raw" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
+      break
+    fi
+    raw=""
+    sleep 1
+  done
+  test "${#raw}" -eq 43
+  ANDROID_LOCAL_TOKEN="$raw"
   echo "::add-mask::$ANDROID_LOCAL_TOKEN"
   export ANDROID_LOCAL_TOKEN
 }
