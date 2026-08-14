@@ -5,12 +5,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.engine import Engine
 
 from .db import (
     accounts,
     app_users,
+    device_identity,
     get_engine,
     auth_sessions,
     import_batches,
@@ -19,7 +20,10 @@ from .db import (
     oidc_login_states,
     order_line_versions,
     raw_import_rows,
+    record_sync_tombstone,
     saved_report_views,
+    sync_history,
+    sync_tombstones,
     user_account_access,
     user_ui_preferences,
 )
@@ -27,20 +31,31 @@ from .db import (
 RESET_CONFIRMATION_PHRASE = "XOA DU LIEU"
 RESTORE_CONFIRMATION_PHRASE = "KHOI PHUC DU LIEU"
 RESET_TABLES = (raw_import_rows, order_line_versions, import_batches)
+RESET_AUXILIARY_TABLES: tuple = ()
 PREFERENCE_TABLES = (user_ui_preferences, saved_report_views)
 RESTORE_DELETE_TABLES = (
     saved_report_views,
     user_ui_preferences,
+    sync_history,
+    sync_tombstones,
     raw_import_rows,
     order_line_versions,
     import_batches,
     monthly_targets,
     accounts,
 )
-BUSINESS_TABLES = (accounts, monthly_targets, import_batches, raw_import_rows, order_line_versions)
+BUSINESS_TABLES = (
+    accounts,
+    monthly_targets,
+    import_batches,
+    raw_import_rows,
+    order_line_versions,
+    sync_tombstones,
+    sync_history,
+)
 RESTORE_TABLES = (*BUSINESS_TABLES, *PREFERENCE_TABLES)
 AUTH_TABLES = (app_users, user_account_access, auth_sessions, oidc_login_states)
-REQUIRED_TABLES = (*RESTORE_TABLES, *AUTH_TABLES)
+REQUIRED_TABLES = (*RESTORE_TABLES, *AUTH_TABLES, device_identity)
 
 
 def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
@@ -54,8 +69,14 @@ def reset_sqlite_business_data(engine: Engine) -> dict[str, object]:
             _backup_sqlite(db_path, backup_path)
             _check_backup(backup_path)
 
+            for sync_id in conn.execute(
+                select(import_batches.c.sync_id).where(import_batches.c.sync_id.is_not(None))
+            ).scalars():
+                record_sync_tombstone(conn, "import_batch", str(sync_id))
             for table in RESET_TABLES:
                 counts[table.name] = conn.execute(delete(table)).rowcount or 0
+            for table in RESET_AUXILIARY_TABLES:
+                conn.execute(delete(table))
             conn.commit()
         except Exception:
             conn.rollback()

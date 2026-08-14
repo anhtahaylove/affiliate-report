@@ -1,0 +1,262 @@
+name: Android candidate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: android-candidate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_CI_NAME: affiliate-report-android-ci-${{ github.sha }}
+  ANDROID_CANDIDATE_NAME: affiliate-report-android-${{ github.sha }}
+  ANDROID_CERT_SHA256: D59C870025C9F9EE493046E52CC0CD25160E2D4B4204BA86AD3629D0DFE5FBE4
+
+jobs:
+  ci-apk:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-java@v5
+        with:
+          distribution: microsoft
+          java-version: "21"
+          cache: gradle
+      - name: Prepare Android SDK 36
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not $env:ANDROID_HOME) { throw "windows-latest did not provide ANDROID_HOME" }
+          $sdkManager = Join-Path $env:ANDROID_HOME "cmdline-tools\latest\bin\sdkmanager.bat"
+          if (-not (Test-Path -LiteralPath $sdkManager)) { throw "Android sdkmanager is unavailable" }
+          & $sdkManager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          if ($LASTEXITCODE -ne 0) { throw "Could not install the pinned Android SDK packages" }
+      - name: Build web bundle and x86_64 CI APK
+        shell: pwsh
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install failed" }
+          pnpm --dir web build
+          if ($LASTEXITCODE -ne 0) { throw "web production build failed" }
+          .\scripts\ci\build_android_candidate.ps1 -Variant ciDebug -SkipWebBuild
+      - name: Verify generated Android scaffold contract
+        run: python scripts/ci/verify_android_scaffold.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ANDROID_CI_NAME }}
+          path: artifacts/android/AffiliateReport-v2.1.0-x86_64-debug.apk
+          if-no-files-found: error
+          retention-days: 3
+
+  emulator-smoke:
+    needs: ci-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [24, 36]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check "httpx==0.28.1"
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ env.ANDROID_CI_NAME }}
+          path: candidate
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Fresh install, Excel import, process recreation and AFFSYNC round-trip
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/ci/android_emulator_smoke.sh "${{ matrix.api-level }}"
+
+  signed-candidate:
+    if: github.event_name == 'push'
+    needs: emulator-smoke
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-java@v5
+        with:
+          distribution: microsoft
+          java-version: "21"
+          cache: gradle
+      - name: Prepare Android SDK 36
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not $env:ANDROID_HOME) { throw "windows-latest did not provide ANDROID_HOME" }
+          $sdkManager = Join-Path $env:ANDROID_HOME "cmdline-tools\latest\bin\sdkmanager.bat"
+          & $sdkManager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          if ($LASTEXITCODE -ne 0) { throw "Could not install the pinned Android SDK packages" }
+      - name: Build web bundle
+        shell: pwsh
+        run: |
+          pnpm --dir web install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install failed" }
+          pnpm --dir web build
+          if ($LASTEXITCODE -ne 0) { throw "web production build failed" }
+      - name: Build signed candidates in isolated secret scope
+        shell: pwsh
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          foreach ($value in @($env:KEYSTORE_B64, $env:KEYSTORE_PASSWORD, $env:KEY_ALIAS, $env:KEY_PASSWORD)) {
+            if (-not $value) { throw "Android release signing secrets are incomplete" }
+            Write-Output "::add-mask::$value"
+          }
+          $keystore = Join-Path $env:RUNNER_TEMP "affiliate-report-release-$([guid]::NewGuid().ToString('N')).p12"
+          $versionPath = "affiliate_report\version.py"
+          $gradlePath = "android\native\app\build.gradle"
+          $builderPath = "scripts\ci\build_android_candidate.ps1"
+          $versionPy = Get-Content -Raw $versionPath
+          $gradle = Get-Content -Raw $gradlePath
+          $builder = Get-Content -Raw $builderPath
+          try {
+            [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:KEYSTORE_B64))
+            $env:ANDROID_KEYSTORE_PATH = $keystore
+            $env:ANDROID_KEYSTORE_PASSWORD = $env:KEYSTORE_PASSWORD
+            $env:ANDROID_KEY_ALIAS = $env:KEY_ALIAS
+            $env:ANDROID_KEY_PASSWORD = $env:KEY_PASSWORD
+
+            .\scripts\ci\build_android_candidate.ps1 -Variant arm64Release -SkipWebBuild
+            .\scripts\ci\build_android_candidate.ps1 -Variant ciRelease -SkipWebBuild
+
+            if ($versionPy -notmatch 'APP_VERSION = "2\.1\.0"' -or $gradle -notmatch 'versionCode 2001000' -or $gradle -notmatch 'versionName "2\.1\.0"') {
+              throw "Synthetic Android upgrade source is not the exact 2.1.0 candidate"
+            }
+            $versionPy.Replace('APP_VERSION = "2.1.0"', 'APP_VERSION = "2.1.1"') | Set-Content -Encoding utf8 $versionPath
+            $gradle.Replace('versionCode 2001000', 'versionCode 2001001').Replace('versionName "2.1.0"', 'versionName "2.1.1"') | Set-Content -Encoding utf8 $gradlePath
+            $builder.Replace('$version = "2.1.0"', '$version = "2.1.1"').Replace('$versionCode = "2001000"', '$versionCode = "2001001"') | Set-Content -Encoding utf8 $builderPath
+            .\scripts\ci\build_android_candidate.ps1 -Variant ciRelease -SkipWebBuild
+          }
+          finally {
+            $versionPy | Set-Content -Encoding utf8 $versionPath
+            $gradle | Set-Content -Encoding utf8 $gradlePath
+            $builder | Set-Content -Encoding utf8 $builderPath
+            Remove-Item Env:ANDROID_KEYSTORE_PATH, Env:ANDROID_KEYSTORE_PASSWORD, Env:ANDROID_KEY_ALIAS, Env:ANDROID_KEY_PASSWORD -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $keystore) { Remove-Item -LiteralPath $keystore -Force }
+          }
+      - name: Verify signed arm64 candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = & python -c "from affiliate_report.version import APP_VERSION; print(APP_VERSION)"
+          $apk = "artifacts\android\AffiliateReport-v$version-arm64.apk"
+          $apksigner = Join-Path $env:ANDROID_HOME "build-tools\36.0.0\apksigner.bat"
+          if (-not (Test-Path -LiteralPath $apk)) { throw "Signed APK is missing" }
+          $details = & $apksigner verify --verbose --print-certs $apk 2>&1
+          if ($LASTEXITCODE -ne 0) { throw "apksigner verification failed" }
+          $certLine = @($details | Where-Object { $_ -match '^Signer #1 certificate SHA-256 digest:' })
+          if ($certLine.Count -ne 1) { throw "Could not resolve the Android signing certificate" }
+          $cert = ($certLine[0] -replace '^.*digest:\s*', '').Replace(':', '').Trim().ToUpperInvariant()
+          if ($cert -ne $env:ANDROID_CERT_SHA256) { throw "Android signing certificate does not match the pinned release key" }
+          $aapt2 = Join-Path $env:ANDROID_HOME "build-tools\36.0.0\aapt2.exe"
+          $badging = (& $aapt2 dump badging $apk) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $badging -notmatch "package: name='vn\.io\.huuhungn\.affiliatereport'.*versionCode='2001000'.*versionName='2\.1\.0'") {
+            throw "APK package/version metadata is not the v2.1.0 release contract"
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $apk).Hash
+          $size = (Get-Item -LiteralPath $apk).Length
+          @"
+          ## Android release candidate
+          - Source SHA: `${{ github.sha }}`
+          - APK: `AffiliateReport-v$version-arm64.apk`
+          - SHA-256: `$hash`
+          - Size: `$size bytes`
+          - Certificate SHA-256: `$cert`
+          - Emulator API 24/36: PASS
+          "@ >> $env:GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ANDROID_CANDIDATE_NAME }}
+          path: artifacts/android/AffiliateReport-v2.1.0-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        with:
+          name: affiliate-report-android-upgrade-${{ github.sha }}
+          path: |
+            artifacts/android/AffiliateReport-v2.1.0-x86_64-release.apk
+            artifacts/android/AffiliateReport-v2.1.1-x86_64-release.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  signed-update-smoke:
+    if: github.event_name == 'push'
+    needs: signed-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check "httpx==0.28.1"
+      - uses: actions/download-artifact@v8
+        with:
+          name: affiliate-report-android-upgrade-${{ github.sha }}
+          path: candidate
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Same-key synthetic 2.1.0 to 2.1.1 upgrade preserves SQLite
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash scripts/ci/android_signed_upgrade_smoke.sh

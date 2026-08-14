@@ -5,11 +5,10 @@ import os
 import secrets
 import sys
 import threading
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Literal
-
 import pandas as pd
 from fastapi import (
     Depends,
@@ -22,12 +21,17 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
-from pydantic import AliasChoices, BaseModel, Field
-from sqlalchemy import select
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field
+try:  # Pydantic v1 trên Android không có AliasChoices/model_dump.
+    from pydantic import AliasChoices
+except ImportError:  # pragma: no cover - chạy trong Android feasibility gate
+    AliasChoices = None
+from sqlalchemy import delete, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
+from starlette.background import BackgroundTask
 
 from .accounts import (
     ACCOUNT_CODE_RE,
@@ -41,7 +45,7 @@ from .accounts import (
 from .auth import AuthService, AuthSettings, Principal, is_loopback_host
 from .cloud_pairing import CloudPairingError, CloudPairingRunner
 from .db import accounts as account_registry
-from .db import get_engine, import_batches, import_rows, init_db, monthly_targets
+from .db import ensure_device_identity, get_engine, import_batches, import_rows, init_db, monthly_targets, sync_tombstones, target_sync_id
 from .imports import order_line_history, undo_import, undo_preview
 from .pairing import PairingRunner
 from .parser import read_xlsx
@@ -66,10 +70,19 @@ from .reset_data import (
     restore_sqlite_business_backup,
     sqlite_file_path,
 )
+from .sync_service import (
+    MAX_PACKAGE_BYTES,
+    SyncError,
+    SyncPackageTooLarge,
+    SyncPreviewExpired,
+    SyncService,
+)
 from .updater import (
     INSTALL_CONFIRMATION_PHRASE,
     UpdateError,
+    check_for_android_update,
     check_for_update,
+    download_latest_android,
     download_latest_update,
     public_update_issue,
     read_update_status,
@@ -79,6 +92,9 @@ from .updater import (
 from .version import APP_VERSION
 
 MAX_UPLOAD_MB = 20
+ANDROID_APK_TOKEN_TTL = timedelta(minutes=5)
+SYNC_EXPORT_TOKEN_TTL = timedelta(minutes=5)
+ANDROID_LOCAL_TOKEN_COOKIE = "android_local_token"
 STATUSES = ["settled", "ineligible", "pending", "unknown"]
 
 
@@ -206,13 +222,25 @@ def _sanitize_view_filters(route: str, values: dict[str, Any], *, strict: bool) 
     return output
 
 
-class TargetUpdate(BaseModel):
-    # Nhận cả tên cũ vì tab đang mở lúc app cập nhật vẫn chạy bản JS trước đó vài phút.
-    daily_target_commission: int = Field(
-        ge=0,
-        le=1_000_000_000_000,
-        validation_alias=AliasChoices("daily_target_commission", "target_commission"),
-    )
+if AliasChoices is not None:
+    class TargetUpdate(BaseModel):
+        # Nhận cả tên cũ vì tab đang mở lúc app cập nhật vẫn chạy bản JS trước đó vài phút.
+        daily_target_commission: int = Field(
+            ge=0,
+            le=1_000_000_000_000,
+            validation_alias=AliasChoices("daily_target_commission", "target_commission"),
+        )
+else:
+    from pydantic import root_validator
+
+    class TargetUpdate(BaseModel):
+        daily_target_commission: int = Field(ge=0, le=1_000_000_000_000)
+
+        @root_validator(pre=True)
+        def _legacy_alias(cls, values):
+            if "daily_target_commission" not in values and "target_commission" in values:
+                values["daily_target_commission"] = values["target_commission"]
+            return values
 
 
 class ResetDataRequest(BaseModel):
@@ -226,6 +254,16 @@ class RestoreBackupRequest(BaseModel):
 
 class InstallUpdateRequest(BaseModel):
     confirmation: str
+
+
+class SyncExportRequest(BaseModel):
+    passphrase: str = Field(min_length=8, max_length=256)
+
+
+class SyncImportRequest(BaseModel):
+    preview_id: str = Field(min_length=36, max_length=36)
+    confirmation: str
+    conflict_resolutions: dict[str, Literal["local", "incoming"]] = Field(default_factory=dict)
 
 
 class AccountCreate(BaseModel):
@@ -279,6 +317,13 @@ def _clean_nested(value: Any) -> Any:
     if isinstance(value, list):
         return [_clean_nested(item) for item in value]
     return _clean(value)
+
+
+def _model_dump(model: BaseModel, *, exclude_none: bool = False) -> dict[str, Any]:
+    method = getattr(model, "model_dump", None)
+    if callable(method):
+        return method(exclude_none=exclude_none)
+    return model.dict(exclude_none=exclude_none)
 
 
 def _list(values: list[str] | None) -> list[str] | None:
@@ -355,9 +400,31 @@ def _capability(available: bool, reason: str | None = None) -> dict[str, Any]:
     return {"available": available, "reason": None if available else reason}
 
 
+def _runtime_platform() -> Literal["windows", "android", "web"]:
+    configured = (
+        os.getenv("APP_PLATFORM", "").strip().lower()
+        or os.getenv("AFFILIATE_RUNTIME_PLATFORM", "").strip().lower()
+    )
+    if configured in {"windows", "android", "web"}:
+        return configured  # type: ignore[return-value]
+    # Desktop là runtime lịch sử/mặc định của repo, kể cả khi test/build chạy trên
+    # runner Linux. Android và web server phải khai báo APP_PLATFORM rõ ràng.
+    return "windows"
+
+
+def _configured_android_local_token() -> str | None:
+    if _runtime_platform() != "android":
+        return None
+    token = os.getenv("ANDROID_LOCAL_TOKEN", "")
+    if not 32 <= len(token) <= 256:
+        raise ValueError("Android local runtime requires a private ANDROID_LOCAL_TOKEN.")
+    return token
+
+
 def _runtime_capabilities(app: FastAPI) -> dict[str, Any]:
     engine = _engine(app)
     auth_mode = _auth(app).settings.mode
+    runtime_platform = _runtime_platform()
     try:
         sqlite_file_path(engine)
         data_admin = _capability(True)
@@ -371,8 +438,12 @@ def _runtime_capabilities(app: FastAPI) -> dict[str, Any]:
             reason = str(exc)
         data_admin = _capability(False, reason)
 
-    update_check_available = auth_mode == "local" and data_admin["available"]
-    if auth_mode != "local":
+    sync_available = data_admin["available"] and auth_mode == "local"
+    sync_reason = "Đồng bộ thiết bị chỉ khả dụng ở chế độ local với SQLite riêng trên thiết bị."
+    update_check_available = runtime_platform == "windows" and auth_mode == "local" and data_admin["available"]
+    if runtime_platform != "windows":
+        update_reason = "Trình cập nhật Windows chỉ khả dụng trong ứng dụng Windows đã cài đặt."
+    elif auth_mode != "local":
         update_reason = (
             "Bản triển khai OIDC dùng chung được cập nhật tại máy chủ; "
             "trình cập nhật Windows cục bộ không chạy trong môi trường này."
@@ -391,9 +462,15 @@ def _runtime_capabilities(app: FastAPI) -> dict[str, Any]:
     return {
         "database_backend": engine.dialect.name,
         "auth_mode": auth_mode,
+        "runtime_platform": runtime_platform,
         "data_admin": data_admin,
+        "sync": _capability(sync_available, sync_reason),
         "update_check": _capability(update_check_available, update_reason),
         "update_install": _capability(install_available, install_reason),
+        "android_update": _capability(
+            runtime_platform == "android" and sync_available,
+            "Cập nhật APK chỉ khả dụng trong ứng dụng Android local.",
+        ),
     }
 
 
@@ -404,6 +481,20 @@ def _identity_policy(app: FastAPI) -> dict[str, Any]:
         "oidc_allowlist_enforced": mode == "oidc",
         "enforcement": "login_and_active_sessions" if mode == "oidc" else "local_owner",
     }
+
+
+def _android_update_summary() -> dict[str, Any] | None:
+    if _runtime_platform() != "android":
+        return None
+    try:
+        return check_for_android_update()
+    except UpdateError as exc:
+        return {
+            "current_version": APP_VERSION,
+            "available": False,
+            "installable": False,
+            "error": str(exc),
+        }
 
 
 def _require_capability(capability: dict[str, Any]) -> None:
@@ -425,6 +516,15 @@ async def _read_upload(file: UploadFile) -> bytes:
     return bytes(data)
 
 
+async def _read_sync_upload(file: UploadFile) -> bytes:
+    data = bytearray()
+    while chunk := await file.read(min(1024 * 1024, MAX_PACKAGE_BYTES + 1 - len(data))):
+        data.extend(chunk)
+        if len(data) > MAX_PACKAGE_BYTES:
+            raise HTTPException(status_code=413, detail="Gói đồng bộ vượt giới hạn 100 MiB.")
+    return bytes(data)
+
+
 def _xlsx_response(df: pd.DataFrame, filename: str, sheet_name: str) -> StreamingResponse:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -440,7 +540,23 @@ def _xlsx_response(df: pd.DataFrame, filename: str, sheet_name: str) -> Streamin
     )
 
 
+def _sweep_sync_export_spool(engine: Engine) -> None:
+    """Remove private one-time export files which cannot survive app restart."""
+
+    try:
+        export_dir = sqlite_file_path(engine).parent / "sync-exports"
+    except ValueError:
+        return
+    if not export_dir.is_dir():
+        return
+    for pattern in ("*.affsync", "*.tmp"):
+        for candidate in export_dir.glob(pattern):
+            if candidate.is_file():
+                candidate.unlink(missing_ok=True)
+
+
 def create_app(engine: Engine | None = None, auth: AuthService | None = None) -> FastAPI:
+    android_local_token = _configured_android_local_token()
     app = FastAPI(
         title="Affiliate Report API",
         description="Phase-2 API with local-safe mode, OIDC sessions and account-scoped RBAC.",
@@ -449,8 +565,14 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     app.state.engine = engine or get_engine()
     init_db(app.state.engine)
     app.state.auth = auth or AuthService(app.state.engine, AuthSettings.from_env())
+    app.state.sync = SyncService(app.state.engine)
     app.state.update_lock = threading.Lock()
     app.state.update_scheduled = False
+    app.state.android_apk_lock = threading.Lock()
+    app.state.android_apk_tokens = {}
+    app.state.sync_export_lock = threading.Lock()
+    app.state.sync_export_tokens = {}
+    _sweep_sync_export_spool(app.state.engine)
     origins = _cors_origins()
     if "*" in origins:
         raise ValueError("API_CORS_ORIGINS không được dùng * khi cookie credentials được bật.")
@@ -459,10 +581,18 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Desktop-Control-Token"],
+        allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Desktop-Control-Token", "X-Android-Local-Token"],
     )
 
+    def require_android_local_access(request: Request) -> None:
+        if android_local_token is None:
+            return
+        supplied = request.headers.get("X-Android-Local-Token") or request.cookies.get(ANDROID_LOCAL_TOKEN_COOKIE)
+        if not supplied or not secrets.compare_digest(supplied, android_local_token):
+            raise HTTPException(status_code=401, detail="Android local authentication required")
+
     def principal(request: Request) -> Principal:
+        require_android_local_access(request)
         service = _auth(app)
         if service.settings.mode == "local" and (
             request.client is None
@@ -479,6 +609,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         return current
 
     def csrf(request: Request) -> None:
+        require_android_local_access(request)
         service = _auth(app)
         if not service.require_csrf(
             request.cookies.get(service.settings.cookie_name),
@@ -631,6 +762,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             # Hiện ngay ở thanh bên: trước đây chỉ owner xem được, nằm sâu trong Cài đặt >
             # Cập nhật, nên người báo lỗi thường không biết mình đang chạy bản nào.
             "app_version": APP_VERSION,
+            "runtime_platform": _runtime_platform(),
+            # Không kiểm tra Internet trong meta: mọi trang local phải mở ngay cả khi Android
+            # đang offline. Trang Cập nhật gọi endpoint riêng khi người dùng thực sự mở nó.
+            "android_update": None,
             # Thư mục nhập tự động chỉ có ở bản chạy trên máy (SQLite). Trả về đường dẫn để
             # giao diện chỉ được cho người dùng thả tệp vào đâu — tạo thư mục im lặng trong
             # %LOCALAPPDATA% thì không ai tìm ra.
@@ -820,16 +955,41 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "daily_target_commission": changes.daily_target_commission,
         }
         with _engine(app).begin() as conn:
+            device_id = ensure_device_identity(conn)["device_id"]
+            sync_timestamp = datetime.now()
+            values |= {
+                "sync_id": target_sync_id(account, month_date),
+                "source_device_id": device_id,
+                "sync_updated_at": sync_timestamp,
+            }
             if conn.dialect.name == "postgresql":
                 from sqlalchemy.dialects.postgresql import insert
             else:
                 from sqlalchemy.dialects.sqlite import insert
             stmt = insert(monthly_targets).values(**values).on_conflict_do_update(
                 index_elements=["account", "month"],
-                set_={"daily_target_commission": changes.daily_target_commission},
+                set_={
+                    "daily_target_commission": changes.daily_target_commission,
+                    "source_device_id": device_id,
+                    "sync_updated_at": func.now(),
+                },
             )
             conn.execute(stmt)
+            conn.execute(delete(sync_tombstones).where(
+                sync_tombstones.c.entity_type == "target",
+                sync_tombstones.c.entity_key == target_sync_id(account, month_date),
+            ))
         return {"account": account, "month": month, "daily_target_commission": changes.daily_target_commission}
+
+    @app.get("/api/v1/update/android/status")
+    def android_update_status(_: Principal = Depends(owner)) -> dict[str, Any]:
+        capabilities = _runtime_capabilities(app)
+        _require_capability(capabilities["android_update"])
+        return _android_update_summary() or {
+            "current_version": APP_VERSION,
+            "available": False,
+            "installable": False,
+        }
 
     @app.post("/api/v1/targets/{month}/copy-previous")
     def copy_previous_targets_endpoint(
@@ -849,6 +1009,8 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         source_month = _previous_month(target_month)
         allowed = set(permitted_target_accounts(current, None))
         with _engine(app).begin() as conn:
+            device_id = ensure_device_identity(conn)["device_id"]
+            sync_timestamp = datetime.now()
             existing = {
                 row.account
                 for row in conn.execute(select(monthly_targets.c.account).where(monthly_targets.c.month == target_month))
@@ -866,10 +1028,22 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
                 conn.execute(
                     monthly_targets.insert(),
                     [
-                        {"account": row.account, "month": target_month, "daily_target_commission": int(row.daily_target_commission)}
+                        {
+                            "account": row.account,
+                            "month": target_month,
+                            "daily_target_commission": int(row.daily_target_commission),
+                            "sync_id": target_sync_id(row.account, target_month),
+                            "source_device_id": device_id,
+                            "sync_updated_at": sync_timestamp,
+                        }
                         for row in copied
                     ],
                 )
+                for row in copied:
+                    conn.execute(delete(sync_tombstones).where(
+                        sync_tombstones.c.entity_type == "target",
+                        sync_tombstones.c.entity_key == target_sync_id(row.account, target_month),
+                    ))
         return {
             "month": month,
             "from_month": source_month.strftime("%Y-%m"),
@@ -1151,6 +1325,161 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         permitted_accounts(current, [str(items[0]["account"])])
         return {"items": [_clean_nested(item) for item in items], "count": len(items)}
 
+    @app.get("/api/v1/sync/status")
+    def sync_status_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["sync"])
+        try:
+            return app.state.sync.status()
+        except SyncError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/v1/sync/history")
+    def sync_history_endpoint(
+        limit: int = Query(100, ge=1, le=200),
+        _: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["sync"])
+        try:
+            return app.state.sync.history(limit)
+        except SyncError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/v1/sync/export")
+    def sync_export_endpoint(
+        request: SyncExportRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> StreamingResponse:
+        _require_capability(_runtime_capabilities(app)["sync"])
+        try:
+            package, manifest = app.state.sync.export_package(request.passphrase)
+        except SyncPackageTooLarge as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except SyncError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return StreamingResponse(
+            BytesIO(package),
+            media_type="application/vnd.affiliate-report.sync",
+            headers={
+                "Content-Disposition": f'attachment; filename="{manifest["filename"]}"',
+                "X-Affsync-Package-Id": manifest["package_id"],
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @app.post("/api/v1/sync/export/prepare")
+    def prepare_sync_export_endpoint(
+        request: SyncExportRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        """Prepare a one-time loopback download for Android's native file picker.
+
+        Browser Blob URLs are not visible to the native bridge. A short-lived random
+        token gives Android a same-origin URL without exposing the user's passphrase.
+        Only one prepared export is retained, and the encrypted bytes are spooled to
+        the private data directory instead of being held in RAM until the user picks a file.
+        """
+        _require_capability(_runtime_capabilities(app)["sync"])
+        if _runtime_platform() != "android":
+            raise HTTPException(status_code=409, detail="Liên kết tải đồng bộ chỉ dùng trong ứng dụng Android.")
+        try:
+            package, manifest = app.state.sync.export_package(request.passphrase)
+        except SyncPackageTooLarge as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except SyncError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        now = datetime.now(UTC)
+        expires_at = now + SYNC_EXPORT_TOKEN_TTL
+        token = secrets.token_urlsafe(32)
+        export_dir = sqlite_file_path(_engine(app)).parent / "sync-exports"
+        export_dir.mkdir(parents=True, exist_ok=True)
+        package_path = export_dir / f"{token}.affsync"
+        temporary_path = package_path.with_suffix(".tmp")
+        temporary_path.write_bytes(package)
+        os.replace(temporary_path, package_path)
+        package_size = package_path.stat().st_size
+        with app.state.sync_export_lock:
+            previous = list(app.state.sync_export_tokens.values())
+            app.state.sync_export_tokens = {}
+            app.state.sync_export_tokens[token] = {
+                "path": package_path,
+                "filename": manifest["filename"],
+                "size": package_size,
+                "expires_at": expires_at,
+            }
+        for old in previous:
+            Path(old["path"]).unlink(missing_ok=True)
+        return {
+            "download_url": f"/api/v1/sync/export/download/{token}",
+            "filename": manifest["filename"],
+            "size": package_size,
+            "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        }
+
+    @app.get("/api/v1/sync/export/download/{token}")
+    def download_prepared_sync_export(token: str) -> FileResponse:
+        now = datetime.now(UTC)
+        with app.state.sync_export_lock:
+            entry = app.state.sync_export_tokens.pop(token, None)
+            for expired_token, expired in list(app.state.sync_export_tokens.items()):
+                if expired["expires_at"] <= now:
+                    stale = app.state.sync_export_tokens.pop(expired_token, None)
+                    if stale:
+                        Path(stale["path"]).unlink(missing_ok=True)
+        if entry is None or entry["expires_at"] <= now:
+            if entry:
+                Path(entry["path"]).unlink(missing_ok=True)
+            raise HTTPException(status_code=404, detail="Liên kết .affsync đã hết hạn hoặc đã được sử dụng.")
+        package_path = Path(entry["path"])
+        if not package_path.is_file():
+            raise HTTPException(status_code=404, detail="Gói .affsync đã chuẩn bị không còn tồn tại.")
+        return FileResponse(
+            package_path,
+            media_type="application/vnd.affiliate-report.sync",
+            filename=entry["filename"],
+            content_disposition_type="attachment",
+            headers={
+                "X-Content-Type-Options": "nosniff",
+            },
+            background=BackgroundTask(package_path.unlink, missing_ok=True),
+        )
+
+    @app.post("/api/v1/sync/preview")
+    async def sync_preview_endpoint(
+        package: UploadFile = File(...),
+        passphrase: str = Form(..., min_length=8, max_length=256),
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["sync"])
+        try:
+            package_bytes = await _read_sync_upload(package)
+            return await run_in_threadpool(app.state.sync.preview, package_bytes, passphrase)
+        except SyncPackageTooLarge as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except SyncError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/api/v1/sync/import")
+    def sync_import_endpoint(
+        request: SyncImportRequest,
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["sync"])
+        try:
+            return app.state.sync.import_preview(
+                request.preview_id,
+                request.confirmation,
+                request.conflict_resolutions,
+            )
+        except SyncPreviewExpired as exc:
+            raise HTTPException(status_code=410, detail=str(exc)) from exc
+        except SyncError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.post("/api/v1/admin/reset-data")
     def reset_data_endpoint(
         request: ResetDataRequest,
@@ -1211,6 +1540,79 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             raise HTTPException(status_code=502, detail=str(exc)) from exc
         result["automatic_install_supported"] = _automatic_update_supported(app)
         return result
+
+    @app.post("/api/v1/update/android/prepare")
+    def prepare_android_update_endpoint(
+        _: None = Depends(csrf),
+        __: Principal = Depends(owner),
+    ) -> dict[str, Any]:
+        _require_capability(_runtime_capabilities(app)["android_update"])
+        try:
+            data_dir = sqlite_file_path(_engine(app)).parent
+            downloaded = download_latest_android(data_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except UpdateError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        apk_path = Path(str(downloaded.get("apk_path") or "")).resolve()
+        update_root = (data_dir / "updates").resolve()
+        try:
+            apk_path.relative_to(update_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail="Đường dẫn APK đã xác minh không an toàn.") from exc
+        if not apk_path.is_file() or apk_path.suffix.lower() != ".apk":
+            raise HTTPException(status_code=500, detail="APK đã xác minh không tồn tại.")
+
+        now = datetime.now(UTC)
+        expires_at = now + ANDROID_APK_TOKEN_TTL
+        token = secrets.token_urlsafe(32)
+        with app.state.android_apk_lock:
+            app.state.android_apk_tokens = {
+                key: value
+                for key, value in app.state.android_apk_tokens.items()
+                if value["expires_at"] > now
+            }
+            app.state.android_apk_tokens[token] = {
+                "path": apk_path,
+                "expires_at": expires_at,
+                "version": downloaded["version"],
+                "size": apk_path.stat().st_size,
+                "sha256": str(downloaded["sha256"]).upper(),
+            }
+        return {
+            "version": downloaded["version"],
+            "filename": apk_path.name,
+            "size": apk_path.stat().st_size,
+            "sha256": downloaded["sha256"],
+            "release_url": downloaded["release_url"],
+            "download_url": f"/api/v1/update/android/apk/{token}",
+            "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        }
+
+    @app.get("/api/v1/update/android/apk/{token}")
+    def download_prepared_android_apk(token: str) -> FileResponse:
+        now = datetime.now(UTC)
+        with app.state.android_apk_lock:
+            entry = app.state.android_apk_tokens.pop(token, None)
+            for expired_token, expired in list(app.state.android_apk_tokens.items()):
+                if expired["expires_at"] <= now:
+                    app.state.android_apk_tokens.pop(expired_token, None)
+        if entry is None or entry["expires_at"] <= now:
+            raise HTTPException(status_code=404, detail="Liên kết APK đã hết hạn hoặc đã được sử dụng.")
+        apk_path = Path(entry["path"])
+        if not apk_path.is_file():
+            raise HTTPException(status_code=404, detail="APK đã xác minh không còn tồn tại.")
+        return FileResponse(
+            apk_path,
+            media_type="application/vnd.android.package-archive",
+            filename=apk_path.name,
+            headers={
+                "X-Affiliate-Report-Version": str(entry["version"]),
+                "X-Affiliate-Report-Size": str(entry["size"]),
+                "X-Affiliate-Report-SHA256": str(entry["sha256"]),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.get("/api/v1/admin/update/progress")
     def update_progress_endpoint(_: Principal = Depends(owner)) -> dict[str, Any]:
@@ -1409,7 +1811,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         current: Principal = Depends(principal),
     ) -> dict[str, Any]:
         current_values = get_preferences(current)
-        values = current_values | changes.model_dump(exclude_none=True)
+        values = current_values | _model_dump(changes, exclude_none=True)
         values["dashboard_layout"] = _validate_dashboard_layout(values["dashboard_layout"])
         _auth(app).save_preferences(current, values)
         return get_preferences(current)

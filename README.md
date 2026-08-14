@@ -1,6 +1,6 @@
 # Affiliate Report
 
-Web app local cho Windows để import Excel export từ TikTok Affiliate, chống double-count khi file bị overlap và theo dõi hiệu suất theo từng affiliate account. UI production là **Next.js Momentum Canvas**; Python/FastAPI giữ toàn bộ parser, dedupe, versioning và công thức báo cáo.
+Ứng dụng local-first cho Windows và Android để import Excel export từ TikTok Affiliate, chống double-count khi file bị overlap và theo dõi hiệu suất theo từng affiliate account. UI production là **Next.js Momentum Canvas**; Python/FastAPI giữ toàn bộ parser, dedupe, versioning và công thức báo cáo trên cả hai nền tảng.
 
 ## Chức năng
 
@@ -11,13 +11,15 @@ Web app local cho Windows để import Excel export từ TikTok Affiliate, chố
 - Sửa KPI/ngày theo từng account; owner sửa thêm target tổng `ALL`.
 - Upload `.xlsx`, phản hồi duplicate/inserted/updated/unchanged/rejected và lịch sử import gần nhất.
 - Hybrid Pairing gửi file từ điện thoại: ưu tiên cùng Wi-Fi/LAN hoặc dùng Cloudflare relay khi hai thiết bị khác mạng; nội dung được mã hóa AES-256-GCM trước khi lên cloud.
+- Đồng bộ thủ công Windows ↔ Android bằng gói `.affsync` mã hóa AES-256-GCM, không sao chép trực tiếp SQLite và không đưa database lên cloud.
 - Roles `owner` / `operator` / `viewer`, account allowlist, OIDC session + CSRF cho shared web.
 - SQLite cho local single-user; PostgreSQL cho shared multi-user.
-- PWA responsive dùng chung cho web/desktop, sẵn boundary để bọc mobile sau này.
+- Android chạy Python 3.12/FastAPI/SQLite ngay trong ứng dụng qua Chaquopy; dữ liệu nằm trong internal app storage.
+- PWA responsive dùng chung cho web/desktop/Android, có safe-area, bottom navigation và luồng cài APK riêng cho Android.
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.0.30.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.1.0.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\AffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -34,7 +36,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\AffiliateReportSetup-v2.0.30.exe -Algorithm SHA256
+   Get-FileHash .\AffiliateReportSetup-v2.1.0.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -59,6 +61,29 @@ Trong **Imports → Gửi tệp từ điện thoại**, chọn **Cùng Wi-Fi** �
 Máy người dùng không cần Python, Node.js, pnpm, Docker hoặc Railway. Dữ liệu nằm tại `%LOCALAPPDATA%\AffiliateReport\data\affiliate_report.db` và không được nhúng vào installer hay ghi đè khi nâng cấp/cài lại. Đây là chủ ý để giữ lịch sử; muốn làm mới dữ liệu phải thực hiện thao tác reset riêng, không dùng reinstall.
 
 Mỗi máy cài đặt hoạt động độc lập với database riêng. Người dùng chỉ cần cài full installer rồi chạy local; domain, Cloudflare Tunnel, OIDC và PostgreSQL chỉ cần khi chủ động chuyển sang mô hình dùng chung nhiều người.
+
+## Cài và sử dụng trên Android
+
+Tải `AffiliateReport-v2.1.0-arm64.apk` từ cùng trang Releases và đối chiếu dòng tương ứng trong `SHA256SUMS.txt`. APK hỗ trợ thiết bị Android 7.0 trở lên dùng ABI `arm64-v8a`.
+
+1. Mở APK, cho phép trình duyệt hoặc trình quản lý tệp cài ứng dụng không rõ nguồn khi Android yêu cầu, rồi xác nhận cài đặt.
+2. Mở **Affiliate Report**. FastAPI và SQLite chạy cục bộ trong ứng dụng; không cần máy Windows, Docker hay server riêng.
+3. Dùng trình chọn tệp hệ thống để import Excel. Ứng dụng không yêu cầu quyền truy cập toàn bộ bộ nhớ.
+4. Trước khi gỡ ứng dụng, vào **Cài đặt → Thiết bị & đồng bộ** và export gói `.affsync`; Android có thể xóa toàn bộ local database khi uninstall.
+
+Android kiểm tra cùng update feed Ed25519 như Windows, xác minh filename/kích thước/SHA-256 của APK rồi chuyển tệp đã xác minh sang trình cài đặt hệ thống. Android vẫn bắt buộc người dùng xác nhận cài đặt và chỉ cho phép cài đè khi APK mới dùng đúng signing key.
+
+## Đồng bộ dữ liệu Windows ↔ Android
+
+Trang **Cài đặt → Thiết bị & đồng bộ** chỉ khả dụng trong local mode dùng SQLite. Gói `AffiliateReport-<date>.affsync` có header `AFFSYNC1`, được nén và mã hóa AES-256-GCM; khóa được dẫn xuất bằng Scrypt từ mật khẩu do người dùng nhập.
+
+- Export không chứa session, OIDC user, updater state, log, backup hoặc cấu hình riêng của thiết bị.
+- Import luôn theo luồng chọn gói → nhập mật khẩu → preview → xử lý từng conflict → nhập `DONG BO` → backup → kiểm tra integrity/KPI → áp dụng atomic.
+- Package đã import được ghi nhận để import lại không nhân đôi đơn hàng hoặc lần import.
+- Account/target xung đột mặc định giữ bản local cho tới khi người dùng chọn rõ phương án khác.
+- Preview hết hạn sau 15 phút; kích thước gói tối đa 100 MiB.
+
+Cloud Pairing và `.affsync` có mục đích khác nhau: Cloud Pairing chỉ chuyển file Excel mã hóa tạm thời; `.affsync` mới là định dạng trao đổi dữ liệu ứng dụng giữa các thiết bị. Cloudflare không lưu database của người dùng.
 
 Owner có thể dùng mục **Reset Data** trong dashboard local. App bắt buộc nhập cụm xác nhận, tạo backup đầy đủ tại `%LOCALAPPDATA%\AffiliateReport\data\backups`, kiểm tra backup rồi mới xoá lịch sử import và đơn hàng. Account, target, cấu hình đăng nhập và tùy chọn giao diện được giữ nguyên.
 
@@ -146,7 +171,8 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\AffiliateReportSetup-v2.0.30.exe`
+- `artifacts\installer\AffiliateReportSetup-v2.1.0.exe`
+- `artifacts\android\AffiliateReport-v2.1.0-arm64.apk`
 - `artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`
@@ -188,6 +214,7 @@ Kịch bản này cố ý không nằm trong CI: mỗi lần chạy phải tải
 - [Database schema](docs/schema.sql)
 - [Phase 2 architecture](docs/PHASE-2-ARCHITECTURE.md)
 - [Hybrid Pairing trên Cloudflare](docs/HYBRID-PAIRING-CLOUDFLARE.md)
+- [Android local runtime](docs/android-runtime.md)
 
 ## Quy tắc dữ liệu
 

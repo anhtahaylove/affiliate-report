@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.0.30 - 2026-08-14
+## v2.1.0 - 2026-08-14
 
 **Gửi tệp từ điện thoại ngay cả khi không cùng Wi-Fi.** Trang Nhập dữ liệu nay có hai
 lựa chọn rõ ràng: **Cùng Wi-Fi** tiếp tục dùng listener LAN ngắn hạn như trước, còn

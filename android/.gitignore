@@ -1,0 +1,11 @@
+node_modules/
+.idea/
+native/.gradle/
+native/**/build/
+native/local.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.apk
+*.aab

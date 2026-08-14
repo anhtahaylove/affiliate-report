@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.engine import Engine
 
-from .db import import_batches, order_line_versions, raw_import_rows
+from .db import import_batches, order_line_versions, raw_import_rows, record_sync_tombstone
 from .reset_data import backup_sqlite_before_change
 
 UNDO_CONFIRMATION_PREFIX = "HOAN TAC"
@@ -110,6 +110,7 @@ def undo_import(engine: Engine, batch_id: int, confirmation: str) -> dict[str, A
         if conn.dialect.name == "sqlite":
             conn.exec_driver_sql("BEGIN IMMEDIATE")
         try:
+            batch = _batch(conn, batch_id)
             keys = _batch_keys(conn, batch_id)
             removed_versions = conn.execute(
                 delete(order_line_versions).where(order_line_versions.c.batch_id == batch_id)
@@ -152,6 +153,8 @@ def undo_import(engine: Engine, batch_id: int, confirmation: str) -> dict[str, A
             removed_raw_rows = conn.execute(
                 delete(raw_import_rows).where(raw_import_rows.c.batch_id == batch_id)
             ).rowcount or 0
+            if batch.get("sync_id"):
+                record_sync_tombstone(conn, "import_batch", str(batch["sync_id"]))
             if conn.execute(delete(import_batches).where(import_batches.c.id == batch_id)).rowcount == 0:
                 raise LookupError("Không tìm thấy lần nhập.")
             conn.commit()

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
+import socket
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import (
     JSON,
@@ -23,6 +26,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    delete,
     event,
     func,
     select,
@@ -36,6 +40,7 @@ from .parser import file_sha256
 
 DEFAULT_DATABASE_URL = "sqlite:///data/affiliate_report.db"
 ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_-]{1,64}$")
+SYNC_ID_NAMESPACE = UUID("35788392-f297-47bb-8f2f-0a6a8e5af910")
 ANALYTICS_RAW_FIELDS = {
     "product_id": "ID sản phẩm",
     "shop_id": "Mã cửa hàng",
@@ -45,16 +50,32 @@ ANALYTICS_RAW_FIELDS = {
     "commission_type": "Loại hoa hồng",
     "currency": "Đơn vị tiền tệ",
 }
+
+
+def account_sync_id(code: str) -> str:
+    return str(uuid5(SYNC_ID_NAMESPACE, f"account:{code.strip().upper()}"))
+
+
+def target_sync_id(account: str, month: Any) -> str:
+    month_text = month.isoformat() if hasattr(month, "isoformat") else str(month)
+    return str(uuid5(SYNC_ID_NAMESPACE, f"target:{account.strip().upper()}:{month_text[:10]}"))
+
+
+def import_batch_sync_id(account: str, file_sha: str) -> str:
+    return str(uuid5(SYNC_ID_NAMESPACE, f"batch:{account.strip().upper()}:{file_sha.lower()}"))
 metadata = MetaData()
 
 accounts = Table(
     "accounts", metadata,
     Column("code", String(64), primary_key=True),
+    Column("sync_id", String(36), unique=True),
     Column("display_name", String(128), nullable=False),
     Column("active", Boolean, nullable=False, default=True),
     Column("display_order", Integer, nullable=False, default=0),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("source_device_id", String(36)),
+    Column("sync_updated_at", DateTime(timezone=True)),
 )
 Index("ix_accounts_active_order", accounts.c.active, accounts.c.display_order, accounts.c.code)
 
@@ -72,7 +93,11 @@ import_batches = Table(
     Column("unchanged", Integer, nullable=False, default=0),
     Column("rejected", Integer, nullable=False, default=0),
     Column("created_at", DateTime, nullable=False, server_default=func.now()),
+    Column("sync_id", String(36)),
+    Column("source_device_id", String(36)),
+    Column("source_created_at", DateTime(timezone=True)),
     UniqueConstraint("account", "file_sha", name="uq_import_batch_account_file"),
+    UniqueConstraint("sync_id", name="uq_import_batches_sync_id"),
 )
 Index("ix_import_batches_account_created_at", import_batches.c.account, import_batches.c.created_at)
 
@@ -156,7 +181,11 @@ monthly_targets = Table(
     Column("account", String(64), nullable=False),
     Column("month", Date, nullable=False),
     Column("daily_target_commission", BigInteger, nullable=False),
+    Column("sync_id", String(36)),
+    Column("source_device_id", String(36)),
+    Column("sync_updated_at", DateTime(timezone=True)),
     UniqueConstraint("account", "month", name="uq_target_account_month"),
+    UniqueConstraint("sync_id", name="uq_monthly_targets_sync_id"),
 )
 
 app_users = Table(
@@ -239,6 +268,78 @@ Index(
     postgresql_where=saved_report_views.c.is_default.is_(True),
 )
 
+device_identity = Table(
+    "device_identity", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("device_id", String(36), nullable=False, unique=True),
+    Column("device_name", String(128), nullable=False),
+    Column("platform", String(32), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("id = 1", name="ck_device_identity_singleton"),
+)
+
+sync_tombstones = Table(
+    "sync_tombstones", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("entity_type", String(32), nullable=False),
+    Column("entity_key", String(512), nullable=False),
+    Column("deleted_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column("source_device_id", String(36), nullable=False),
+    CheckConstraint(
+        "entity_type IN ('import_batch', 'account', 'target')",
+        name="ck_sync_tombstone_entity_type",
+    ),
+    UniqueConstraint("entity_type", "entity_key", name="uq_sync_tombstone_entity"),
+)
+Index("ix_sync_tombstones_deleted_at", sync_tombstones.c.deleted_at)
+
+sync_history = Table(
+    "sync_history", metadata,
+    Column("package_id", String(36), primary_key=True),
+    Column("package_hash", String(64), nullable=False),
+    Column("source_device_id", String(36), nullable=False),
+    Column("direction", String(16), nullable=False),
+    Column("summary_json", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    CheckConstraint("direction IN ('export', 'import')", name="ck_sync_history_direction"),
+)
+Index("ix_sync_history_created_at", sync_history.c.created_at)
+
+
+def ensure_device_identity(conn) -> dict[str, Any]:
+    """Trả danh tính bền vững của database hiện tại; không phụ thuộc tài khoản đăng nhập."""
+    row = conn.execute(select(device_identity).where(device_identity.c.id == 1)).mappings().first()
+    if row:
+        return dict(row)
+    values = {
+        "id": 1,
+        "device_id": str(uuid4()),
+        "device_name": socket.gethostname()[:128] or "Affiliate Report",
+        "platform": (platform.system() or "unknown").lower()[:32],
+    }
+    conn.execute(device_identity.insert().values(**values))
+    return values
+
+
+def record_sync_tombstone(conn, entity_type: str, entity_key: str) -> None:
+    if entity_type not in {"import_batch", "account", "target"} or not entity_key:
+        raise ValueError("Sync tombstone không hợp lệ.")
+    device_id = ensure_device_identity(conn)["device_id"]
+    existing = conn.execute(select(sync_tombstones.c.id).where(
+        sync_tombstones.c.entity_type == entity_type,
+        sync_tombstones.c.entity_key == entity_key,
+    )).first()
+    if existing:
+        conn.execute(update(sync_tombstones).where(sync_tombstones.c.id == existing.id).values(
+            deleted_at=func.now(), source_device_id=device_id,
+        ))
+    else:
+        conn.execute(sync_tombstones.insert().values(
+            entity_type=entity_type,
+            entity_key=entity_key,
+            source_device_id=device_id,
+        ))
+
 
 def _unicode_lower(value: Any) -> Any:
     return value.lower() if isinstance(value, str) else value
@@ -287,12 +388,16 @@ def _ensure_account(conn, account: str) -> None:
     if existing:
         return
     order = int(conn.execute(select(func.max(accounts.c.display_order))).scalar() or 0) + 10
+    identity = ensure_device_identity(conn)
     values = {
         "code": account,
+        "sync_id": account_sync_id(account),
         "display_name": account,
         "active": True,
         "display_order": order,
         "updated_at": func.now(),
+        "source_device_id": identity["device_id"],
+        "sync_updated_at": func.now(),
     }
     if conn.dialect.name == "postgresql":
         from sqlalchemy.dialects.postgresql import insert
@@ -303,6 +408,10 @@ def _ensure_account(conn, account: str) -> None:
 
         stmt = insert(accounts).values(**values).on_conflict_do_nothing(index_elements=["code"])
     conn.execute(stmt)
+    conn.execute(delete(sync_tombstones).where(
+        sync_tombstones.c.entity_type == "account",
+        sync_tombstones.c.entity_key == account_sync_id(account),
+    ))
 
 
 IMPORT_BATCH_SIZE = 1000
@@ -373,6 +482,7 @@ def import_rows(
                 {"lock_key": f"tiktok-affiliate-import:{account}"},
             )
         _ensure_account(conn, account)
+        identity = ensure_device_identity(conn)
         old_batch = conn.execute(
             select(import_batches).where(
                 import_batches.c.account == account,
@@ -382,6 +492,10 @@ def import_rows(
         if old_batch:
             return {"batch_id": old_batch["id"], "duplicate": True, "inserted": 0, "updated": 0, "unchanged": 0, "rejected": 0}
 
+        conn.execute(delete(sync_tombstones).where(
+            sync_tombstones.c.entity_type == "import_batch",
+            sync_tombstones.c.entity_key == import_batch_sync_id(account, sha),
+        ))
         batch_id = conn.execute(import_batches.insert().values(
             file_sha=sha,
             filename=filename,
@@ -389,6 +503,9 @@ def import_rows(
             uploaded_by_label=uploaded_by_label,
             auth_method=auth_method,
             auth_subject=auth_subject,
+            sync_id=import_batch_sync_id(account, sha),
+            source_device_id=identity["device_id"],
+            source_created_at=func.now(),
         )).inserted_primary_key[0]
         summary = {
             "batch_id": batch_id,

@@ -1,7 +1,26 @@
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 from affiliate_report.version import APP_VERSION
+
+
+def test_release_bundle_verifier_cli_imports_from_repo_root_without_pythonpath():
+    env = os.environ.copy()
+    env["PYTHONPATH"] = ""
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.ci.verify_release_bundle", "--help"],
+        cwd=Path(__file__).resolve().parents[1],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Verify the exact Affiliate Report release bundle" in result.stdout
 
 
 def test_full_installer_preserves_data_and_excludes_portable_release():
@@ -132,13 +151,15 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert '$repo = "anhtahaylove/affiliate-report"' in workflow
     assert "tiktok-affiliate-report-updates" not in workflow
     assert "stable.json.sig" in workflow
-    assert "Downloaded release checksum mismatch" in workflow
+    assert "-m scripts.ci.verify_release_bundle" in workflow
+    assert "scripts\\ci\\verify_release_bundle.py" not in workflow
+    assert "AffiliateReport-v$version-arm64.apk" in workflow
+    assert "--android-min-sdk 24 --android-abi arm64-v8a" in workflow
     assert "gh release create $tag @assets --repo $repo --draft --latest=false" in workflow
     assert "gh release edit $tag --repo $repo --draft=false --prerelease" in workflow
     assert '$public.isDraft -or !$public.isPrerelease -or $public.tagName -ne $tag' in workflow
     assert "gh release edit $tag --repo $repo --draft=false --prerelease=false --latest" in workflow
-    assert "verify_update_manifest_bytes" in workflow
-    assert "Public mirror checksum mismatch" in workflow
+    assert "Public draft manifest verification failed" in workflow
     assert "Private release $tag is already published" in workflow
     assert "Public release $tag is already published" in workflow
     assert "gh release delete $tag --yes" in workflow
@@ -222,8 +243,8 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.0.30"
-    assert 'default: "2.0.25"' in workflow
+    assert APP_VERSION == "2.1.0"
+    assert 'default: "2.0.29"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
     assert "if: github.event_name == 'workflow_dispatch'" in workflow
@@ -252,6 +273,9 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "daily_target_commission" in smoke
     assert "@{ target_commission = $Value }" not in smoke
     assert "v$PreviousVersion legacy account is missing" not in smoke
+    assert smoke.count("-TimeoutSec 15") >= 4
+    assert 'Write-SmokePhase "Beginning upgrade smoke v$PreviousVersion -> v$CurrentVersion"' in smoke
+    assert "timeout-minutes: 8" in workflow
 
 
 def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
@@ -314,16 +338,20 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert '$_.displayTitle -eq $smokeTitle -and $_.headSha -eq $releaseSha' in release
     assert "Public updater UI gate did not pass 5/5" in release
     assert release.index("gh workflow run windows-updater-ui-smoke.yml") < release.index("gh release edit $tag --repo $repo --draft=false --prerelease=false --latest")
-    assert "SHA256SUMS must contain exactly the installer and updater bootstrap" in release
+    assert "SHA256SUMS.txt" in release
+    assert "AffiliateReport-v$version-arm64.apk" in release
     assert "Candidate SHA256SUMS must contain exactly the installer and updater bootstrap" in candidate
     assert "candidate-bootstrap-runtime:" in candidate
     assert "-Mode Bootstrap" in candidate
     assert "Packaged bootstrap runtime: PASS" in candidate
+    assert 'previous_version: ["2.0.25", "2.0.29"]' in candidate
+    assert '$previousVersion = "${{ matrix.previous_version }}"' in candidate
 
     assert "workflow_dispatch:" in updater_ui
     assert "pull_request:" not in updater_ui
     assert "permissions:\n  contents: read" in updater_ui
-    assert "run: [1, 2, 3, 4, 5]" in updater_ui
+    assert "smoke_run_count:" in updater_ui
+    assert "fromJSON(inputs.smoke_run_count == '1' && '[1]' || '[1,2,3,4,5]')" in updater_ui
     assert "[${{ inputs.release_nonce || 'manual' }}]" in updater_ui
     assert "Release-gated runs require a unique 32-character hexadecimal nonce" in updater_ui
     assert "ref: ${{ inputs.release_sha || github.sha }}" in updater_ui
@@ -333,11 +361,14 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     # có gì canh nên không ai thấy. Giờ nó phải đọc từ đúng một nguồn.
     release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "-f previous_version=$previousVersion" in release_workflow
+    assert "-f previous_version=$legacyVersion" in release_workflow
+    assert "-f smoke_run_count=5" in release_workflow
+    assert "-f smoke_run_count=1" in release_workflow
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.0.30"' in updater_ui
-    assert 'default: "2.0.25"' in updater_ui
+    assert 'default: "2.1.0"' in updater_ui
+    assert 'default: "2.0.29"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
     assert "actions/upload-artifact@v7" in updater_ui
@@ -370,6 +401,65 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert "recovered_at" in browser_smoke
     assert "UPDATER_SMOKE" in browser_smoke
     assert "screenshot" in browser_smoke
+
+
+def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
+    android = Path(".github/workflows/android-candidate.yml").read_text(encoding="utf-8")
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    gradle = Path("android/native/app/build.gradle").read_text(encoding="utf-8")
+    package = Path("android/package.json").read_text(encoding="utf-8")
+
+    assert android.index("Build web bundle and x86_64 CI APK") < android.index(
+        "Verify generated Android scaffold contract"
+    )
+    assert 'script: bash scripts/ci/android_emulator_smoke.sh "${{ matrix.api-level }}"' in android
+    assert "script: bash scripts/ci/android_signed_upgrade_smoke.sh" in android
+    assert android.count("Enable KVM group permissions") == 2
+    assert android.count("udevadm trigger --name-match=kvm") == 2
+    for script in (
+        Path("scripts/ci/android_emulator_smoke.sh"),
+        Path("scripts/ci/android_signed_upgrade_smoke.sh"),
+    ):
+        text = script.read_text(encoding="utf-8")
+        assert text.startswith("#!/usr/bin/env bash\nset -euo pipefail\n")
+        assert "trap dump_diagnostics ERR" in text
+        assert "cat cache/startup-error.txt" in text
+    upgrade_smoke = Path("scripts/ci/android_signed_upgrade_smoke.sh").read_text(encoding="utf-8")
+
+    assert "push:\n    branches: [main]" in android
+    assert "pull_request:\n    branches: [main]" in android
+    assert "ANDROID_KEYSTORE_B64" in android
+    assert "GITHUB_ENV" not in android
+    assert "Remove-Item -LiteralPath $keystore -Force" in android
+    assert "Remove-Item Env:ANDROID_KEYSTORE_PATH" in android
+    assert "if: github.event_name == 'push'" in android
+    assert "arm64Release" in android and "ciRelease" in android and "ciDebug" in android
+    assert "verify --verbose --print-certs $apk" in android
+    assert "vn\\.io\\.huuhungn\\.affiliatereport" in android
+    assert "versionCode='2001000'" in android
+    assert "versionName='2\\.1\\.0'" in android
+    assert "affiliate-report-android-${{ github.sha }}" in android
+    assert "actions/upload-artifact@v7" in android
+    assert "signed-update-smoke:" in android
+    assert "needs: signed-candidate" in android
+    assert "AffiliateReport-v2.1.0-x86_64-release.apk" in android
+    assert "AffiliateReport-v2.1.1-x86_64-release.apk" in android
+    assert 'adb install -r "$target"' in upgrade_smoke
+    assert "--expected-version 2.1.1" in upgrade_smoke
+    assert "versionCode=2001001" in upgrade_smoke
+    assert "storeType 'PKCS12'" in gradle
+    assert '"version": "2.1.0"' in package
+
+    assert "Require successful signed Android candidate for this exact main commit" in release
+    assert "android-candidate.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed" in release
+    assert '$artifactName = "affiliate-report-android-$env:RELEASE_SHA"' in release
+    assert "gh run download $run[0].id --name $artifactName" in release
+    assert "AffiliateReport-v$version-arm64.apk" in release
+    assert "--android-apk" in release
+    assert "--android-url" in release
+    assert "-m scripts.ci.verify_release_bundle" in release
+    assert '$_.isLatest -and !$_.isDraft -and !$_.isPrerelease' in release
+    assert "Sort-Object publishedAt -Descending | Select-Object -First 1" not in release
 
 
 def test_settings_data_page_is_not_ignored():

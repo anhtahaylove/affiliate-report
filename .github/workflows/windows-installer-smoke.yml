@@ -6,11 +6,11 @@ on:
       current_version:
         description: Current public installer version to smoke test
         required: true
-        default: "2.0.30"
+        default: "2.1.0"
       previous_version:
         description: Previous public installer version used for upgrade smoke
         required: true
-        default: "2.0.25"
+        default: "2.0.29"
   pull_request:
     branches: [main]
     paths:
@@ -54,8 +54,8 @@ permissions:
 
 env:
   PUBLIC_UPDATE_REPO: anhtahaylove/affiliate-report
-  PREVIOUS_STABLE_VERSION: "2.0.6"
-  CANDIDATE_ARTIFACT_NAME: v207-candidate-installer
+  LATEST_PREVIOUS_VERSION: "2.0.29"
+  CANDIDATE_ARTIFACT_NAME: affiliate-report-windows-candidate
 
 jobs:
   contract-checks:
@@ -127,7 +127,7 @@ jobs:
           if ($actualSha -ne $env:EXPECTED_SHA) { throw "Candidate checkout does not match PR merge SHA: $actualSha" }
           $currentVersion = & .\.venv\Scripts\python.exe -c "from affiliate_report.version import APP_VERSION; print(APP_VERSION)"
           if ($currentVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid canonical candidate version: $currentVersion" }
-          if ([version]$env:PREVIOUS_STABLE_VERSION -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
+          if ([version]$env:LATEST_PREVIOUS_VERSION -ge [version]$currentVersion) { throw "previous_version must be lower than current_version" }
           "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
       - name: Run exact-head Windows updater helper runtime tests
         shell: pwsh
@@ -217,7 +217,13 @@ jobs:
     if: always() && needs.candidate-build.result == 'success'
     needs: candidate-build
     runs-on: windows-latest
-    timeout-minutes: 15
+    # Mọi thao tác con đều có timeout riêng. Giới hạn job ngắn hơn để một bản legacy
+    # không thể giữ runner/PR gate vô hạn nếu Windows hoặc HTTP stack mất phản hồi.
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        previous_version: ["2.0.25", "2.0.29"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -229,7 +235,7 @@ jobs:
       - name: Download previous public installer and checksum
         shell: pwsh
         run: |
-          $previousVersion = $env:PREVIOUS_STABLE_VERSION
+          $previousVersion = "${{ matrix.previous_version }}"
           $previousChecksums = Join-Path $env:RUNNER_TEMP "SHA256SUMS-previous.txt"
           # Nhiều job của lane này chạy song song và cùng kéo tệp 46 MB từ cùng một release,
           # nên GitHub trả 503 cho vài job là chuyện sẽ xảy ra. Tải một phát không thử lại biến
@@ -270,7 +276,7 @@ jobs:
         shell: pwsh
         run: |
           $currentVersion = "${{ needs.candidate-build.outputs.current_version }}"
-          $previousVersion = $env:PREVIOUS_STABLE_VERSION
+          $previousVersion = "${{ matrix.previous_version }}"
           .\scripts\ci\windows_installer_smoke.ps1 -Mode Upgrade `
             -CurrentInstaller (Join-Path $PWD "candidate\AffiliateReportSetup-v$currentVersion.exe") `
             -CurrentVersion $currentVersion `

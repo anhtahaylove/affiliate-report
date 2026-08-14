@@ -5,8 +5,8 @@ import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, Target, UploadCloud, Users, X, XCircle, type LucideIcon } from "lucide-react";
-import { apiUrl, CurrentUser, exitApplication, logout } from "@/lib/api";
+import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings, Shield, Target, UploadCloud, Users, X, XCircle, type LucideIcon } from "lucide-react";
+import { apiUrl, CurrentUser, exitApplication, logout, type MetaResponse } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { BottomSheet } from "@/components/primitives";
 import { roleLabel } from "@/lib/format";
@@ -36,6 +36,7 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
     items: [
       { href: "/settings/preferences", label: "Giao diện", desc: "Sáng, tối hoặc theo hệ thống", icon: Settings },
       { href: "/settings/data", label: "Dữ liệu", desc: "Xóa, sao lưu, khôi phục", icon: Database, roles: ["owner"] },
+      { href: "/settings/sync", label: "Thiết bị & đồng bộ", desc: "Chuyển dữ liệu bằng gói mã hóa", icon: RefreshCw, roles: ["owner"] },
       { href: "/settings/update", label: "Cập nhật", desc: "Kiểm tra và cài bản mới", icon: FileSpreadsheet, roles: ["owner"] },
       { href: "/settings/users", label: "Người dùng", desc: "Vai trò và phạm vi tài khoản", icon: Users, roles: ["owner"] },
     ],
@@ -56,7 +57,7 @@ function NavLink({ item, active, onClick, compact = false, iconOnly = false }: {
   );
 }
 
-export function AppShell({ user, appVersion, heading, children, collapsed = false, onCollapsedChange }: { user: CurrentUser; appVersion?: string; heading?: ReactNode; children: ReactNode; collapsed?: boolean; onCollapsedChange?: (collapsed: boolean) => Promise<void> }) {
+export function AppShell({ user, appVersion, runtimePlatform, heading, children, collapsed = false, onCollapsedChange }: { user: CurrentUser; appVersion?: string; runtimePlatform?: MetaResponse["runtime_platform"]; heading?: ReactNode; children: ReactNode; collapsed?: boolean; onCollapsedChange?: (collapsed: boolean) => Promise<void> }) {
   const pathname = usePathname();
   const groups = useMemo(() => allowedItems(user), [user]);
   const allItems = groups.flatMap((group) => group.items);
@@ -71,7 +72,7 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
   const [commandQuery, setCommandQuery] = useState("");
   const [savingSidebar, setSavingSidebar] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
-  const identityLabel = user.auth_method === "local" ? "Chế độ cục bộ" : user.email;
+  const identityLabel = user.auth_method === "local" ? (runtimePlatform === "android" ? "Cục bộ trên Android" : "Chế độ cục bộ") : user.email;
   const commandItems = allItems.filter((item) => `${item.label} ${item.desc}`.toLocaleLowerCase("vi").includes(commandQuery.trim().toLocaleLowerCase("vi")));
 
   useEffect(() => {
@@ -141,7 +142,7 @@ export function AppShell({ user, appVersion, heading, children, collapsed = fals
           {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
           <div className="sidebar-actions">
             <button type="button" onClick={handleLogout} aria-label="Đăng xuất" title={collapsed ? "Đăng xuất" : undefined}><LogOut size={16} aria-hidden="true" /><span>Đăng xuất</span></button>
-            {user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => setAskExit(true)} disabled={exiting} aria-label="Thoát ứng dụng" title={collapsed ? "Thoát ứng dụng" : undefined}><XCircle size={16} aria-hidden="true" /><span>{exiting ? "Đang thoát…" : "Thoát"}</span></button> : null}
+            {runtimePlatform !== "android" && user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => setAskExit(true)} disabled={exiting} aria-label="Thoát ứng dụng" title={collapsed ? "Thoát ứng dụng" : undefined}><XCircle size={16} aria-hidden="true" /><span>{exiting ? "Đang thoát…" : "Thoát"}</span></button> : null}
           </div>
         </div>
       </aside>

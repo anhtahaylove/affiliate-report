@@ -9,6 +9,7 @@ const routes = [
   "/accounts/",
   "/settings/preferences/",
   "/settings/data/",
+  "/settings/sync/",
   "/settings/update/",
   "/settings/users/",
 ] as const;
@@ -55,6 +56,10 @@ test("các điều khiển mobile trọng yếu có vùng chạm tối thiểu 4
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/analytics/");
 
+  const mobileNav = page.locator(".mobile-bottom-nav");
+  await expect(mobileNav.locator(":scope > *")).toHaveCount(4);
+  expect(await mobileNav.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(4);
+
   for (const control of [
     page.getByRole("button", { name: "Mở tìm kiếm nhanh" }),
     page.getByRole("button", { name: "7 ngày" }),
@@ -70,6 +75,16 @@ test("các điều khiển mobile trọng yếu có vùng chạm tối thiểu 4
   const summaryBox = await columnSummary.boundingBox();
   expect(summaryBox).not.toBeNull();
   expect(summaryBox!.height).toBeGreaterThanOrEqual(44);
+
+  await page.goto("/settings/sync/");
+  for (const control of [
+    page.getByRole("button", { name: "Tạo mật khẩu" }),
+    page.locator(".sync-file-picker .file-picker-button"),
+  ]) {
+    const box = await control.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
 });
 
 test("hộp xác nhận hiện giữa màn hình chứ không dồn về góc", async ({ page }) => {

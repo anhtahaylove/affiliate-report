@@ -99,9 +99,24 @@ export function wholeMonth(month: string) {
   return { start: firstDayOfMonth(month), end: lastDayOfMonth(month), month };
 }
 
+const COUNT_LABELS: Record<string, string> = {
+  accounts: "Tài khoản",
+  targets: "Mục tiêu",
+  import_batches: "Lượt nhập",
+  imports: "Lượt nhập",
+  raw_rows: "Dòng dữ liệu gốc",
+  rows: "Dòng dữ liệu",
+  tombstones: "Bản ghi đã xóa",
+  order_line_versions: "Phiên bản đơn hàng",
+  user_account_access: "Phân quyền tài khoản",
+  app_users: "Người dùng",
+  user_ui_preferences: "Tùy chọn giao diện",
+  saved_report_views: "Bộ lọc đã lưu",
+};
+
 export function countsText(counts: Record<string, number> | undefined) {
   const entries = Object.entries(counts ?? {});
-  return entries.length ? entries.map(([name, count]) => `${name}: ${integer.format(Number(count))}`).join(" · ") : "Không có bảng";
+  return entries.length ? entries.map(([name, count]) => `${COUNT_LABELS[name] ?? name}: ${integer.format(Number(count))}`).join(" · ") : "Không có bảng";
 }
 
 export function errorMessage(reason: unknown, fallback: string) {

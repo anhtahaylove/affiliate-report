@@ -45,6 +45,7 @@ INSTALL_CONFIRMATION_PHRASE = "CAP NHAT UNG DUNG"
 _DOWNLOAD_ATTEMPTS = 3
 _DOWNLOAD_RETRY_DELAYS = (2.0, 5.0)
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
+MAX_ANDROID_APK_BYTES = 250 * 1024 * 1024
 MAX_BOOTSTRAP_BYTES = 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_CHECKSUM_BYTES = MAX_MANIFEST_BYTES
@@ -57,6 +58,7 @@ VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 # đường cập nhật đã đứt. Vì vậy phải phát hành bản nới lỏng này TRƯỚC, đợi mọi máy lên tới
 # đây, rồi mới đổi tên. Sau khi không còn máy nào chạy bản cũ hơn thì thu hẹp lại được.
 INSTALLER_RE = re.compile(r"^(?:TikTok)?AffiliateReportSetup-v(\d+\.\d+\.\d+)\.exe$")
+ANDROID_APK_RE = re.compile(r"^AffiliateReport-v(\d+\.\d+\.\d+)-arm64\.apk$")
 UPDATE_BOOTSTRAP_PROTOCOL = 1
 UPDATE_BOOTSTRAP_VERSION = "1.0.0"
 UPDATE_BOOTSTRAP_NAME = f"TikTokAffiliateUpdater-v{UPDATE_BOOTSTRAP_VERSION}.ps1"
@@ -93,7 +95,7 @@ def github_token() -> None:
     return None
 
 
-def _latest_release_with_fallback() -> dict[str, Any]:
+def _latest_release_with_fallback(*, read_timeout: float | None = None) -> dict[str, Any]:
     """Đọc feed ở nguồn chính, hỏng thì thử nguồn dự phòng.
 
     Đổi tên repo GitHub làm URL feed đổi theo. Tài liệu GitHub nói rõ git clone/fetch/push được
@@ -110,7 +112,9 @@ def _latest_release_with_fallback() -> dict[str, Any]:
     loi: Exception | None = None
     for url in urls:
         try:
-            return _latest_release(url)
+            if read_timeout is None:
+                return _latest_release(url)
+            return _latest_release(url, read_timeout=read_timeout)
         except (UpdateError, OSError) as exc:
             loi = exc
     raise loi if loi is not None else UpdateError("Không đọc được nguồn cập nhật.")
@@ -141,6 +145,66 @@ def check_for_update(*, current_version: str = APP_VERSION, token: str | None = 
         result["bootstrap_protocol"] = int(bootstrap["protocol"])
         result["bootstrap_version"] = str(bootstrap["version"])
     return result
+
+
+def check_for_android_update(*, current_version: str = APP_VERSION, read_timeout: float = 3.0) -> dict[str, Any]:
+    manifest = _latest_release_with_fallback(read_timeout=read_timeout)
+    latest = _parse_version(str(manifest["version"]))
+    current = _parse_version(current_version)
+    android = manifest.get("android")
+    available = latest > current and isinstance(android, dict)
+    result: dict[str, Any] = {
+        "current_version": current_version,
+        "latest_version": ".".join(map(str, latest)),
+        "available": available,
+        "installable": available,
+        "release_url": str(manifest["release_url"]),
+        "published_at": manifest.get("published_at"),
+    }
+    if isinstance(android, dict):
+        result.update({
+            "name": android["name"],
+            "url": android["url"],
+            "size": android["size"],
+            "sha256": android["sha256"],
+            "min_sdk": android["min_sdk"],
+            "abis": list(android["abis"]),
+        })
+    return result
+
+
+def download_latest_android(
+    data_dir: Path,
+    *,
+    current_version: str = APP_VERSION,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
+    manifest = _latest_release(configured_feed_url())
+    latest = _parse_version(str(manifest["version"]))
+    if latest <= _parse_version(current_version):
+        raise UpdateError("Ứng dụng đang ở phiên bản mới nhất.")
+    android = manifest.get("android")
+    if not isinstance(android, dict):
+        raise UpdateError("Update manifest chưa có gói cài Android.")
+    target_dir = Path(data_dir).resolve() / "updates" / f"v{manifest['version']}"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    destination = target_dir / str(android["name"])
+    actual_hash = _download_file(
+        str(android["url"]),
+        destination,
+        int(android["size"]),
+        MAX_ANDROID_APK_BYTES,
+        progress_callback,
+    )
+    if actual_hash != str(android["sha256"]).upper():
+        destination.unlink(missing_ok=True)
+        raise UpdateError("SHA-256 của APK không khớp; đã hủy cập nhật.")
+    return {
+        "version": str(manifest["version"]),
+        "apk_path": str(destination),
+        "sha256": actual_hash,
+        "release_url": str(manifest["release_url"]),
+    }
 
 
 def download_latest_update(
@@ -211,12 +275,23 @@ def download_latest_update(
     }
 
 
-def _latest_release(feed_url: str, token: str | None = None) -> dict[str, Any]:
+def _latest_release(feed_url: str, token: str | None = None, *, read_timeout: float = 20) -> dict[str, Any]:
     if token:
         raise UpdateError("Nguồn cập nhật công khai không dùng GitHub token.")
-    manifest_bytes = _read_url(_require_https_url(feed_url, "Nguồn cập nhật không hợp lệ."), MAX_MANIFEST_BYTES)
+    manifest_bytes = _read_url(
+        _require_https_url(feed_url, "Nguồn cập nhật không hợp lệ."),
+        MAX_MANIFEST_BYTES,
+        timeout=read_timeout,
+    )
     sig_url = urljoin(feed_url, Path(urlparse(feed_url).path).name + ".sig")
-    return verify_update_manifest_bytes(manifest_bytes, _read_url(_require_https_url(sig_url, "Chữ ký update không hợp lệ."), 16 * 1024))
+    return verify_update_manifest_bytes(
+        manifest_bytes,
+        _read_url(
+            _require_https_url(sig_url, "Chữ ký update không hợp lệ."),
+            16 * 1024,
+            timeout=read_timeout,
+        ),
+    )
 
 
 def verify_update_manifest_bytes(manifest_bytes: bytes, signature_bytes: bytes) -> dict[str, Any]:
@@ -309,6 +384,42 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
         )
         if Path(urlparse(bootstrap_url).path).name != bootstrap_name:
             raise UpdateError("Updater bootstrap URL không khớp tên file.")
+    android = value.get("android")
+    android_value = None
+    if android is not None:
+        if not isinstance(android, dict):
+            raise UpdateError("Gói Android trong update manifest không hợp lệ.")
+        android_name = str(android.get("name") or "")
+        android_match = ANDROID_APK_RE.fullmatch(android_name)
+        if not android_match or android_match.group(1) != version:
+            raise UpdateError("Tên APK trong update manifest không hợp lệ.")
+        android_size = android.get("size")
+        if not isinstance(android_size, int) or android_size <= 0 or android_size > MAX_ANDROID_APK_BYTES:
+            raise UpdateError("Kích thước APK trong update manifest không hợp lệ.")
+        android_sha256 = str(android.get("sha256") or "").upper()
+        if not SHA256_RE.fullmatch(android_sha256):
+            raise UpdateError("SHA-256 APK trong update manifest không hợp lệ.")
+        android_url = _require_https_url(
+            str(android.get("url") or ""),
+            "APK URL trong update manifest không hợp lệ.",
+        )
+        if Path(urlparse(android_url).path).name != android_name:
+            raise UpdateError("APK URL không khớp tên file trong update manifest.")
+        min_sdk = android.get("min_sdk")
+        if not isinstance(min_sdk, int) or min_sdk < 24:
+            raise UpdateError("Android min SDK trong update manifest không hợp lệ.")
+        abis = android.get("abis")
+        if abis != ["arm64-v8a"]:
+            raise UpdateError("Danh sách ABI Android trong update manifest không hợp lệ.")
+        android_value = {
+            "name": android_name,
+            "url": android_url,
+            "size": android_size,
+            "sha256": android_sha256,
+            "version": version,
+            "min_sdk": min_sdk,
+            "abis": list(abis),
+        }
     result = {
         "schema": UPDATE_SCHEMA,
         "app_id": UPDATE_APP_ID,
@@ -327,6 +438,8 @@ def _validate_manifest(value: Any) -> dict[str, Any]:
             "size": bootstrap_size,
             "sha256": bootstrap_sha256,
         }
+    if android_value is not None:
+        result["android"] = android_value
     return result
 
 
@@ -387,9 +500,9 @@ def _download_file(
     return digest.hexdigest().upper()
 
 
-def _read_url(url: str, max_bytes: int) -> bytes:
+def _read_url(url: str, max_bytes: int, *, timeout: float = 20) -> bytes:
     try:
-        with urlopen(Request(url, headers=_headers(None, "application/json")), timeout=20) as response:
+        with urlopen(Request(url, headers=_headers(None, "application/json")), timeout=timeout) as response:
             payload = response.read(max_bytes + 1)
     except HTTPError as exc:
         raise UpdateError(f"Nguồn cập nhật trả về HTTP {exc.code}.") from exc

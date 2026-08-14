@@ -249,7 +249,10 @@ export type MetaResponse = {
   app_version?: string;
   /** Chỉ có ở bản chạy trên máy: thư mục thả tệp để tự nhập. */
   inbox_dir?: string | null;
+  /** Nền tảng đang phục vụ UI. Bỏ trống ở backend cũ và được xem như web/desktop. */
+  runtime_platform?: "windows" | "android" | "web";
   capabilities: RuntimeCapabilities;
+  android_update?: AndroidUpdateSummary | null;
   identity_policy: IdentityPolicy;
 };
 
@@ -264,6 +267,98 @@ export type RuntimeCapabilities = {
   data_admin: CapabilityState;
   update_check: CapabilityState;
   update_install: CapabilityState;
+  sync?: CapabilityState;
+  android_update?: CapabilityState;
+};
+
+export type AndroidUpdateSummary = {
+  current_version: string;
+  latest_version?: string | null;
+  available?: boolean;
+  installable?: boolean;
+  release_url?: string | null;
+  published_at?: string | null;
+  name?: string | null;
+  size?: number | null;
+  min_sdk?: number | null;
+  abis?: string[];
+  message?: string | null;
+  error?: string | null;
+};
+
+export type AndroidUpdatePrepareResponse = {
+  download_url: string;
+  filename: string;
+  version: string;
+  size: number;
+  sha256: string;
+};
+
+export type SyncExportPrepareResponse = {
+  download_url: string;
+  filename: string;
+  size: number;
+  expires_at: string;
+};
+
+export type SyncDevice = {
+  id: string;
+  name: string;
+  platform: string;
+};
+
+export type SyncStatus = {
+  schema?: number;
+  device: SyncDevice;
+  max_package_bytes: number;
+  history_count: number;
+  last_exported_at?: string | null;
+  last_imported_at?: string | null;
+};
+
+export type SyncCounts = Record<string, number>;
+
+export type SyncConflictResolution = "local" | "incoming";
+
+export type SyncConflict = {
+  id: string;
+  entity: "account" | "target" | string;
+  label: string;
+  local_value: unknown;
+  incoming_value: unknown;
+  default_resolution?: SyncConflictResolution;
+};
+
+export type SyncPreview = {
+  preview_id: string;
+  expires_at: string;
+  package_id: string;
+  source_device: SyncDevice;
+  exported_at: string;
+  counts: SyncCounts;
+  conflicts: SyncConflict[];
+  already_imported?: boolean;
+  warnings?: string[];
+};
+
+export type SyncImportResponse = {
+  history_id?: number | string;
+  package_id: string;
+  backup_path: string;
+  counts: SyncCounts;
+  imported_at?: string | null;
+  already_imported?: boolean;
+};
+
+export type SyncHistoryItem = {
+  id: number | string;
+  package_id: string;
+  direction: "export" | "import";
+  source_device?: SyncDevice | null;
+  source_device_id?: string | null;
+  created_at: string;
+  counts: SyncCounts;
+  status?: string | null;
 };
 
 export type IdentityPolicy = {
@@ -506,6 +601,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(message, response.status);
   }
   return response.json() as Promise<T>;
+}
+
+async function requestBlob(path: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept", "application/octet-stream");
+  if (init?.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (!["GET", "HEAD", "OPTIONS"].includes(init?.method?.toUpperCase() ?? "GET")) {
+    const token = csrfToken();
+    if (token) headers.set("X-CSRF-Token", decodeURIComponent(token));
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}${path}`, { ...init, credentials: "include", headers });
+  } catch {
+    throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
+  }
+  if (!response.ok) {
+    let message = `API trả về HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string" && payload.detail) message = payload.detail;
+    } catch {
+      // Keep HTTP fallback.
+    }
+    throw new ApiError(message, response.status);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  const filename = encoded ? decodeURIComponent(encoded) : plain || `AffiliateReport-${new Date().toISOString().slice(0, 10)}.affsync`;
+  return { blob: await response.blob(), filename };
 }
 
 export function queryString(params: Record<string, string | string[] | number | undefined | null>) {
@@ -766,8 +892,140 @@ export async function installUpdate(confirmation: string) {
   });
 }
 
+export async function prepareAndroidUpdate() {
+  return request<AndroidUpdatePrepareResponse>("/api/v1/update/android/prepare", {
+    method: "POST",
+  });
+}
+
+export async function loadAndroidUpdateStatus() {
+  return request<AndroidUpdateSummary>("/api/v1/update/android/status");
+}
+
 export async function loadUpdateProgress(signal?: AbortSignal) {
   return request<UpdateProgress>("/api/v1/admin/update/progress", { signal });
+}
+
+type RawSyncDevice = Partial<SyncDevice> & {
+  device_id?: string;
+  device_name?: string;
+};
+
+function normalizeSyncDevice(device?: RawSyncDevice | null): SyncDevice {
+  return {
+    id: device?.id ?? device?.device_id ?? "unknown-device",
+    name: device?.name ?? device?.device_name ?? "Thiết bị không rõ tên",
+    platform: device?.platform ?? "unknown",
+  };
+}
+
+export async function loadSyncStatus() {
+  const payload = await request<Omit<SyncStatus, "device"> & { device: RawSyncDevice }>("/api/v1/sync/status");
+  return { ...payload, device: normalizeSyncDevice(payload.device) } satisfies SyncStatus;
+}
+
+export async function exportSyncPackage(passphrase: string) {
+  return requestBlob("/api/v1/sync/export", {
+    method: "POST",
+    body: JSON.stringify({ passphrase }),
+  });
+}
+
+export async function prepareSyncPackageExport(passphrase: string) {
+  return request<SyncExportPrepareResponse>("/api/v1/sync/export/prepare", {
+    method: "POST",
+    body: JSON.stringify({ passphrase }),
+  });
+}
+
+export async function previewSyncPackage(file: File, passphrase: string) {
+  const body = new FormData();
+  body.set("package", file);
+  body.set("passphrase", passphrase);
+  const payload = await request<{
+    preview_id: string;
+    expires_at: string;
+    package_id?: string;
+    source_device?: RawSyncDevice;
+    exported_at?: string;
+    counts?: SyncCounts;
+    already_imported?: boolean;
+    warnings?: string[];
+    duplicate?: boolean;
+    manifest?: {
+      package_id?: string;
+      source_device?: RawSyncDevice;
+      exported_at?: string;
+      counts?: SyncCounts;
+    };
+    conflicts?: Array<Partial<SyncConflict> & {
+      key?: string;
+      local?: unknown;
+      incoming?: unknown;
+      default?: SyncConflictResolution;
+    }>;
+  }>("/api/v1/sync/preview", { method: "POST", body });
+  const manifest = payload.manifest ?? {};
+  return {
+    preview_id: payload.preview_id,
+    expires_at: payload.expires_at,
+    package_id: payload.package_id ?? manifest.package_id ?? "unknown-package",
+    source_device: normalizeSyncDevice(payload.source_device ?? manifest.source_device),
+    exported_at: payload.exported_at ?? manifest.exported_at ?? "",
+    counts: payload.counts ?? manifest.counts ?? {},
+    already_imported: payload.already_imported ?? payload.duplicate ?? false,
+    warnings: payload.warnings ?? [],
+    conflicts: (payload.conflicts ?? []).map((conflict) => ({
+      id: conflict.id ?? conflict.key ?? "unknown-conflict",
+      entity: conflict.entity ?? "unknown",
+      label: conflict.label ?? conflict.key ?? "Xung đột dữ liệu",
+      local_value: conflict.local_value ?? conflict.local,
+      incoming_value: conflict.incoming_value ?? conflict.incoming,
+      default_resolution: conflict.default_resolution ?? conflict.default,
+    })),
+  } satisfies SyncPreview;
+}
+
+export async function importSyncPackage(
+  previewId: string,
+  conflictResolutions: Record<string, SyncConflictResolution>,
+  confirmation = "DONG BO",
+) {
+  const payload = await request<SyncImportResponse & {
+    duplicate?: boolean;
+    applied?: SyncCounts;
+  }>("/api/v1/sync/import", {
+    method: "POST",
+    body: JSON.stringify({
+      preview_id: previewId,
+      confirmation,
+      conflict_resolutions: conflictResolutions,
+    }),
+  });
+  return {
+    ...payload,
+    backup_path: payload.backup_path ?? "",
+    counts: payload.counts ?? payload.applied ?? {},
+    already_imported: payload.already_imported ?? payload.duplicate ?? false,
+  } satisfies SyncImportResponse;
+}
+
+export async function loadSyncHistory() {
+  const payload = await request<ListResponse<Omit<SyncHistoryItem, "id"> & {
+    id?: number | string;
+    summary_json?: {
+      counts?: SyncCounts;
+      applied?: SyncCounts;
+    } | null;
+  }>>("/api/v1/sync/history");
+  return {
+    ...payload,
+    items: payload.items.map((item) => ({
+      ...item,
+      id: item.id ?? item.package_id,
+      counts: item.counts ?? item.summary_json?.counts ?? item.summary_json?.applied ?? {},
+    })),
+  } satisfies ListResponse<SyncHistoryItem>;
 }
 
 export async function loadUsers() {
