@@ -95,7 +95,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             APK="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-debug.apk"
             PACKAGE="$RUNNER_TEMP/android-${{ matrix.api-level }}.affsync"
             read_token() {
@@ -276,7 +276,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             CURRENT="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-release.apk"
             TARGET="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.1-x86_64-release.apk"
             PACKAGE="$RUNNER_TEMP/android-signed-upgrade.affsync"

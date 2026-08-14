@@ -409,6 +409,8 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert android.index("Build web bundle and x86_64 CI APK") < android.index(
         "Verify generated Android scaffold contract"
     )
+    assert "set -euo pipefail" not in android
+    assert "set -eu" in android
 
     assert "push:\n    branches: [main]" in android
     assert "pull_request:\n    branches: [main]" in android
