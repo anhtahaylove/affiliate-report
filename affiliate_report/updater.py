@@ -140,6 +140,7 @@ def check_for_update(*, current_version: str = APP_VERSION, token: str | None = 
         "source_repo": configured_repo(),
         "feed_url": configured_feed_url(),
         "installer_name": str(installer["name"]),
+        "installer_size": int(installer["size"]),
     }
     if bootstrap is not None:
         result["bootstrap_protocol"] = int(bootstrap["protocol"])

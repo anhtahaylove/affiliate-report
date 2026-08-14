@@ -7,7 +7,7 @@ const dashboardLayout = {
   hidden: [],
 };
 
-async function mockShell(page: Page, platform: "windows" | "android" = "windows") {
+async function mockShell(page: Page, platform: "windows" | "android" = "windows", androidUpdateAvailable = true) {
   // Giữ desktop token trong fixture Android để chứng minh capability nền tảng thắng dữ liệu auth cũ.
   await page.route("**/auth/me", (route) => route.fulfill({ json: { email: "local-owner@localhost", role: "owner", accounts: [], auth_method: "local", desktop_app: true, desktop_control_token: "test-token" } }));
   await page.route("**/api/v1/ui/preferences", (route) => route.fulfill({ json: { theme: "system", sidebar_collapsed: false, dashboard_layout: dashboardLayout, updated_at: null } }));
@@ -20,7 +20,7 @@ async function mockShell(page: Page, platform: "windows" | "android" = "windows"
         sync: { available: true, reason: null },
         update_check: { available: platform === "windows", reason: platform === "android" ? "Không dùng updater Windows trên Android." : null },
         update_install: { available: platform === "windows", reason: platform === "android" ? "Không dùng installer Windows trên Android." : null },
-        android_update: { available: platform === "android", reason: null },
+        android_update: { available: platform === "android" && androidUpdateAvailable, reason: platform === "android" && !androidUpdateAvailable ? "Thiết bị này chưa hỗ trợ kênh cập nhật APK." : null },
       },
       android_update: platform === "android" ? { current_version: "2.1.0", latest_version: "2.1.1", available: true, installable: true, release_url: "https://example.test/v2.1.1", message: "APK đã sẵn sàng." } : null,
       identity_policy: { mode: "local", oidc_allowlist_enforced: false, enforcement: "local_owner" },
@@ -127,6 +127,21 @@ test("Android chỉ hiển thị trạng thái APK và không gọi updater Wind
   await expect(page.getByRole("button", { name: "Thoát ứng dụng" })).toHaveCount(0);
   expect(windowsUpdaterCalls).toBe(0);
   await expect(page.getByText("Cục bộ trên Android")).toBeVisible();
+});
+
+test("Android không hỗ trợ update hiển thị lý do và không lộ control Windows", async ({ page }) => {
+  await mockShell(page, "android", false);
+  let windowsUpdaterCalls = 0;
+  let androidStatusCalls = 0;
+  await page.route("**/api/v1/admin/update**", (route) => { windowsUpdaterCalls += 1; return route.fulfill({ status: 500 }); });
+  await page.route("**/api/v1/update/android/status", (route) => { androidStatusCalls += 1; return route.fulfill({ status: 500 }); });
+
+  await page.goto("/settings/update/");
+  await expect(page.getByRole("heading", { name: "Cập nhật APK chưa được hỗ trợ" })).toBeVisible();
+  await expect(page.getByText("Thiết bị này chưa hỗ trợ kênh cập nhật APK.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Tải và cài|Kiểm tra lại/ })).toHaveCount(0);
+  expect(windowsUpdaterCalls).toBe(0);
+  expect(androidStatusCalls).toBe(0);
 });
 
 test("Android xuất .affsync qua URL loopback một lần thay vì Blob URL", async ({ page }) => {

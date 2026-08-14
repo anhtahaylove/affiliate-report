@@ -288,6 +288,7 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     assert checked["available"] is True
     assert checked["installable"] is True
     assert checked["source_repo"] == "anhtahaylove/affiliate-report"
+    assert checked["installer_size"] == len(installer)
     assert downloaded["sha256"] == hashlib.sha256(installer).hexdigest().upper()
     assert Path(downloaded["installer_path"]).read_bytes() == installer
     assert downloaded["bootstrap_protocol"] == 1
