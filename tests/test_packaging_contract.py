@@ -409,8 +409,15 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert android.index("Build web bundle and x86_64 CI APK") < android.index(
         "Verify generated Android scaffold contract"
     )
-    assert "set -euo pipefail" not in android
-    assert "set -eu" in android
+    assert 'script: bash scripts/ci/android_emulator_smoke.sh "${{ matrix.api-level }}"' in android
+    assert "script: bash scripts/ci/android_signed_upgrade_smoke.sh" in android
+    for script in (
+        Path("scripts/ci/android_emulator_smoke.sh"),
+        Path("scripts/ci/android_signed_upgrade_smoke.sh"),
+    ):
+        text = script.read_text(encoding="utf-8")
+        assert text.startswith("#!/usr/bin/env bash\nset -euo pipefail\n")
+    upgrade_smoke = Path("scripts/ci/android_signed_upgrade_smoke.sh").read_text(encoding="utf-8")
 
     assert "push:\n    branches: [main]" in android
     assert "pull_request:\n    branches: [main]" in android
@@ -430,9 +437,9 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "needs: signed-candidate" in android
     assert "AffiliateReport-v2.1.0-x86_64-release.apk" in android
     assert "AffiliateReport-v2.1.1-x86_64-release.apk" in android
-    assert 'adb install -r "$TARGET"' in android
-    assert "--expected-version 2.1.1" in android
-    assert "versionCode=2001001" in android
+    assert 'adb install -r "$target"' in upgrade_smoke
+    assert "--expected-version 2.1.1" in upgrade_smoke
+    assert "versionCode=2001001" in upgrade_smoke
     assert "storeType 'PKCS12'" in gradle
     assert '"version": "2.1.0"' in package
 

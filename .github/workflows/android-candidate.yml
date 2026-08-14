@@ -94,33 +94,7 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            set -eu
-            APK="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-debug.apk"
-            PACKAGE="$RUNNER_TEMP/android-${{ matrix.api-level }}.affsync"
-            read_token() {
-              ANDROID_LOCAL_TOKEN="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token | tr -d '\r\n')"
-              test "${#ANDROID_LOCAL_TOKEN}" -ge 32
-              echo "::add-mask::$ANDROID_LOCAL_TOKEN"
-              export ANDROID_LOCAL_TOKEN
-            }
-            adb install -r "$APK"
-            adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
-            adb forward tcp:9876 tcp:8765
-            read_token
-            python scripts/ci/android_runtime_smoke.py --phase seed --package "$PACKAGE"
-            adb shell settings put system accelerometer_rotation 0
-            adb shell settings put system user_rotation 1
-            sleep 2
-            python scripts/ci/android_runtime_smoke.py --phase persist --package "$PACKAGE"
-            adb shell am force-stop vn.io.huuhungn.affiliatereport
-            adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
-            python scripts/ci/android_runtime_smoke.py --phase persist --package "$PACKAGE"
-            adb shell pm clear vn.io.huuhungn.affiliatereport
-            adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
-            read_token
-            python scripts/ci/android_runtime_smoke.py --phase restore --package "$PACKAGE"
-            adb shell pidof vn.io.huuhungn.affiliatereport
+          script: bash scripts/ci/android_emulator_smoke.sh "${{ matrix.api-level }}"
 
   signed-candidate:
     if: github.event_name == 'push'
@@ -275,21 +249,4 @@ jobs:
           profile: pixel_2
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            set -eu
-            CURRENT="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-release.apk"
-            TARGET="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.1-x86_64-release.apk"
-            PACKAGE="$RUNNER_TEMP/android-signed-upgrade.affsync"
-            adb install "$CURRENT"
-            adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
-            adb forward tcp:9876 tcp:8765
-            ANDROID_LOCAL_TOKEN="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token | tr -d '\r\n')"
-            test "${#ANDROID_LOCAL_TOKEN}" -ge 32
-            echo "::add-mask::$ANDROID_LOCAL_TOKEN"
-            export ANDROID_LOCAL_TOKEN
-            python scripts/ci/android_runtime_smoke.py --phase seed --package "$PACKAGE" --expected-version 2.1.0
-            adb install -r "$TARGET"
-            adb shell am force-stop vn.io.huuhungn.affiliatereport
-            adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
-            python scripts/ci/android_runtime_smoke.py --phase persist --package "$PACKAGE" --expected-version 2.1.1
-            adb shell dumpsys package vn.io.huuhungn.affiliatereport | grep -q 'versionCode=2001001'
+          script: bash scripts/ci/android_signed_upgrade_smoke.sh
