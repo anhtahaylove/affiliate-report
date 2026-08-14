@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import inspect, select, text
 
+from affiliate_report import migrations as migration_module
 from affiliate_report.api import _runtime_capabilities
 from affiliate_report.auth import AuthService, AuthSettings
 from affiliate_report.db import (
@@ -25,6 +26,24 @@ from tests.test_imports import raw_row
 
 def engine():
     return get_engine("sqlite:///:memory:")
+
+
+def test_migration_checksums_are_stable_without_packaged_source(monkeypatch):
+    expected = dict(migration_module._PACKAGED_CHECKSUMS)
+    assert set(expected) == {migration.version for migration in migration_module.MIGRATIONS}
+    assert {
+        migration.version: migration_module._checksum(migration)
+        for migration in migration_module.MIGRATIONS
+    } == expected
+
+    def source_unavailable(_run):
+        raise OSError("source unavailable")
+
+    monkeypatch.setattr(migration_module.pyinspect, "getsource", source_unavailable)
+    assert {
+        migration.version: migration_module._checksum(migration)
+        for migration in migration_module.MIGRATIONS
+    } == expected
 
 
 def test_init_db_runs_versioned_migrations_and_seeds_targets():

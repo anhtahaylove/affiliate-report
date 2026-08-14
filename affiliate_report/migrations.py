@@ -18,6 +18,23 @@ schema_migrations = Table(
     Column("applied_at", DateTime, nullable=False, server_default=func.now()),
 )
 
+# Chaquopy packages application modules as bytecode, so inspect.getsource isn't
+# available on Android. These values are the source-derived checksums already
+# used by desktop databases; keeping them preserves cross-runtime migration
+# identity without weakening the existing checksum contract.
+_PACKAGED_CHECKSUMS = {
+    1: "b761a894e626ea804659b69e37ae5724be70b817d8dfae357bd7ed5f832be167",
+    2: "2d82dc9116f6f23249a84e3f5c56ae93333841ed2729f65131e784765e115119",
+    3: "5ecd41b319bb13533ddc251be8fe74270b21de8b608da47cc07f5a14c42f901f",
+    4: "8be6c50ecb4ef9820369d6247137f775092abec4e150a1997416dcd3a5b6c2dd",
+    5: "9ddcea91ecb2d89a1cb6a1e31d65b521d17bb65a13a3523c38850e98fa63c70a",
+    6: "23943d9094c35ba074f6ea3a5368d84f7ec3cfc0e4ca678d51c81d684a37e05a",
+    7: "637d1107e4c32466d3af141ce6a2fcc13788a32cb814aafe1679fa60000ec0fa",
+    8: "498a271a1e2140f91870445c0181d6a2a5d6639bbbb6f5e0b34d27da14f3e080",
+    9: "5421861e463299902337d2b7ab06455621361f31cd7f55001e4790787cda273b",
+    10: "2f40e4529801e4e21dde58acaaadf0f88497d0fe2e63bd978004cfc5c357b404",
+}
+
 
 def apply_migrations(engine: Engine) -> None:
     schema_metadata.create_all(engine, tables=[schema_migrations])
@@ -46,8 +63,21 @@ class Migration:
 
 
 def _checksum(migration: Migration) -> str:
-    payload = f"{migration.version}:{migration.name}:" + pyinspect.getsource(migration.run)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    expected = _PACKAGED_CHECKSUMS.get(migration.version)
+    try:
+        source = pyinspect.getsource(migration.run)
+    except (OSError, TypeError):
+        if expected is None:
+            raise RuntimeError(
+                f"Migration {migration.version:04d} has no packaged checksum fallback"
+            ) from None
+        return expected
+
+    payload = f"{migration.version}:{migration.name}:" + source
+    calculated = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    if expected is not None and calculated != expected:
+        raise RuntimeError(f"Migration {migration.version:04d} source changed after release")
+    return calculated
 
 
 def _has_table(conn: Connection, name: str) -> bool:
