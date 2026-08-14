@@ -1768,8 +1768,11 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .target-figures { display: grid; flex: 1; gap: 7px; }
 .target-figures > strong { font-size: clamp(1.35rem, 3vw, 2.2rem); font-variant-numeric: tabular-nums; }
 .target-figures > span { color: var(--ink-soft); }
-.target-track, .share-track, .download-progress { height: 8px; overflow: hidden; border-radius: 999px; background: var(--surface-soft); }
-.target-track span, .share-track span, .download-progress span { display: block; height: 100%; border-radius: inherit; background: var(--chart-cyan); }
+/* Chỉ hai lớp này là thanh tiến độ dạng track (một <span> fill bên trong). `.download-progress`
+   của trang cập nhật là hộp có nhãn + <progress>, nên bị height:8px và overflow:hidden ở đây cắt
+   cụt, còn <span> đếm byte thì bị tô thành thanh cyan. */
+.target-track, .share-track { height: 8px; overflow: hidden; border-radius: 999px; background: var(--surface-soft); }
+.target-track span, .share-track span { display: block; height: 100%; border-radius: inherit; background: var(--chart-cyan); }
 .pace-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .pace-list, .quality-list { display: grid; gap: 0; margin: 10px 0 0; }
 .pace-list > div, .quality-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }

@@ -129,6 +129,13 @@ for (const scenario of [
     await page.goto("/settings/update/");
     await expect(page.locator(".update-stages li")).toHaveCount(5);
     await expect(page.locator("#update-download-progress")).toHaveCount(scenario.phase === "downloading" ? 1 : 0);
+    if (scenario.phase === "downloading") {
+      // Có mặt trong DOM chưa đủ: một luật CSS khác từng ép .download-progress xuống height 8px
+      // kèm overflow hidden, nên nhãn và thanh tải bị cắt cụt mà test đếm phần tử vẫn xanh.
+      const box = await page.locator(".download-progress").evaluate((el) => ({ clientHeight: el.clientHeight, scrollHeight: el.scrollHeight }));
+      expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight + 1);
+      await expect(page.locator("#update-download-progress")).toBeVisible();
+    }
   });
 }
 
