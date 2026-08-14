@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$SkipAppBuild,
     [string]$AppVersion = '2.1.2'
 )

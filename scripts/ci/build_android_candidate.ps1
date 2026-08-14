@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet("arm64Release", "ciRelease", "ciDebug")]
     [string]$Variant = "arm64Release",

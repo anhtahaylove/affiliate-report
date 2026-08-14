@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)]
     [ValidateSet('Fresh', 'Upgrade', 'Bootstrap')]
     [string]$Mode,

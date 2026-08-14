@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory)][string]$PreviousInstaller,
     [Parameter(Mandatory)][string]$PreviousVersion,
     [Parameter(Mandatory)][string]$PreviousChecksumFile,

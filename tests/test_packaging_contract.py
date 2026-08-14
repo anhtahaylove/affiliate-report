@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from affiliate_report.version import APP_VERSION
+from scripts.sync_version import CODE, NEXT, NEXT_CODE, version_code
 
 
 def test_release_bundle_verifier_cli_imports_from_repo_root_without_pythonpath():
@@ -243,7 +244,6 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.1.2"
     assert 'default: "2.0.29"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
@@ -377,7 +377,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.1.2"' in updater_ui
+    assert f'default: "{APP_VERSION}"' in updater_ui
     assert 'default: "2.0.29"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
@@ -448,7 +448,7 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "arm64Release" in android and "ciRelease" in android and "ciDebug" in android
     assert "verify --verbose --print-certs $apk" in android
     assert "vn\\.io\\.huuhungn\\.affiliatereport" in android
-    assert "versionCode='2001002'" in android
+    assert f"versionCode='{CODE}'" in android
     # Các gate Android kiểm phiên bản bằng regex có escape dấu chấm. Bump bằng cách thay chuỗi
     # "2.1.1" không chạm tới "2\.1\.1", nên workflow vẫn kiểm số cũ trong khi APK đã mang số mới
     # — hỏng ở phút thứ 20 của CI thay vì ngay tại đây. Ràng chúng vào APP_VERSION.
@@ -460,13 +460,13 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "actions/upload-artifact@v7" in android
     assert "signed-update-smoke:" in android
     assert "needs: signed-candidate" in android
-    assert "AffiliateReport-v2.1.2-x86_64-release.apk" in android
-    assert "AffiliateReport-v2.1.3-x86_64-release.apk" in android
+    assert f"AffiliateReport-v{APP_VERSION}-x86_64-release.apk" in android
+    assert f"AffiliateReport-v{NEXT}-x86_64-release.apk" in android
     assert 'adb install -r "$target"' in upgrade_smoke
-    assert "--expected-version 2.1.3" in upgrade_smoke
-    assert "versionCode=2001003" in upgrade_smoke
+    assert f"--expected-version {NEXT}" in upgrade_smoke
+    assert f"versionCode={NEXT_CODE}" in upgrade_smoke
     assert "storeType 'PKCS12'" in gradle
-    assert '"version": "2.1.2"' in package
+    assert f'"version": "{APP_VERSION}"' in package
 
     assert "Require successful signed Android candidate for this exact main commit" in release
     assert "android-candidate.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed" in release
@@ -478,6 +478,46 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "-m scripts.ci.verify_release_bundle" in release
     assert '$_.isLatest -and !$_.isDraft -and !$_.isPrerelease' in release
     assert "Sort-Object publishedAt -Descending | Select-Object -First 1" not in release
+
+
+def test_powershell_scripts_with_non_ascii_keep_a_utf8_bom():
+    # Windows PowerShell 5.1 đọc .ps1 không BOM theo bảng mã ANSI, nên chuỗi tiếng Việt
+    # bị vỡ và script chết với "string is missing the terminator" — khó lần ra nguyên nhân.
+    # BUILD_EXE.bat gọi assert_no_embedded_database.ps1 bằng powershell.exe (5.1) ngay cả
+    # trong CI, nên đây là bẫy thật chứ không phải giả định.
+    offenders = []
+    for script in sorted(Path("packaging").rglob("*.ps1")) + sorted(Path("scripts").rglob("*.ps1")):
+        raw = script.read_bytes()
+        if raw.decode("utf-8", errors="replace").isascii():
+            continue
+        if not raw.startswith(b"\xef\xbb\xbf"):
+            offenders.append(str(script))
+    assert not offenders, f"thiếu UTF-8 BOM, sẽ vỡ dưới PowerShell 5.1: {offenders}"
+
+
+def test_android_version_code_formula_is_pinned():
+    # Ghim công thức bằng số literal độc lập. Phần còn lại của test hợp đồng suy ra
+    # versionCode từ scripts.sync_version, nên nếu công thức trôi thì mọi assertion
+    # kia trôi theo mà vẫn xanh — đúng cái bẫy đã xảy ra với regex escape dấu chấm.
+    assert version_code((2, 1, 2)) == 2001002
+    assert version_code((2, 0, 29)) == 2000029
+    assert version_code((10, 0, 0)) == 10000000
+    # versionCode của Android phải tăng đơn điệu theo thứ tự phiên bản.
+    assert version_code((2, 1, 3)) > version_code((2, 1, 2)) > version_code((2, 0, 29))
+
+
+def test_version_pins_stay_in_sync_with_app_version():
+    # Nguồn sự thật là affiliate_report/version.py; mọi chỗ khác do
+    # scripts.sync_version ghi lại. Lệch phải hỏng ở đây, không phải ở phút thứ 20 của CI.
+    result = subprocess.run(
+        [sys.executable, "-m", "scripts.sync_version", "--check"],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
 
 def test_settings_data_page_is_not_ignored():
