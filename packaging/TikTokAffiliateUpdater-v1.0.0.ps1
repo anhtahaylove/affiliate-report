@@ -33,16 +33,32 @@ function Write-AtomicJson([string]$FilePath, $Value) {
     $json = ConvertTo-Json -InputObject $Value -Compress
     $tmp = $FilePath + '.' + $PID + '.tmp'
     [System.IO.File]::WriteAllText($tmp, $json + [System.Environment]::NewLine, $Utf8)
-    if ([System.IO.File]::Exists($FilePath)) {
-        $backup = $FilePath + '.' + $PID + '.bak'
+    # The web UI polls update-status.json while this helper replaces it. On Windows an
+    # otherwise harmless reader can temporarily deny File.Replace/Delete access. Retry the
+    # atomic promotion instead of exiting before the bootstrap ACK is written; that exact race
+    # made two of five real v2.0.29 -> v2.1.0 update runs time out at the handshake gate.
+    $deadline = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($true) {
         try {
-            if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) }
-            [System.IO.File]::Replace($tmp, $FilePath, $backup, $true)
-        } finally {
-            try { if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) } } catch {}
+            if ([System.IO.File]::Exists($FilePath)) {
+                $backup = $FilePath + '.' + $PID + '.bak'
+                try {
+                    if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) }
+                    [System.IO.File]::Replace($tmp, $FilePath, $backup, $true)
+                } finally {
+                    try { if ([System.IO.File]::Exists($backup)) { [System.IO.File]::Delete($backup) } } catch {}
+                }
+            } else {
+                [System.IO.File]::Move($tmp, $FilePath)
+            }
+            return
+        } catch [System.IO.IOException] {
+            if ($deadline.ElapsedMilliseconds -ge 5000) { throw }
+            Start-Sleep -Milliseconds 50
+        } catch [System.UnauthorizedAccessException] {
+            if ($deadline.ElapsedMilliseconds -ge 5000) { throw }
+            Start-Sleep -Milliseconds 50
         }
-    } else {
-        [System.IO.File]::Move($tmp, $FilePath)
     }
 }
 function Write-UpdateStatus([string]$Phase, [string]$ErrorText) {

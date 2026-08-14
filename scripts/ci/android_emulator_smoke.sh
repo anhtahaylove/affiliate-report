@@ -2,7 +2,7 @@
 set -euo pipefail
 
 api_level="${1:?Android API level is required}"
-apk="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-debug.apk"
+apk="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.1-x86_64-debug.apk"
 package="$RUNNER_TEMP/android-${api_level}.affsync"
 
 dump_diagnostics() {

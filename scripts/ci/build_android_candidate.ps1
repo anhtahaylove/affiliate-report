@@ -9,8 +9,8 @@ $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $android = Join-Path $repo "android"
 $native = Join-Path $android "native"
-$version = "2.1.0"
-$versionCode = "2001000"
+$version = "2.1.1"
+$versionCode = "2001001"
 $releaseCertificateSha256 = "d59c870025c9f9ee493046e52cc0cd25160e2d4b4204ba86ad3629d0dfe5fbe4"
 
 function Require-Command([string]$Name) {

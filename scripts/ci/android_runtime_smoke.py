@@ -49,7 +49,7 @@ def _assert_routes(client: httpx.Client) -> None:
 
 def _seed(client: httpx.Client, fixture: Path, package: Path) -> dict:
     health = _wait(client)
-    if health.get("app_version") != "2.1.0":
+    if health.get("app_version") != "2.1.1":
         raise RuntimeError(f"Unexpected Android runtime version: {health!r}")
     _assert_routes(client)
     account = client.post(
@@ -123,7 +123,7 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:9876")
     parser.add_argument("--fixture", type=Path, default=Path("tests/fixtures/e2e-sample.xlsx"))
     parser.add_argument("--package", type=Path, required=True)
-    parser.add_argument("--expected-version", default="2.1.0")
+    parser.add_argument("--expected-version", default="2.1.1")
     parser.add_argument("--android-token", default=os.getenv("ANDROID_LOCAL_TOKEN", ""))
     args = parser.parse_args()
     if len(args.android_token) < 32:

@@ -700,6 +700,82 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
     assert not list(tmp_path.glob("update-status.json.*.tmp"))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="requires Windows file locking semantics")
+def test_windows_update_helper_retries_status_replace_before_handshake(tmp_path):
+    powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    installer = tmp_path / "AffiliateReportSetup-v1.2.1.exe"
+    installer.write_bytes(b"not-an-installer")
+    helper = Path("packaging/TikTokAffiliateUpdater-v1.0.0.ps1").resolve()
+    status_path = tmp_path / "update-status.json"
+    ack_path = tmp_path / "bootstrap-ack.json"
+    lock_ready = tmp_path / "status-lock-ready"
+    lock_holder = tmp_path / "hold-status-lock.ps1"
+    lock_holder.write_text(
+        """
+param([string]$StatusPath, [string]$ReadyPath)
+$stream = [System.IO.File]::Open($StatusPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
+[System.IO.File]::WriteAllText($ReadyPath, 'ready')
+Start-Sleep -Milliseconds 750
+$stream.Dispose()
+""",
+        encoding="utf-8-sig",
+    )
+    updater.write_update_status(
+        status_path,
+        phase="verifying",
+        target_version="1.2.1",
+        bytes_downloaded=installer.stat().st_size,
+        bytes_total=installer.stat().st_size,
+    )
+    holder = subprocess.Popen(
+        [
+            str(powershell),
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(lock_holder),
+            "-StatusPath",
+            str(status_path),
+            "-ReadyPath",
+            str(lock_ready),
+        ],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    deadline = time.monotonic() + 5
+    while not lock_ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert lock_ready.exists(), "status-file lock holder did not start"
+
+    try:
+        result = subprocess.run(
+            [
+                str(powershell), "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                "-File", str(helper), "-ParentPid", str(2_147_483_647), "-Installer", str(installer),
+                "-ExpectedSha256", "0" * 64, "-AppExe", str(tmp_path / "TikTokAffiliateReport.exe"),
+                "-LogPath", str(tmp_path / "updater.log"), "-InstallerLog", str(tmp_path / "installer.log"),
+                "-StatusPath", str(status_path), "-TargetVersion", "1.2.1", "-InstallerSize", str(installer.stat().st_size),
+                "-InstanceStatePath", str(tmp_path / "instance.json"), "-BootstrapProtocol", "1",
+                "-BootstrapVersion", "1.0.0", "-AttemptId", "c" * 32, "-AckPath", str(ack_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    finally:
+        holder.wait(timeout=5)
+
+    assert result.returncode == 0, result.stderr
+    ack = json.loads(ack_path.read_text(encoding="utf-8"))
+    assert ack["attempt_id"] == "c" * 32
+    assert ack["phase"] == "ready"
+    assert updater.read_update_status(status_path)["phase"] == "failed"
+    assert not list(tmp_path.glob("update-status.json.*.tmp"))
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="requires Windows PowerShell")
 def test_windows_bootstrap_executes_a_newer_asset_version_on_same_protocol(tmp_path):
     powershell = Path(os.environ["SystemRoot"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
