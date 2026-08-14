@@ -288,6 +288,7 @@ def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, mo
     assert checked["available"] is True
     assert checked["installable"] is True
     assert checked["source_repo"] == "anhtahaylove/affiliate-report"
+    assert checked["installer_size"] == len(installer)
     assert downloaded["sha256"] == hashlib.sha256(installer).hexdigest().upper()
     assert Path(downloaded["installer_path"]).read_bytes() == installer
     assert downloaded["bootstrap_protocol"] == 1
@@ -678,7 +679,10 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
         ],
         capture_output=True,
         text=True,
-        timeout=10,
+        # The helper can legitimately spend up to five seconds on each atomic
+        # status promotion. Leave enough process budget for both promotions
+        # plus Windows PowerShell startup and antivirus scanning on CI runners.
+        timeout=30,
         check=False,
     )
 

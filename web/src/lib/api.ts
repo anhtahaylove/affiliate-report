@@ -218,6 +218,11 @@ export type UpdateStatus = {
   published_at: string | null;
   notes: string | null;
   source_repo: string | null;
+  feed_url?: string | null;
+  installer_name?: string | null;
+  installer_size?: number | null;
+  bootstrap_protocol?: number | null;
+  bootstrap_version?: string | null;
 };
 
 export type InstallUpdateResponse = {

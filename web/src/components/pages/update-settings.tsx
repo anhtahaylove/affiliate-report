@@ -5,8 +5,9 @@ import { ApiError, AndroidUpdatePrepareResponse, AndroidUpdateSummary, Capabilit
 import { forgetPostponedUpdate } from "@/components/update-banner";
 import { ConfirmDialog } from "@/components/ui";
 import { formatBytes, formatDateTime } from "@/lib/format";
-import { Check, CheckCircle2, CloudCog, Download, ExternalLink, HardDriveDownload, MonitorUp, RefreshCw, RotateCw, ShieldCheck, Smartphone, type LucideIcon } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, ChevronDown, CircleAlert, CloudCog, Download, ExternalLink, HardDriveDownload, Info, MonitorUp, RefreshCw, RotateCw, ShieldCheck, Smartphone, WifiOff, type LucideIcon } from "lucide-react";
 import { requestAndroidNativeDownload } from "@/lib/android-native";
+import { compareSemanticVersions, deriveUpdatePresentation, type UpdateExperienceState, type UpdateIssueKind } from "@/lib/update-presentation";
 
 const UPDATE_RECONNECT_TIMEOUT_MS = 90_000;
 const ANDROID_APK_HANDOFF_TIMEOUT_MS = 180_000;
@@ -16,34 +17,39 @@ const ANDROID_APK_HANDOFF_TIMEOUT_MS = 180_000;
 // app đã lên, endpoint này chỉ đọc một file JSON qua loopback nên 1,5 giây là thừa sức.
 const UPDATE_PROBE_TIMEOUT_MS = 1_500;
 
-function updateErrorInfo(reason: unknown) {
+function updateErrorInfo(reason: unknown): { kind: Exclude<UpdateIssueKind, null>; message: string; action: string } {
   if (reason instanceof ApiError) {
     if (reason.status === 0) {
       return {
+        kind: "offline",
         message: "Không thể kết nối với ứng dụng để kiểm tra cập nhật.",
         action: "Mở lại Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.",
       };
     }
     if ([401, 403].includes(reason.status)) {
       return {
+        kind: "permission",
         message: "Tài khoản hiện tại không có quyền quản lý cập nhật.",
         action: "Đăng nhập bằng tài khoản Chủ sở hữu hoặc liên hệ người quản trị.",
       };
     }
     if (reason.status === 409) {
       return {
+        kind: "busy",
         message: "Một phiên cập nhật đang được xử lý hoặc trạng thái chưa sẵn sàng.",
         action: "Chờ một lát rồi bấm “Kiểm tra lại”.",
       };
     }
     if ([404, 502].includes(reason.status)) {
       return {
+        kind: "source",
         message: "Chưa thể kiểm tra nguồn cập nhật an toàn.",
         action: "Kiểm tra kết nối mạng rồi thử lại. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ.",
       };
     }
   }
   return {
+    kind: "generic",
     message: "Không thể hoàn tất thao tác cập nhật.",
     action: "Bấm “Kiểm tra lại”. Nếu lỗi tiếp diễn, hãy mở trang phát hành hoặc liên hệ người hỗ trợ.",
   };
@@ -84,20 +90,31 @@ function updateStageState(stage: (typeof updateStages)[number], phase: UpdateUiP
   return "pending";
 }
 
-function updateStateCopy(status: UpdateStatus | null, phase: UpdateUiPhase, installing: boolean, busy: boolean, hasIssue: boolean) {
-  if (phase === "failed") return { tone: "danger", title: "Cập nhật chưa hoàn tất", copy: "Kiểm tra thông báo bên dưới rồi thử lại.", icon: RotateCw };
-  if (hasIssue) return { tone: "warning", title: "Cập nhật cần bạn kiểm tra", copy: "Xem việc cần làm bên dưới để hoàn tất.", icon: RotateCw };
-  if (installing) return { tone: "info", title: phaseLabel(phase), copy: "Giữ ứng dụng mở; tiến trình sẽ tự kết nối lại sau khi cài đặt.", icon: Download };
-  if (!status && busy) return { tone: "info", title: "Đang kiểm tra phiên bản", copy: "Đang xác minh nguồn cập nhật công khai có chữ ký.", icon: RefreshCw };
-  if (status?.available) return { tone: "info", title: `Có bản ${status.latest_version} sẵn sàng`, copy: status.installable && status.automatic_install_supported ? "Bạn có thể tải, xác minh và cài ngay trong ứng dụng." : "Bản mới đã được phát hành nhưng máy này chưa hỗ trợ cài tự động.", icon: Download };
-  return { tone: "success", title: "Bạn đang dùng bản mới nhất", copy: "Không cần thao tác thêm. Bạn có thể kiểm tra lại bất cứ lúc nào.", icon: CheckCircle2 };
+function updateStateCopy(state: UpdateExperienceState, targetVersion: string | null, phase: UpdateUiPhase) {
+  const copy = {
+    checking: { tone: "info", label: "Đang kiểm tra", title: "Đang kiểm tra phiên bản", copy: "Đang xác minh nguồn cập nhật công khai có chữ ký.", icon: RefreshCw },
+    latest: { tone: "success", label: "Đã cập nhật", title: "Bạn đang dùng bản mới nhất", copy: "Không có bản mới hơn. Affiliate Report đã sẵn sàng để sử dụng.", icon: CheckCircle2 },
+    available: { tone: "info", label: "Có bản mới", title: `Bản ${targetVersion ?? "mới"} đã sẵn sàng`, copy: "Ứng dụng sẽ tải, xác minh và cài đúng gói phát hành dành cho thiết bị này.", icon: Download },
+    manual: { tone: "warning", label: "Cần cài thủ công", title: `Có bản ${targetVersion ?? "mới"} để tải`, copy: "Máy này chưa hỗ trợ cài tự động. Mở trang phát hành để tải đúng bộ cài.", icon: ExternalLink },
+    active: { tone: "info", label: "Đang cập nhật", title: phaseLabel(phase), copy: "Giữ máy hoạt động. Ứng dụng sẽ tự đóng, cài đặt và kết nối lại.", icon: Download },
+    reconnecting: { tone: "info", label: "Đang hoàn tất", title: "Đang chờ ứng dụng kết nối lại", copy: "Bộ cài đang hoàn tất và Affiliate Report sẽ tự mở lại.", icon: RotateCw },
+    completed: { tone: "success", label: "Hoàn tất", title: `Đã cài xong bản ${targetVersion ?? "mới"}`, copy: "Phiên bản mới đã được xác minh và khởi động thành công.", icon: CheckCircle2 },
+    failed: { tone: "danger", label: "Chưa hoàn tất", title: "Cập nhật gặp sự cố", copy: "Dữ liệu của bạn vẫn được giữ nguyên. Xem hướng xử lý bên dưới rồi thử lại.", icon: CircleAlert },
+    offline: { tone: "warning", label: "Mất kết nối", title: "Chưa thể kiểm tra cập nhật", copy: "Ứng dụng không kết nối được tới dịch vụ cục bộ hoặc nguồn phát hành.", icon: WifiOff },
+    issue: { tone: "warning", label: "Cần kiểm tra", title: "Cập nhật cần bạn xử lý", copy: "Xem hướng dẫn bên dưới để tiếp tục an toàn.", icon: CircleAlert },
+  } satisfies Record<UpdateExperienceState, { tone: string; label: string; title: string; copy: string; icon: LucideIcon }>;
+  return copy[state];
 }
 
 export function AndroidUpdateSettings({ capability, status }: { capability?: CapabilityState; status?: AndroidUpdateSummary | null }) {
   const available = capability?.available ?? Boolean(status);
+  const unsupported = capability?.available === false;
   const [liveStatus, setLiveStatus] = useState<AndroidUpdateSummary | null>(status ?? null);
   const [checking, setChecking] = useState(available);
-  const latest = liveStatus?.latest_version ?? liveStatus?.current_version ?? "—";
+  const current = liveStatus?.current_version ?? status?.current_version ?? null;
+  const published = liveStatus?.latest_version ?? null;
+  const hasNewerRelease = Boolean(available && liveStatus?.available && compareSemanticVersions(published, current) === 1);
+  const latest = hasNewerRelease ? published : null;
   const failed = Boolean(liveStatus?.error);
   const [preparing, setPreparing] = useState(false);
   const [prepared, setPrepared] = useState<AndroidUpdatePrepareResponse | null>(null);
@@ -181,12 +198,12 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
   return (
     <section className="section panel wide update-settings-page android-update-page">
       <div className="update-overview">
-        <div className="update-state" data-tone={failed ? "warning" : liveStatus?.available ? "info" : "success"} role="status">
+        <div className="update-state" data-tone={failed || unsupported ? "warning" : hasNewerRelease ? "info" : "success"} role="status">
           <span className="update-state-icon"><Smartphone size={24} aria-hidden="true" /></span>
           <div>
             <p className="section-label">Ứng dụng Android</p>
-            <h2>{checking ? "Đang kiểm tra bản APK" : failed ? "Chưa kiểm tra được bản APK" : liveStatus?.available ? `Có APK ${latest} sẵn sàng` : "Affiliate Report trên Android"}</h2>
-            <p>{checking ? "Ứng dụng đang kiểm tra nguồn cập nhật có chữ ký trong nền." : liveStatus?.error ?? liveStatus?.message ?? (available
+            <h2>{checking ? "Đang kiểm tra bản APK" : unsupported ? "Cập nhật APK chưa được hỗ trợ" : failed ? "Chưa kiểm tra được bản APK" : hasNewerRelease ? `Có APK ${latest} sẵn sàng` : "Bạn đang dùng bản mới nhất"}</h2>
+            <p>{checking ? "Ứng dụng đang kiểm tra nguồn cập nhật có chữ ký trong nền." : unsupported ? capability?.reason : liveStatus?.error ?? liveStatus?.message ?? (available
               ? "APK được xác minh chữ ký và SHA-256 trước khi chuyển sang trình cài đặt của Android."
               : capability?.reason ?? "Kênh cập nhật APK đang được chuẩn bị.")}</p>
           </div>
@@ -194,8 +211,8 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
       </div>
       <section className="update-version-grid" aria-labelledby="android-version-title">
         <h3 className="sr-only" id="android-version-title">Thông tin phiên bản Android</h3>
-        <div><span>Đang dùng</span><strong>{liveStatus?.current_version ?? status?.current_version ?? "—"}</strong></div>
-        <div><span>Mới nhất</span><strong>{latest}</strong></div>
+        <div><span>Đang dùng</span><strong>{current ?? "—"}</strong></div>
+        <div><span>Bản khả dụng</span><strong>{latest ?? "Không có bản mới hơn"}</strong></div>
         <div><span>Cài đặt</span><strong>Android xác nhận</strong></div>
       </section>
       <div className="update-safeguards"><ShieldCheck size={18} aria-hidden="true" /><p><strong>Không chạy installer Windows</strong><span>Ứng dụng chỉ tải APK dành cho Android; bước cài đặt cuối luôn cần bạn xác nhận trong hệ thống.</span></p></div>
@@ -203,7 +220,7 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
       {prepared ? <div className="android-update-result" role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>APK {prepared.version} đã được xác minh và chuyển sang trình cài đặt Android. Hãy xác nhận cài đặt trong màn hình hệ thống.</span></div> : null}
       {prepareError ? <div className="android-update-error" role="alert">{prepareError}</div> : null}
       <div className="row-actions update-actions">
-        {liveStatus?.available && liveStatus.installable !== false ? <button className="primary" type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài APK"}</button> : null}
+        {hasNewerRelease && liveStatus?.installable !== false ? <button className="primary" type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài APK"}</button> : null}
         {liveStatus?.release_url ? <a className="button-link secondary-link" href={liveStatus.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
       </div>
     </section>
@@ -215,7 +232,9 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [message, setMessage] = useState("");
   const [nextAction, setNextAction] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [issueKind, setIssueKind] = useState<UpdateIssueKind>(null);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
+  const [busy, setBusy] = useState(checkCapability.available);
   const [installing, setInstalling] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   // Banner "Cập nhật ngay" trỏ tới /settings/update#install để mở thẳng hộp xác nhận, thay vì
@@ -234,6 +253,9 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   const check = useCallback(async () => {
     if (!checkCapability.available) return;
     setBusy(true);
+    setIssueKind(null);
+    setMessage("");
+    setNextAction("");
     setReconnecting(false);
     reconnectStartedRef.current = null;
     installStartedRef.current = null;
@@ -241,21 +263,26 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
       const [updateStatus, updateProgress] = await Promise.all([checkUpdate(), loadUpdateProgress().catch(() => null)]);
       setStatus(updateStatus);
       rememberProgress(updateProgress);
-      if (updateProgress?.error) {
+      setLastCheckedAt(new Date().toISOString());
+      const loadedPresentation = deriveUpdatePresentation({
+        status: updateStatus,
+        progress: updateProgress,
+        busy: false,
+        installing: false,
+        reconnecting: false,
+        issueKind: null,
+        hasIssue: false,
+      });
+      if (updateProgress?.error && loadedPresentation.state === "failed") {
+        setIssueKind("generic");
         setMessage(updateProgress.error);
         setNextAction(updateProgress.error_action || "Bấm “Kiểm tra lại”. Nếu lỗi tiếp diễn, hãy liên hệ người hỗ trợ.");
-      } else {
-        setNextAction("");
-        setMessage(updateProgress?.phase === "installed" && updateProgress.target_version === updateProgress.current_version
-          ? `Đã cài xong bản ${updateProgress.current_version}.`
-          : updateStatus.available
-            ? `Có bản ${updateStatus.latest_version}${updateStatus.installable ? " sẵn sàng cài." : " nhưng chưa cài tự động được."}`
-            : `Đang ở bản mới nhất (${updateStatus.current_version}).`);
       }
     } catch (reason) {
       setStatus(null);
       rememberProgress(null);
       const issue = updateErrorInfo(reason);
+      setIssueKind(issue.kind);
       setMessage(issue.message);
       setNextAction(issue.action);
     } finally {
@@ -293,6 +320,7 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           installStartedRef.current = null;
           setInstalling(false);
           setBusy(false);
+          setIssueKind("generic");
           setMessage(data.error || "Cập nhật chưa hoàn tất.");
           setNextAction(data.error_action || "Bấm “Thử lại”. Nếu lỗi tiếp diễn, hãy liên hệ người hỗ trợ.");
           return;
@@ -302,18 +330,21 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           setInstalling(false);
           setBusy(false);
           if (data.error) {
+            setIssueKind("generic");
             setMessage(data.error);
             setNextAction(data.error_action || "Mở lại ứng dụng rồi kiểm tra phiên bản.");
           } else {
-            setMessage(`Đã cài xong bản ${data.current_version}. Đang tải lại giao diện…`);
+            setIssueKind(null);
+            setMessage("");
             setNextAction("");
             forgetPostponedUpdate();
             window.setTimeout(() => window.location.reload(), 1_200);
           }
           return;
         }
+        setIssueKind(null);
         setNextAction("");
-        setMessage(`${phaseLabel(data.phase)}${data.target_version ? ` bản ${data.target_version}` : ""}.`);
+        setMessage("");
         timer = setTimeout(poll, 750);
       } catch (reason) {
         if (stopped) return;
@@ -325,17 +356,20 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           if (Date.now() - startedAt > UPDATE_RECONNECT_TIMEOUT_MS) {
             setInstalling(false);
             setBusy(false);
+            setIssueKind("offline");
             setMessage("Ứng dụng chưa kết nối lại sau 90 giây.");
             setNextAction("Mở Affiliate Report từ Desktop hoặc Start Menu rồi bấm “Kiểm tra lại”.");
             return;
           }
-          setMessage("Ứng dụng đang đóng để cài đặt. Đang chờ kết nối lại…");
+          setIssueKind(null);
+          setMessage("");
           timer = setTimeout(poll, Date.now() - startedAt < 10_000 ? 500 : 1_000);
           return;
         }
         setInstalling(false);
         setBusy(false);
         const issue = updateErrorInfo(reason);
+        setIssueKind(issue.kind);
         setMessage(issue.message);
         setNextAction(issue.action);
       }
@@ -353,19 +387,22 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
     setAskInstall(false);
     setBusy(true);
     setInstalling(true);
+    setIssueKind(null);
     setReconnecting(false);
     reconnectStartedRef.current = null;
     installStartedRef.current = Date.now();
     rememberProgress(null);
-    setMessage("Đang chuẩn bị cập nhật…");
+    setMessage("");
     setNextAction("");
     try {
       const result = await installUpdate("CAP NHAT UNG DUNG");
-      setMessage(`Đã bắt đầu tải bản ${result.version}. Theo dõi tiến độ bên dưới; không đóng máy trong lúc cài.`);
+      void result;
+      setMessage("");
     } catch (reason) {
       installStartedRef.current = null;
       setInstalling(false);
       const issue = updateErrorInfo(reason);
+      setIssueKind(issue.kind);
       setMessage(issue.message);
       setNextAction(issue.action);
     } finally {
@@ -373,14 +410,16 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
     }
   }
 
-  const phase: UpdateUiPhase = installing && !progress ? "preparing" : progress?.phase ?? "idle";
+  const presentation = deriveUpdatePresentation({ status, progress, busy, installing, reconnecting, issueKind, hasIssue: Boolean(nextAction) });
+  const phase = presentation.phase;
   const downloadValue = progress?.percent != null ? progress.percent : progress?.bytes_total ? (progress.bytes_downloaded / progress.bytes_total) * 100 : undefined;
-  const targetVersion = progress?.target_version ?? status?.latest_version ?? null;
-  const canInstall = Boolean(installCapability.available && status?.available && status.installable && status.automatic_install_supported && !installing);
-  const stateCopy = updateStateCopy(status, phase, installing || reconnecting, busy, Boolean(nextAction));
+  const targetVersion = presentation.targetVersion;
+  const canInstall = Boolean(installCapability.available && presentation.state === "available" && status?.installable && status.automatic_install_supported && !installing);
+  const stateCopy = updateStateCopy(presentation.state, targetVersion, phase);
   const StateIcon = stateCopy.icon;
-  const showDownloadProgress = Boolean(installing || reconnecting || progress?.bytes_total || progress?.percent != null || phase === "failed" || phase === "installed");
-  const messageTone = phase === "failed" ? "danger" : nextAction ? "warning" : phase === "installed" ? "success" : "info";
+  const messageTone = presentation.state === "failed" ? "danger" : "warning";
+  const checkedText = lastCheckedAt ? formatDateTime(lastCheckedAt) : busy ? "Đang kiểm tra" : "Chưa kiểm tra";
+  const showRetry = ["failed", "offline", "issue"].includes(presentation.state);
 
   if (!checkCapability.available) {
     return (
@@ -401,56 +440,90 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
   }
 
   return (
-    <section className="section panel wide update-settings-page" aria-busy={busy || installing || reconnecting}>
-      <div className="update-overview">
-        <div className="update-state" data-tone={stateCopy.tone} role="status" aria-live="polite">
-          <span className="update-state-icon"><StateIcon size={24} aria-hidden="true" /></span>
-          <div><p className="section-label">Trạng thái phiên bản</p><h2>{stateCopy.title}</h2><p>{stateCopy.copy}</p></div>
+    <section className="section panel wide update-settings-page windows-update-page" aria-busy={busy || installing || reconnecting}>
+      <div className="update-layout">
+        <div className="update-primary-panel">
+          <div className="update-overview">
+            <div className="update-state" data-tone={stateCopy.tone} role="status" aria-live="polite">
+              <span className="update-state-icon"><StateIcon size={24} aria-hidden="true" /></span>
+              <div className="update-state-copy">
+                <p className="section-label">{stateCopy.label}</p>
+                <h2>{stateCopy.title}</h2>
+                <p>{stateCopy.copy}</p>
+                {presentation.availableVersion && presentation.currentVersion ? <p className="update-version-route" aria-label={`Nâng từ phiên bản ${presentation.currentVersion} lên ${presentation.availableVersion}`}><strong>v{presentation.currentVersion}</strong><ArrowRight size={16} aria-hidden="true" /><strong>v{presentation.availableVersion}</strong></p> : null}
+              </div>
+            </div>
+            <div className="update-state-actions">
+              {canInstall ? <button className="primary" type="button" onClick={() => setAskInstall(true)}><Download size={17} aria-hidden="true" />Tải và cài bản {presentation.availableVersion}</button> : null}
+              {presentation.state === "manual" && status?.release_url ? <a className="button-link" href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Mở trang tải</a> : null}
+              {!presentation.showWorkflow && !showRetry ? <button className="update-check-button" type="button" onClick={() => void check()} disabled={busy || installing}>
+                <RefreshCw size={17} aria-hidden="true" />{busy ? "Đang kiểm tra…" : "Kiểm tra lại"}
+              </button> : null}
+              {showRetry ? <button className="primary" type="button" onClick={() => void check()} disabled={busy}><RefreshCw size={17} aria-hidden="true" />Thử lại</button> : null}
+            </div>
+          </div>
+
+          <section className="update-version-grid" aria-labelledby="update-version-title">
+            <h3 className="sr-only" id="update-version-title">Thông tin phiên bản</h3>
+            <div><span>Đang dùng</span><strong>{presentation.currentVersion ?? "—"}</strong></div>
+            <div><span>Bản khả dụng</span><strong>{presentation.availabilityText}</strong></div>
+            <div><span>Đã kiểm tra</span><strong>{checkedText}</strong></div>
+          </section>
+
+          {presentation.feedBehindCurrent ? <p className="update-feed-note" role="status"><Info size={17} aria-hidden="true" /><span>Ứng dụng hiện tại mới hơn phiên bản nguồn đang công bố; tiến trình cũ đã được ẩn để tránh gây nhầm lẫn.</span></p> : null}
+
+          {presentation.showWorkflow ? <section className="update-workflow" aria-labelledby="update-workflow-title">
+            <div className="update-workflow-heading">
+              <div><p className="section-label">Tiến trình cập nhật</p><h3 id="update-workflow-title">{phaseLabel(phase)}{targetVersion ? ` bản ${targetVersion}` : ""}</h3></div>
+              {progress?.percent != null && phase === "downloading" ? <strong>{Math.round(progress.percent)}%</strong> : null}
+            </div>
+            <ol className="update-stages" aria-label="Các bước cập nhật">
+              {updateStages.map((stage) => {
+                const StageIcon = stage.icon;
+                const stageState = updateStageState(stage, phase);
+                return <li key={stage.key} data-state={stageState}><span className="update-stage-icon" aria-hidden="true">{stageState === "done" ? <Check size={16} /> : <StageIcon size={17} />}</span><span>{stage.label}</span></li>;
+              })}
+            </ol>
+            {presentation.showDownloadProgress ? <div className="download-progress" aria-live="polite">
+              <div><label htmlFor="update-download-progress">Đang tải gói cài</label><span>{progress?.bytes_total ? `${formatBytes(progress.bytes_downloaded)} / ${formatBytes(progress.bytes_total)}` : phaseLabel(phase)}{progress?.percent != null ? ` · ${Math.round(progress.percent)}%` : ""}</span></div>
+              <progress id="update-download-progress" max={100} value={downloadValue} aria-valuetext={progress?.percent != null ? `${Math.round(progress.percent)} phần trăm` : undefined}>{downloadValue != null ? `${Math.round(downloadValue)}%` : undefined}</progress>
+            </div> : null}
+          </section> : null}
+
+          {message ? <div className="update-message" data-tone={messageTone} role="alert" aria-live={presentation.state === "failed" ? "assertive" : "polite"}><p>{message}</p>{nextAction ? <p><strong>Việc cần làm:</strong> {nextAction}</p> : null}</div> : null}
         </div>
-        <button className="update-check-button" type="button" onClick={() => void check()} disabled={busy || installing}>
-          <RefreshCw size={17} aria-hidden="true" />{busy ? "Đang kiểm tra…" : "Kiểm tra lại"}
-        </button>
+
+        <aside className="update-support-panel" aria-label="Thông tin bản phát hành và bảo mật">
+          <section className="update-release-row" aria-labelledby="update-release-title">
+            <div>
+              <p className="section-label">Bản phát hành</p>
+              <h3 id="update-release-title">{status?.release_name || (presentation.feedVersion ? `Affiliate Report ${presentation.feedVersion}` : "Chưa có thông tin")}</h3>
+              <p>{status?.published_at ? `Phát hành ${formatDateTime(status.published_at)}` : "Thông tin sẽ xuất hiện sau khi kiểm tra cập nhật."}</p>
+              {status?.installer_size ? <p className="update-package-size"><HardDriveDownload size={16} aria-hidden="true" /><span>Gói cài Windows · {formatBytes(status.installer_size)}</span></p> : null}
+            </div>
+            {status?.release_url ? <a className="button-link secondary-link" href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
+          </section>
+
+          {status?.notes ? <details className="update-notes"><summary><span>Ghi chú phiên bản</span><ChevronDown size={17} aria-hidden="true" /></summary><p>{status.notes}</p></details> : null}
+
+          <details className="update-technical">
+            <summary><span><ShieldCheck size={18} aria-hidden="true" />Chi tiết kỹ thuật</span><ChevronDown size={17} aria-hidden="true" /></summary>
+            <div className="update-technical-body">
+              <p>Manifest được xác minh bằng Ed25519; dung lượng và SHA-256 của gói cài được kiểm tra lại trước khi chạy.</p>
+              <dl>
+                <div><dt>Nguồn phát hành</dt><dd className="source-repo">{status?.source_repo ?? "Nguồn công khai đã ký"}</dd></div>
+                <div><dt>Phiên bản trên nguồn</dt><dd>{presentation.feedVersion ?? "—"}</dd></div>
+                {status?.installer_name ? <div><dt>Gói cài</dt><dd>{status.installer_name}</dd></div> : null}
+                {status?.installer_size ? <div><dt>Dung lượng</dt><dd>{formatBytes(status.installer_size)}</dd></div> : null}
+                {status?.bootstrap_version ? <div><dt>Updater bootstrap</dt><dd>v{status.bootstrap_version}</dd></div> : null}
+              </dl>
+            </div>
+          </details>
+
+          {!installCapability.available ? <p className="hint">{installCapability.reason}</p> : null}
+          {installCapability.available && status && !status.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
+        </aside>
       </div>
-      <section className="update-version-grid" aria-labelledby="update-version-title">
-        <h3 className="sr-only" id="update-version-title">Thông tin phiên bản</h3>
-        <div><span>Đang dùng</span><strong>{progress?.current_version ?? status?.current_version ?? "—"}</strong></div>
-        <div><span>Mới nhất</span><strong>{targetVersion ?? "—"}</strong></div>
-        <div><span>Tiến trình</span><strong>{phaseLabel(phase)}</strong></div>
-      </section>
-
-      <ol className="update-stages" aria-label="Các bước cập nhật">
-        {updateStages.map((stage) => {
-          const StageIcon = stage.icon;
-          const stageState = updateStageState(stage, phase);
-          return <li key={stage.key} data-state={stageState}><span className="update-stage-icon" aria-hidden="true">{stageState === "done" ? <Check size={16} /> : <StageIcon size={17} />}</span><span>{stage.label}</span></li>;
-        })}
-      </ol>
-
-      {showDownloadProgress ? <div className="download-progress" aria-live="polite">
-        <div><label htmlFor="update-download-progress">Tiến độ tải gói cài</label><span>{progress?.bytes_total ? `${formatBytes(progress.bytes_downloaded)} / ${formatBytes(progress.bytes_total)}` : phaseLabel(phase)}{progress?.percent != null ? ` · ${Math.round(progress.percent)}%` : ""}</span></div>
-        <progress id="update-download-progress" max={100} value={downloadValue}>{downloadValue ? `${Math.round(downloadValue)}%` : undefined}</progress>
-      </div> : null}
-
-      <div className="update-release-row">
-        <div>
-          <p className="section-label">Bản phát hành</p>
-          <h3>{status?.release_name || (targetVersion ? `Affiliate Report ${targetVersion}` : "Chưa có thông tin bản phát hành")}</h3>
-          <p>{status?.published_at ? `Phát hành ${formatDateTime(status.published_at)}` : "Thông tin sẽ xuất hiện sau khi kiểm tra cập nhật."}</p>
-          {status?.source_repo ? <p className="source-repo">Nguồn: {status.source_repo}</p> : null}
-        </div>
-        {status?.release_url ? <a className="button-link secondary-link" href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
-      </div>
-
-      {status?.notes ? <details className="update-notes"><summary>Ghi chú phiên bản</summary><p>{status.notes}</p></details> : null}
-      <div className="update-safeguards"><ShieldCheck size={18} aria-hidden="true" /><p><strong>Cập nhật an toàn</strong><span>Nguồn công khai không cần token; chữ ký và SHA-256 của gói cài được xác minh trước khi chạy.</span></p></div>
-      {!installCapability.available ? <p className="hint">{installCapability.reason}</p> : null}
-      {installCapability.available && status && !status.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
-
-      <div className="row-actions update-actions">
-        {canInstall ? <button className="primary" type="button" onClick={() => setAskInstall(true)}><Download size={17} aria-hidden="true" />Cài bản {status?.latest_version}</button> : null}
-        {phase === "failed" || (!installing && Boolean(nextAction) && phase !== "installed") ? <button type="button" onClick={() => void check()} disabled={busy}><RefreshCw size={17} aria-hidden="true" />Thử lại</button> : null}
-      </div>
-      {message ? <div className="update-message" data-tone={messageTone} role={phase === "failed" || nextAction ? "alert" : "status"} aria-live={phase === "failed" ? "assertive" : "polite"}><p>{message}</p>{nextAction ? <p><strong>Việc cần làm:</strong> {nextAction}</p> : null}</div> : null}
       <ConfirmDialog
         open={askInstall && canInstall}
         title={`Cài bản ${status?.latest_version ?? ""} ngay?`}
