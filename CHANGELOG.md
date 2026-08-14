@@ -4,6 +4,7 @@
 
 - Bỏ gate điện thoại Android vật lý theo xác nhận của chủ dự án; vẫn giữ emulator API 24/36, APK signing và synthetic same-key upgrade.
 - Sửa race thay `update-status.json` trên Windows khiến updater bootstrap đôi lúc không kịp ghi handshake khi giao diện đang poll trạng thái.
+- Người dùng đang ở v2.0.25 phải tải `AffiliateReportSetup-v2.1.1.exe` và cài đè thủ công. Auto-update thật từ v2.0.29 lên v2.1.1 đã đạt 5/5; direct installer upgrade từ v2.0.25 vẫn được kiểm tra giữ dữ liệu.
 - Giữ `v2.1.0` ở draft sau khi gate auto-update thật phát hiện lỗi, không di chuyển hoặc tái sử dụng tag đã tạo.
 
 ## v2.1.0 - 2026-08-14

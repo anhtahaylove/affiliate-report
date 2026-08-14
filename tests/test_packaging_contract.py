@@ -371,9 +371,9 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     # có gì canh nên không ai thấy. Giờ nó phải đọc từ đúng một nguồn.
     release_workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     assert "-f previous_version=$previousVersion" in release_workflow
-    assert "-f previous_version=$legacyVersion" in release_workflow
     assert "-f smoke_run_count=5" in release_workflow
-    assert "-f smoke_run_count=1" in release_workflow
+    assert "$legacyVersion" not in release_workflow
+    assert "Legacy public updater UI gate" not in release_workflow
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.

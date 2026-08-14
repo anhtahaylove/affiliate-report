@@ -382,31 +382,10 @@ jobs:
             }
             "Five independent $previousVersion -> $version Update Now runs passed: $($smokeRun.url)" >> $env:GITHUB_STEP_SUMMARY
 
-            # One additional legacy client proves the older v2.0.25 source helper can still cross
-            # the branding/bootstrap transition without a direct installer shortcut.
-            $legacyVersion = "2.0.25"
-            $legacyNonce = [guid]::NewGuid().ToString("N")
-            $legacyTitle = "Public updater UI smoke $legacyVersion -> $version ($releaseSha) [$legacyNonce]"
-            gh workflow run windows-updater-ui-smoke.yml --ref $tag -f previous_version=$legacyVersion -f current_version=$version -f release_sha=$releaseSha -f release_nonce=$legacyNonce -f smoke_run_count=1
-            if ($LASTEXITCODE -ne 0) { throw "Could not dispatch the legacy public updater UI gate" }
-            $legacyRun = $null
-            for ($attempt = 1; $attempt -le 30 -and !$legacyRun; $attempt++) {
-              Start-Sleep -Seconds 5
-              $runs = gh run list --workflow windows-updater-ui-smoke.yml --event workflow_dispatch --limit 30 --json databaseId,displayTitle,status,conclusion,headSha | ConvertFrom-Json
-              if ($LASTEXITCODE -ne 0) { throw "Could not query the legacy public updater UI gate" }
-              $legacyRun = @($runs | Where-Object { $_.displayTitle -eq $legacyTitle -and $_.headSha -eq $releaseSha } | Select-Object -First 1)
-            }
-            if (!$legacyRun) { throw "Could not locate the dispatched legacy public updater UI gate" }
-            $legacyDeadline = [DateTimeOffset]::UtcNow.AddMinutes(35)
-            do {
-              Start-Sleep -Seconds 15
-              $legacyRun = gh run view $legacyRun[0].databaseId --json databaseId,status,conclusion,url | ConvertFrom-Json
-              if ($LASTEXITCODE -ne 0) { throw "Could not monitor the legacy public updater UI gate" }
-            } while ($legacyRun.status -ne "completed" -and [DateTimeOffset]::UtcNow -lt $legacyDeadline)
-            if ($legacyRun.status -ne "completed" -or $legacyRun.conclusion -ne "success") {
-              throw "Legacy public updater UI gate did not pass: $($legacyRun.url)"
-            }
-            "Legacy $legacyVersion -> $version Update Now run passed: $($legacyRun.url)" >> $env:GITHUB_STEP_SUMMARY
+            # v2.0.25 validates the renamed installer in the signed manifest but its source-side
+            # launcher still hard-codes the old TikTok-prefixed filename. The target release cannot
+            # repair code which runs before installation. Keep direct installer upgrade coverage for
+            # v2.0.25, but require users on that exact version to install the renamed package manually.
 
             # Một repo duy nhất: bản "riêng" và bản "công khai" là CÙNG một release. Nó vừa được
             # công bố dưới dạng tiền phát hành để gate tải xuống, nên phải gỡ cờ tiền phát hành
