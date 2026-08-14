@@ -5,6 +5,17 @@ api_level="${1:?Android API level is required}"
 apk="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-debug.apk"
 package="$RUNNER_TEMP/android-${api_level}.affsync"
 
+dump_diagnostics() {
+  status=$?
+  set +e
+  echo "::group::Android runtime diagnostics"
+  adb shell run-as vn.io.huuhungn.affiliatereport cat cache/startup-error.txt 2>/dev/null || true
+  adb logcat -d -t 500 -s AffiliateReport:E AndroidRuntime:E python.stderr:V chaquopy:V 2>/dev/null || true
+  echo "::endgroup::"
+  exit "$status"
+}
+trap dump_diagnostics ERR
+
 read_token() {
   ANDROID_LOCAL_TOKEN="$(adb exec-out run-as vn.io.huuhungn.affiliatereport cat files/android-local-token | tr -d '\r\n')"
   test "${#ANDROID_LOCAL_TOKEN}" -ge 32

@@ -411,12 +411,16 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     )
     assert 'script: bash scripts/ci/android_emulator_smoke.sh "${{ matrix.api-level }}"' in android
     assert "script: bash scripts/ci/android_signed_upgrade_smoke.sh" in android
+    assert android.count("Enable KVM group permissions") == 2
+    assert android.count("udevadm trigger --name-match=kvm") == 2
     for script in (
         Path("scripts/ci/android_emulator_smoke.sh"),
         Path("scripts/ci/android_signed_upgrade_smoke.sh"),
     ):
         text = script.read_text(encoding="utf-8")
         assert text.startswith("#!/usr/bin/env bash\nset -euo pipefail\n")
+        assert "trap dump_diagnostics ERR" in text
+        assert "cat cache/startup-error.txt" in text
     upgrade_smoke = Path("scripts/ci/android_signed_upgrade_smoke.sh").read_text(encoding="utf-8")
 
     assert "push:\n    branches: [main]" in android

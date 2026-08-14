@@ -5,6 +5,17 @@ current="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.0-x86_64-release.apk"
 target="$GITHUB_WORKSPACE/candidate/AffiliateReport-v2.1.1-x86_64-release.apk"
 package="$RUNNER_TEMP/android-signed-upgrade.affsync"
 
+dump_diagnostics() {
+  status=$?
+  set +e
+  echo "::group::Android runtime diagnostics"
+  adb shell run-as vn.io.huuhungn.affiliatereport cat cache/startup-error.txt 2>/dev/null || true
+  adb logcat -d -t 500 -s AffiliateReport:E AndroidRuntime:E python.stderr:V chaquopy:V 2>/dev/null || true
+  echo "::endgroup::"
+  exit "$status"
+}
+trap dump_diagnostics ERR
+
 adb install "$current"
 adb shell am start -W -n vn.io.huuhungn.affiliatereport/.MainActivity
 adb forward tcp:9876 tcp:8765
