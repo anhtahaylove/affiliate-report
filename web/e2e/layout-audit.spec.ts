@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { findClippedElements } from "./clipping";
 
 const routes = [
   "/",
@@ -42,9 +43,11 @@ test("mọi route không tràn ngang, không trùng id và giữ đúng cấu tr
           sidebarScrollTop: sidebar?.scrollTop ?? 0,
         };
       });
+      const clipped = await findClippedElements(page);
 
       expect(snapshot.overflowX, `${viewport.name} ${route} không được tràn ngang`).toBeLessThanOrEqual(1);
       expect(snapshot.duplicateIds, `${viewport.name} ${route} không được trùng id`).toEqual([]);
+      expect(clipped, `${viewport.name} ${route} có phần tử bị overflow:hidden cắt mất nội dung`).toEqual([]);
       if (viewport.width > 860) {
         expect(snapshot.sidebarScrollTop, `${viewport.name} ${route} phải bắt đầu sidebar từ đầu`).toBe(0);
       }

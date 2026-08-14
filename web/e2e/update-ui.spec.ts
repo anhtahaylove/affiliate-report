@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { UpdateProgress, UpdateStatus } from "../src/lib/api";
+import { findClippedElements } from "./clipping";
 
 const baseStatus: UpdateStatus = {
   current_version: "2.1.1",
@@ -130,11 +131,13 @@ for (const scenario of [
     await expect(page.locator(".update-stages li")).toHaveCount(5);
     await expect(page.locator("#update-download-progress")).toHaveCount(scenario.phase === "downloading" ? 1 : 0);
     if (scenario.phase === "downloading") {
-      // Có mặt trong DOM chưa đủ: một luật CSS khác từng ép .download-progress xuống height 8px
-      // kèm overflow hidden, nên nhãn và thanh tải bị cắt cụt mà test đếm phần tử vẫn xanh.
-      const box = await page.locator(".download-progress").evaluate((el) => ({ clientHeight: el.clientHeight, scrollHeight: el.scrollHeight }));
-      expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight + 1);
       await expect(page.locator("#update-download-progress")).toBeVisible();
+    }
+    // Có mặt trong DOM chưa đủ. Vòng quét route trong layout-audit không bao giờ chạm tới
+    // các trạng thái này, mà v2.1.2 hỏng đúng ở trạng thái downloading — nên phải quét ở đây.
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await findClippedElements(page), `phase ${scenario.phase} @${width}`).toEqual([]);
     }
   });
 }
