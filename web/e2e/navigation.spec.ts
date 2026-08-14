@@ -9,6 +9,7 @@ const ROUTES = [
   ["/accounts/", "/accounts/"],
   ["/settings/preferences/", "/settings/preferences/"],
   ["/settings/data/", "/settings/data/"],
+  ["/settings/sync/", "/settings/sync/"],
   ["/settings/update/", "/settings/update/"],
   ["/settings/users/", "/settings/users/"],
 ] as const;

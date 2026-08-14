@@ -173,6 +173,109 @@ def test_sign_update_feed_writes_byte_stable_lf_files(tmp_path, monkeypatch):
     }
 
 
+def test_sign_update_feed_adds_signed_android_release_metadata(tmp_path, monkeypatch):
+    installer = tmp_path / "AffiliateReportSetup-v2.1.0.exe"
+    installer.write_bytes(b"windows-installer")
+    bootstrap = tmp_path / "TikTokAffiliateUpdater-v1.0.0.ps1"
+    bootstrap.write_bytes(b"bootstrap")
+    android_apk = tmp_path / "AffiliateReport-v2.1.0-arm64.apk"
+    android_apk.write_bytes(b"signed-android-apk")
+    output_dir = tmp_path / "feed"
+    android_url = (
+        "https://github.com/anhtahaylove/affiliate-report/releases/download/"
+        "v2.1.0/AffiliateReport-v2.1.0-arm64.apk"
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "sign_update_feed.py",
+            "--version", "2.1.0",
+            "--installer", str(installer),
+            "--bootstrap", str(bootstrap),
+            "--asset-url", (
+                "https://github.com/anhtahaylove/affiliate-report/releases/download/"
+                "v2.1.0/AffiliateReportSetup-v2.1.0.exe"
+            ),
+            "--bootstrap-url", (
+                "https://github.com/anhtahaylove/affiliate-report/releases/download/"
+                "v2.1.0/TikTokAffiliateUpdater-v1.0.0.ps1"
+            ),
+            "--android-apk", str(android_apk),
+            "--android-url", android_url,
+            "--android-min-sdk", "24",
+            "--android-abi", "arm64-v8a",
+            "--release-url", "https://github.com/anhtahaylove/affiliate-report/releases/tag/v2.1.0",
+            "--key-id", TEST_KEY_ID,
+            "--output-dir", str(output_dir),
+            "--private-key-b64", base64.b64encode(bytes(range(1, 33))).decode("ascii"),
+        ],
+    )
+
+    assert sign_update_feed.main() == 0
+    payload = (output_dir / "stable.json").read_bytes()
+    raw = json.loads(payload)
+    assert raw["android"] == {
+        "name": android_apk.name,
+        "url": android_url,
+        "size": len(b"signed-android-apk"),
+        "sha256": hashlib.sha256(b"signed-android-apk").hexdigest().upper(),
+        "version": "2.1.0",
+        "min_sdk": 24,
+        "abis": ["arm64-v8a"],
+    }
+    monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", {TEST_KEY_ID: TEST_PUBLIC_B64})
+    verified = updater.verify_update_manifest_bytes(
+        payload, (output_dir / "stable.json.sig").read_bytes()
+    )
+    assert verified["version"] == "2.1.0"
+    assert verified["android"] == raw["android"]
+
+
+def test_android_update_uses_signed_metadata_and_verifies_download(tmp_path, monkeypatch):
+    apk = b"signed-apk"
+    version = "2.1.0"
+    name = f"AffiliateReport-v{version}-arm64.apk"
+    manifest, signature, installer = stable_feed(
+        version=version,
+        android={
+            "name": name,
+            "url": f"https://github.com/anhtahaylove/affiliate-report/releases/download/v{version}/{name}",
+            "size": len(apk),
+            "sha256": hashlib.sha256(apk).hexdigest().upper(),
+            "version": version,
+            "min_sdk": 24,
+            "abis": ["arm64-v8a"],
+        },
+    )
+
+    class AndroidResponse(Response):
+        pass
+
+    def fake_urlopen(request, timeout=0):
+        del timeout
+        url = request.full_url
+        if url.endswith("stable.json"):
+            return Response(manifest)
+        if url.endswith("stable.json.sig"):
+            return Response(signature)
+        if url.endswith(".apk"):
+            return AndroidResponse(apk)
+        return Response(installer)
+
+    monkeypatch.setattr(updater, "TRUSTED_UPDATE_KEYS", {TEST_KEY_ID: TEST_PUBLIC_B64})
+    monkeypatch.setattr(updater, "urlopen", fake_urlopen)
+    monkeypatch.delenv("TIKTOK_REPORT_UPDATE_FEED_URL", raising=False)
+
+    checked = updater.check_for_android_update(current_version="2.0.29")
+    downloaded = updater.download_latest_android(tmp_path, current_version="2.0.29")
+
+    assert checked["available"] is True
+    assert checked["name"] == name
+    assert Path(downloaded["apk_path"]).read_bytes() == apk
+    assert downloaded["sha256"] == hashlib.sha256(apk).hexdigest().upper()
+
+
 def test_check_and_download_update_with_verified_signed_public_feed(tmp_path, monkeypatch):
     manifest, signature, installer = stable_feed()
     seen_headers = install_feed(monkeypatch, manifest, signature, installer)

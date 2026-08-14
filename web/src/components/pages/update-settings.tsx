@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, CapabilityState, UpdateProgress, UpdateStatus, checkUpdate, installUpdate, loadUpdateProgress } from "@/lib/api";
+import { ApiError, AndroidUpdatePrepareResponse, AndroidUpdateSummary, CapabilityState, UpdateProgress, UpdateStatus, apiUrl, checkUpdate, installUpdate, loadAndroidUpdateStatus, loadUpdateProgress, prepareAndroidUpdate } from "@/lib/api";
 import { forgetPostponedUpdate } from "@/components/update-banner";
 import { ConfirmDialog } from "@/components/ui";
 import { formatBytes, formatDateTime } from "@/lib/format";
-import { Check, CheckCircle2, CloudCog, Download, ExternalLink, HardDriveDownload, MonitorUp, RefreshCw, RotateCw, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Check, CheckCircle2, CloudCog, Download, ExternalLink, HardDriveDownload, MonitorUp, RefreshCw, RotateCw, ShieldCheck, Smartphone, type LucideIcon } from "lucide-react";
+import { requestAndroidNativeDownload } from "@/lib/android-native";
 
 const UPDATE_RECONNECT_TIMEOUT_MS = 90_000;
+const ANDROID_APK_HANDOFF_TIMEOUT_MS = 180_000;
 // Đo trên Windows: gọi tới cổng loopback đã đóng mất ~2,03 giây mới báo ConnectionRefused, chứ
 // không trả lỗi ngay. Trong lúc chờ app sống lại, phần lớn thời gian mỗi vòng là chờ TCP chứ
 // không phải khoảng nghỉ giữa hai lần hỏi. Cắt sớm là cách duy nhất rút ngắn được vòng đó. Khi
@@ -89,6 +91,123 @@ function updateStateCopy(status: UpdateStatus | null, phase: UpdateUiPhase, inst
   if (!status && busy) return { tone: "info", title: "Đang kiểm tra phiên bản", copy: "Đang xác minh nguồn cập nhật công khai có chữ ký.", icon: RefreshCw };
   if (status?.available) return { tone: "info", title: `Có bản ${status.latest_version} sẵn sàng`, copy: status.installable && status.automatic_install_supported ? "Bạn có thể tải, xác minh và cài ngay trong ứng dụng." : "Bản mới đã được phát hành nhưng máy này chưa hỗ trợ cài tự động.", icon: Download };
   return { tone: "success", title: "Bạn đang dùng bản mới nhất", copy: "Không cần thao tác thêm. Bạn có thể kiểm tra lại bất cứ lúc nào.", icon: CheckCircle2 };
+}
+
+export function AndroidUpdateSettings({ capability, status }: { capability?: CapabilityState; status?: AndroidUpdateSummary | null }) {
+  const available = capability?.available ?? Boolean(status);
+  const [liveStatus, setLiveStatus] = useState<AndroidUpdateSummary | null>(status ?? null);
+  const [checking, setChecking] = useState(available);
+  const latest = liveStatus?.latest_version ?? liveStatus?.current_version ?? "—";
+  const failed = Boolean(liveStatus?.error);
+  const [preparing, setPreparing] = useState(false);
+  const [prepared, setPrepared] = useState<AndroidUpdatePrepareResponse | null>(null);
+  const [prepareError, setPrepareError] = useState("");
+
+  useEffect(() => {
+    if (!available) return;
+    let active = true;
+    void loadAndroidUpdateStatus()
+      .then((next) => { if (active) setLiveStatus(next); })
+      .catch((reason) => {
+        if (active) setLiveStatus({
+          current_version: status?.current_version ?? "—",
+          available: false,
+          installable: false,
+          error: reason instanceof Error ? reason.message : "Không thể kiểm tra bản APK.",
+        });
+      })
+      .finally(() => { if (active) setChecking(false); });
+    return () => { active = false; };
+  }, [available, status?.current_version]);
+
+  function waitForNativeVerification(expected: AndroidUpdatePrepareResponse) {
+    return new Promise<void>((resolve, reject) => {
+      let timer = 0;
+      const cleanup = () => {
+        window.clearTimeout(timer);
+        window.removeEventListener("affiliate-report-apk-ready", onReady);
+        window.removeEventListener("affiliate-report-apk-error", onError);
+      };
+      const onReady = (event: Event) => {
+        const detail = (event as CustomEvent<Record<string, unknown>>).detail ?? {};
+        const size = Number(detail.size);
+        const sha256 = String(detail.sha256 ?? "").toUpperCase();
+        const version = String(detail.version ?? "");
+        if (size !== expected.size || sha256 !== expected.sha256.toUpperCase() || version !== expected.version) {
+          cleanup();
+          reject(new Error("APK được Android nhận không khớp gói đã xác minh."));
+          return;
+        }
+        cleanup();
+        resolve();
+      };
+      const onError = (event: Event) => {
+        const detail = (event as CustomEvent<{ message?: string }>).detail;
+        cleanup();
+        reject(new Error(detail?.message || "Android không thể xác minh APK."));
+      };
+      window.addEventListener("affiliate-report-apk-ready", onReady);
+      window.addEventListener("affiliate-report-apk-error", onError);
+      timer = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Android chưa xác nhận tải APK. Hãy thử lại hoặc mở trang phát hành."));
+      }, ANDROID_APK_HANDOFF_TIMEOUT_MS);
+    });
+  }
+
+  async function handoffAndroidUpdate() {
+    setPreparing(true);
+    setPrepareError("");
+    setPrepared(null);
+    try {
+      const result = await prepareAndroidUpdate();
+      const downloadUrl = new URL(result.download_url, `${apiUrl()}/`);
+      if (downloadUrl.origin !== new URL(apiUrl()).origin) throw new Error("API trả về URL tải APK ngoài ứng dụng.");
+      const nativeVerification = waitForNativeVerification(result);
+      requestAndroidNativeDownload(
+        downloadUrl.toString(),
+        result.filename,
+        "application/vnd.android.package-archive",
+      );
+      await nativeVerification;
+      setPrepared(result);
+    } catch (reason) {
+      setPrepareError(reason instanceof Error ? reason.message : "Không thể tải và xác minh APK.");
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  return (
+    <section className="section panel wide update-settings-page android-update-page">
+      <div className="update-overview">
+        <div className="update-state" data-tone={failed ? "warning" : liveStatus?.available ? "info" : "success"} role="status">
+          <span className="update-state-icon"><Smartphone size={24} aria-hidden="true" /></span>
+          <div>
+            <p className="section-label">Ứng dụng Android</p>
+            <h2>{checking ? "Đang kiểm tra bản APK" : failed ? "Chưa kiểm tra được bản APK" : liveStatus?.available ? `Có APK ${latest} sẵn sàng` : "Affiliate Report trên Android"}</h2>
+            <p>{checking ? "Ứng dụng đang kiểm tra nguồn cập nhật có chữ ký trong nền." : liveStatus?.error ?? liveStatus?.message ?? (available
+              ? "APK được xác minh chữ ký và SHA-256 trước khi chuyển sang trình cài đặt của Android."
+              : capability?.reason ?? "Kênh cập nhật APK đang được chuẩn bị.")}</p>
+          </div>
+        </div>
+      </div>
+      <section className="update-version-grid" aria-labelledby="android-version-title">
+        <h3 className="sr-only" id="android-version-title">Thông tin phiên bản Android</h3>
+        <div><span>Đang dùng</span><strong>{liveStatus?.current_version ?? status?.current_version ?? "—"}</strong></div>
+        <div><span>Mới nhất</span><strong>{latest}</strong></div>
+        <div><span>Cài đặt</span><strong>Android xác nhận</strong></div>
+      </section>
+      <div className="update-safeguards"><ShieldCheck size={18} aria-hidden="true" /><p><strong>Không chạy installer Windows</strong><span>Ứng dụng chỉ tải APK dành cho Android; bước cài đặt cuối luôn cần bạn xác nhận trong hệ thống.</span></p></div>
+      {preparing ? <div className="android-update-progress" role="status" aria-live="polite"><progress aria-label="Đang tải và xác minh APK" /><span>Đang tải APK, kiểm tra dung lượng và SHA-256…</span></div> : null}
+      {prepared ? <div className="android-update-result" role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>APK {prepared.version} đã được xác minh và chuyển sang trình cài đặt Android. Hãy xác nhận cài đặt trong màn hình hệ thống.</span></div> : null}
+      {prepareError ? <div className="android-update-error" role="alert">{prepareError}</div> : null}
+      <div className="row-actions update-actions">
+        {liveStatus?.available && liveStatus.installable !== false ? <button className="primary" type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài APK"}</button> : null}
+        {liveStatus?.release_url ? <a className="button-link secondary-link" href={liveStatus.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
+      </div>
+    </section>
+  );
 }
 
 export function UpdateSettingsPage({ checkCapability, installCapability }: { checkCapability: CapabilityState; installCapability: CapabilityState }) {

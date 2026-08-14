@@ -35,16 +35,22 @@ def test_init_db_runs_versioned_migrations_and_seeds_targets():
 
     inspector = inspect(e)
     assert inspector.has_table("schema_migrations")
+    assert inspector.has_table("device_identity")
+    assert inspector.has_table("sync_tombstones")
+    assert inspector.has_table("sync_history")
     assert {c["name"] for c in inspector.get_columns("import_batches")} >= {"uploaded_by_label", "auth_method", "auth_subject"}
+    assert {c["name"] for c in inspector.get_columns("import_batches")} >= {"sync_id", "source_device_id", "source_created_at"}
+    assert {c["name"] for c in inspector.get_columns("monthly_targets")} >= {"sync_id", "source_device_id", "sync_updated_at"}
     assert {i["name"] for i in inspector.get_indexes("raw_import_rows")} >= {"ix_raw_import_rows_batch_id"}
     assert {i["name"] for i in inspector.get_indexes("import_batches")} >= {"ix_import_batches_account_created_at"}
     with e.connect() as conn:
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         assert conn.execute(select(monthly_targets.c.id)).first() is None
         assert conn.execute(select(accounts)).first() is None
     assert {"app_users", "user_account_access", "auth_sessions", "oidc_login_states"} <= set(inspector.get_table_names())
     assert inspector.has_table("accounts")
-    assert {c["name"] for c in inspector.get_columns("accounts")} >= {"code", "display_name", "active", "display_order", "created_at", "updated_at"}
+    assert {c["name"] for c in inspector.get_columns("accounts")} >= {"code", "sync_id", "display_name", "active", "display_order", "created_at", "updated_at"}
+    assert {i["name"] for i in inspector.get_indexes("accounts")} >= {"uq_accounts_sync_id"}
     assert {c["name"] for c in inspector.get_columns("order_line_versions")} >= {"product_id", "shop_id", "content_type", "content_id", "order_type", "commission_type", "currency"}
     assert {user_ui_preferences.name, saved_report_views.name} <= set(inspector.get_table_names())
     assert {index["name"] for index in inspector.get_indexes(saved_report_views.name)} >= {
@@ -92,8 +98,9 @@ def test_migrations_adopt_existing_sqlite_and_preserve_data():
     with e.connect() as conn:
         old = conn.execute(text("select file_sha, filename, account, inserted from import_batches where id = 1")).mappings().one()
         assert dict(old) == {"file_sha": "abc", "filename": "old.xlsx", "account": "CHIISTORE", "inserted": 3}
-        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7, 8]
+        assert [r.version for r in conn.execute(select(schema_migrations.c.version).order_by(schema_migrations.c.version))] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         assert conn.execute(select(accounts.c.code)).scalar_one() == "CHIISTORE"
+        assert conn.execute(select(accounts.c.sync_id)).scalar_one()
 
 
 def test_import_rows_stores_optional_identity_audit():

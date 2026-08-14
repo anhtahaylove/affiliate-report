@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { achievementTone, formatDateTime, roleLabel, statusLabel } from "./format.ts";
+import { achievementTone, countsText, formatDateTime, roleLabel, statusLabel } from "./format.ts";
 
 test("Vietnamese presentation labels keep canonical values out of the UI", () => {
   assert.equal(statusLabel("settled"), "Đã quyết toán");
@@ -29,4 +29,9 @@ test("formatDateTime keeps a four-digit year and unambiguous Vietnamese date", (
   assert.match(formatted, /2026/);
   assert.match(formatted, /10\/03/);
   assert.match(formatted, /08:05/);
+});
+
+test("countsText Việt hóa các bảng nghiệp vụ nhưng vẫn giữ key mở rộng", () => {
+  assert.equal(countsText({ accounts: 2, raw_rows: 15 }), "Tài khoản: 2 · Dòng dữ liệu gốc: 15");
+  assert.equal(countsText({ future_table: 1 }), "future_table: 1");
 });

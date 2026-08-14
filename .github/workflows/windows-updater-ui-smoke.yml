@@ -7,11 +7,11 @@ on:
       previous_version:
         description: Public version installed before using the in-app updater
         required: true
-        default: "2.0.25"
+        default: "2.0.29"
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.0.30"
+        default: "2.1.0"
       release_sha:
         description: Exact trusted source commit for release-gated runs
         required: false
@@ -20,6 +20,10 @@ on:
         description: Unique dispatch marker used to bind a release to this exact smoke run
         required: false
         default: ""
+      smoke_run_count:
+        description: Number of independent clients; release gates allow only 1 or 5
+        required: true
+        default: "5"
 
 permissions:
   contents: read
@@ -29,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        run: [1, 2, 3, 4, 5]
+        run: ${{ fromJSON(inputs.smoke_run_count == '1' && '[1]' || '[1,2,3,4,5]') }}
     runs-on: windows-latest
     timeout-minutes: 25
     env:
@@ -67,6 +71,7 @@ jobs:
           $sourceSha = (git rev-parse HEAD).Trim()
           if ($env:RELEASE_SHA -and $sourceSha -ne $env:RELEASE_SHA) { throw "Workflow source SHA $sourceSha does not match release_sha $env:RELEASE_SHA" }
           if ($env:RELEASE_SHA -and $env:RELEASE_NONCE -notmatch '^[a-f0-9]{32}$') { throw "Release-gated runs require a unique 32-character hexadecimal nonce" }
+          if ("${{ inputs.smoke_run_count }}" -notin @("1", "5")) { throw "smoke_run_count must be exactly 1 or 5" }
       - name: Install Playwright Chromium
         run: |
           pnpm --dir web install --frozen-lockfile

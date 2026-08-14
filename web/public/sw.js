@@ -13,6 +13,7 @@ const APP_SHELL = [
   "/accounts/",
   "/settings/preferences/",
   "/settings/data/",
+  "/settings/sync/",
   "/settings/update/",
   "/settings/users/",
   "/offline.html",

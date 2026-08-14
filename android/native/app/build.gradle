@@ -1,0 +1,155 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
+
+def repoRoot = file('../../..')
+def androidRequirements = new File(repoRoot, 'requirements-android.txt')
+def generatedPython = layout.buildDirectory.dir('generated/python/main')
+def generatedWebAssets = layout.buildDirectory.dir('generated/assets/main')
+
+def releaseSigningValues = [
+    storeFile: System.getenv('ANDROID_KEYSTORE_PATH') ?: findProperty('affiliateReportKeystorePath'),
+    storePassword: System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: findProperty('affiliateReportKeystorePassword'),
+    keyAlias: System.getenv('ANDROID_KEY_ALIAS') ?: findProperty('affiliateReportKeyAlias'),
+    keyPassword: System.getenv('ANDROID_KEY_PASSWORD') ?: findProperty('affiliateReportKeyPassword'),
+]
+def releaseRequested = gradle.startParameter.taskNames.any {
+    def task = it.toLowerCase()
+    task.contains('release') || task.contains('smoke')
+}
+def missingSigningValues = releaseSigningValues.findAll { key, value -> value == null || value.toString().trim().isEmpty() }.keySet()
+if (releaseRequested && !missingSigningValues.isEmpty()) {
+    throw new GradleException("Release signing is fail-closed. Missing: ${missingSigningValues.join(', ')}")
+}
+
+tasks.register('preparePythonSources', Sync) {
+    from(new File(repoRoot, 'affiliate_report')) {
+        exclude '__pycache__/**', '**/*.pyc'
+    }
+    into(generatedPython.map { it.dir('affiliate_report') })
+}
+
+tasks.register('prepareWebBundle', Sync) {
+    def webOutput = new File(repoRoot, 'web/out')
+    doFirst {
+        if (!new File(webOutput, 'index.html').isFile()) {
+            throw new GradleException("Missing web/out/index.html. Run the production web build before Android packaging.")
+        }
+    }
+    from(webOutput)
+    into(generatedWebAssets.map { it.dir('web') })
+}
+
+android {
+    namespace = "vn.io.huuhungn.affiliatereport"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "vn.io.huuhungn.affiliatereport"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 2001000
+        versionName "2.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    flavorDimensions += 'runtimeAbi'
+    productFlavors {
+        arm64 {
+            dimension 'runtimeAbi'
+            ndk { abiFilters 'arm64-v8a' }
+        }
+        ci {
+            dimension 'runtimeAbi'
+            versionNameSuffix '-ci'
+            ndk { abiFilters 'x86_64' }
+        }
+    }
+    signingConfigs {
+        release {
+            if (missingSigningValues.isEmpty()) {
+                storeFile file(releaseSigningValues.storeFile)
+                storeType 'PKCS12'
+                storePassword releaseSigningValues.storePassword
+                keyAlias releaseSigningValues.keyAlias
+                keyPassword releaseSigningValues.keyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        smoke {
+            initWith release
+            debuggable true
+            signingConfig signingConfigs.release
+            matchingFallbacks = ['release']
+        }
+    }
+    sourceSets {
+        main {
+            assets.srcDir(generatedWebAssets)
+        }
+    }
+}
+
+chaquopy {
+    defaultConfig {
+        version = '3.12'
+        pip {
+            install '-r', androidRequirements.absolutePath
+        }
+    }
+    sourceSets {
+        getByName('main') {
+            srcDir(generatedPython)
+        }
+    }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn tasks.named('preparePythonSources'), tasks.named('prepareWebBundle')
+}
+
+tasks.configureEach { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('PythonSources')) {
+        task.dependsOn tasks.named('preparePythonSources')
+    }
+    if (task.name.startsWith('merge') && task.name.endsWith('Assets')) {
+        task.dependsOn tasks.named('prepareWebBundle')
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

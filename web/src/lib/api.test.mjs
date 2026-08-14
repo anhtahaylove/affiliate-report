@@ -3,7 +3,7 @@ import test from "node:test";
 
 process.env.NEXT_PUBLIC_API_URL = "https://example.test/";
 
-const { ApiError, NETWORK_ERROR_MESSAGE, dailyReportExportUrl, loadMeta, visibleRejectedRows } = await import("./api.ts");
+const { ApiError, NETWORK_ERROR_MESSAGE, dailyReportExportUrl, exportSyncPackage, loadMeta, loadSyncHistory, visibleRejectedRows } = await import("./api.ts");
 
 test("daily report export URL only keeps account status and date filters", () => {
   assert.equal(
@@ -39,4 +39,46 @@ test("visible rejected rows keeps only the first ten details", () => {
   const rows = Array.from({ length: 12 }, (_, index) => ({ row_number: index + 2, reason: `Lỗi ${index + 1}` }));
 
   assert.deepEqual(visibleRejectedRows(rows), rows.slice(0, 10));
+});
+
+test("sync export giữ đúng tên .affsync UTF-8 từ response", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://example.test/api/v1/sync/export");
+    assert.equal(init.method, "POST");
+    assert.deepEqual(JSON.parse(init.body), { passphrase: "mat-khau-rat-dai" });
+    return new Response(new Uint8Array([65, 70, 70]), {
+      headers: { "content-disposition": "attachment; filename*=UTF-8''AffiliateReport-Thi%E1%BA%BFt-b%E1%BB%8B.affsync" },
+    });
+  };
+  try {
+    const result = await exportSyncPackage("mat-khau-rat-dai");
+    assert.equal(result.filename, "AffiliateReport-Thiết-bị.affsync");
+    assert.equal(result.blob.size, 3);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("sync history dùng package_id làm id ổn định khi backend không trả id riêng", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    items: [{
+      package_id: "package-1",
+      package_hash: "hash-1",
+      source_device_id: "desktop-1",
+      direction: "export",
+      status: "exported",
+      counts: { raw_rows: 15 },
+      created_at: "2026-08-14T12:00:00Z",
+    }],
+    count: 1,
+  }), { headers: { "content-type": "application/json" } });
+  try {
+    const result = await loadSyncHistory();
+    assert.equal(result.items[0].id, "package-1");
+    assert.deepEqual(result.items[0].counts, { raw_rows: 15 });
+  } finally {
+    globalThis.fetch = original;
+  }
 });

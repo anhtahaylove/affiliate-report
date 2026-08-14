@@ -10,6 +10,7 @@ const ROUTES = [
   "/accounts/",
   "/settings/preferences/",
   "/settings/data/",
+  "/settings/sync/",
   "/settings/update/",
   "/settings/users/",
 ];

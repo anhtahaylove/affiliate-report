@@ -13,14 +13,15 @@ import { ImportsPage } from "@/components/pages/imports";
 import { TargetsPage } from "@/components/pages/targets";
 import { AccountsPage } from "@/components/pages/accounts";
 import { DataSettingsPage } from "@/components/pages/data-settings";
-import { UpdateSettingsPage } from "@/components/pages/update-settings";
+import { AndroidUpdateSettings, UpdateSettingsPage } from "@/components/pages/update-settings";
 import { UsersSettingsPage } from "@/components/pages/users-settings";
+import { SyncSettingsPage } from "@/components/pages/sync-settings";
 import { applyThemePreference, ThemePreferences, type Theme } from "@/components/theme-toggle";
 import { errorMessage } from "@/lib/format";
 import { SavedViews } from "@/components/saved-views";
 import { createAccountDirectory } from "@/lib/account-directory";
 
-type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | "accounts" | "preferences" | "data" | "update" | "users";
+type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | "accounts" | "preferences" | "data" | "sync" | "update" | "users";
 
 const routeMeta: Record<RouteKind, { label: string; title: string; copy: string; needsWrite?: boolean; needsOwner?: boolean; filters?: boolean; search?: boolean }> = {
   dashboard: { label: "Tổng quan", title: "Tổng quan hiệu suất", copy: "Theo dõi hoa hồng, tiến độ mục tiêu và phạm vi dữ liệu hiện tại.", filters: true },
@@ -31,7 +32,8 @@ const routeMeta: Record<RouteKind, { label: string; title: string; copy: string;
   accounts: { label: "Tài khoản", title: "Quản lý tài khoản TikTok", copy: "Thêm, sửa, lưu trữ và xóa tài khoản TikTok dùng để nhập dữ liệu.", needsOwner: true },
   preferences: { label: "Giao diện", title: "Giao diện ứng dụng", copy: "Cá nhân hóa chế độ màu và cách hiển thị báo cáo." },
   data: { label: "Dữ liệu", title: "Xóa và khôi phục dữ liệu", copy: "Chỉ chủ sở hữu được thao tác; hệ thống luôn tạo bản sao lưu an toàn trước khi thay đổi.", needsOwner: true },
-  update: { label: "Cập nhật", title: "Cập nhật ứng dụng", copy: "Kiểm tra nguồn cập nhật công khai đã ký và cài phiên bản mới trong ứng dụng Windows.", needsOwner: true },
+  sync: { label: "Thiết bị & đồng bộ", title: "Thiết bị & đồng bộ", copy: "Xuất hoặc hợp nhất gói dữ liệu mã hóa giữa máy tính và điện thoại mà không dùng cloud database.", needsOwner: true },
+  update: { label: "Cập nhật", title: "Cập nhật ứng dụng", copy: "Kiểm tra nguồn phát hành công khai đã ký và cài đúng gói dành cho thiết bị này.", needsOwner: true },
   users: { label: "Người dùng", title: "Quản lý người dùng", copy: "Phân quyền vai trò và phạm vi tài khoản cho từng người dùng.", needsOwner: true },
 };
 
@@ -85,13 +87,13 @@ export function OperationsPage({ route }: { route: RouteKind }) {
     setPreferences(updated);
     applyThemePreference(updated.theme);
   }
-  const shellProps = { user, appVersion: metaData.app_version ?? "", collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
+  const shellProps = { user, appVersion: metaData.app_version ?? "", runtimePlatform: metaData.runtime_platform, collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
   if (pageMeta.needsWrite && !canWrite(user)) return <AppShell {...shellProps}><Notice text="Bạn không có quyền nhập dữ liệu. Hãy liên hệ chủ sở hữu để được cấp quyền." /></AppShell>;
   if (pageMeta.needsOwner && !isOwner(user)) return <AppShell {...shellProps}><Notice text="Chỉ chủ sở hữu được truy cập trang này." /></AppShell>;
 
   return (
     <AppShell {...shellProps} heading={<div className="page-heading"><h1>{pageMeta.title}</h1><p className="subtle">{pageMeta.copy}</p></div>}>
-      <UpdateBanner capability={metaData.capabilities.update_check} onUpdatePage={route === "update"} />
+      {metaData.runtime_platform !== "android" ? <UpdateBanner capability={metaData.capabilities.update_check} onUpdatePage={route === "update"} /> : null}
       {(["dashboard", "analytics", "orders"] as RouteKind[]).includes(route) ? <SavedViews route={route as "dashboard" | "analytics" | "orders"} /> : null}
       {pageMeta.filters ? <FilterBar accounts={metaData.accounts} directory={accountDirectory} statuses={route === "targets" ? [] : metaData.statuses} showSearch={pageMeta.search} actions={route === "dashboard" ? <a className="button-link secondary-link" download="affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a> : null} /> : null}
       {route === "dashboard" ? <DashboardHome user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}
@@ -102,7 +104,10 @@ export function OperationsPage({ route }: { route: RouteKind }) {
       {route === "accounts" ? <AccountsPage onAccountsChanged={refreshAccountMetadata} /> : null}
       {route === "preferences" ? <ThemePreferences value={preferences.theme} onChange={(theme: Theme) => updatePreferences({ theme })} /> : null}
       {route === "data" ? <DataSettingsPage capability={metaData.capabilities.data_admin} backend={metaData.capabilities.database_backend} /> : null}
-      {route === "update" ? <UpdateSettingsPage checkCapability={metaData.capabilities.update_check} installCapability={metaData.capabilities.update_install} /> : null}
+      {route === "sync" ? <SyncSettingsPage capability={metaData.capabilities.sync} backend={metaData.capabilities.database_backend} runtimePlatform={metaData.runtime_platform} /> : null}
+      {route === "update" ? metaData.runtime_platform === "android"
+        ? <AndroidUpdateSettings capability={metaData.capabilities.android_update} status={metaData.android_update} />
+        : <UpdateSettingsPage checkCapability={metaData.capabilities.update_check} installCapability={metaData.capabilities.update_install} /> : null}
       {route === "users" ? <UsersSettingsPage currentUser={user} accounts={metaData.accounts} directory={accountDirectory} identityPolicy={metaData.identity_policy} /> : null}
     </AppShell>
   );

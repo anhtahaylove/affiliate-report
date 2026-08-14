@@ -28,6 +28,10 @@ def main() -> int:
     parser.add_argument("--bootstrap", required=True, type=Path)
     parser.add_argument("--asset-url", required=True)
     parser.add_argument("--bootstrap-url", required=True)
+    parser.add_argument("--android-apk", type=Path)
+    parser.add_argument("--android-url", default="")
+    parser.add_argument("--android-min-sdk", type=int, default=24)
+    parser.add_argument("--android-abi", action="append", dest="android_abis", default=[])
     parser.add_argument("--release-url", required=True)
     parser.add_argument("--key-id", required=True)
     parser.add_argument("--output-dir", default="artifacts/installer", type=Path)
@@ -82,6 +86,29 @@ def main() -> int:
             "sha256": bootstrap_digest,
         },
     }
+    if args.android_apk:
+        android_apk = args.android_apk.resolve()
+        if not android_apk.is_file():
+            raise SystemExit(f"Missing Android APK: {android_apk}")
+        expected_android_name = f"AffiliateReport-v{args.version}-arm64.apk"
+        if android_apk.name != expected_android_name:
+            raise SystemExit(f"Android APK must be named {expected_android_name}")
+        if not args.android_url.startswith("https://"):
+            raise SystemExit("Android APK URL must use HTTPS")
+        if args.android_min_sdk < 24:
+            raise SystemExit("Android min SDK must be at least 24")
+        android_abis = args.android_abis or ["arm64-v8a"]
+        if android_abis != ["arm64-v8a"]:
+            raise SystemExit("Stable Android release must contain only the arm64-v8a ABI")
+        manifest["android"] = {
+            "name": android_apk.name,
+            "url": args.android_url,
+            "size": android_apk.stat().st_size,
+            "sha256": hashlib.sha256(android_apk.read_bytes()).hexdigest().upper(),
+            "version": args.version,
+            "min_sdk": args.android_min_sdk,
+            "abis": android_abis,
+        }
     payload = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
     signature = {
         "key_id": args.key_id,
