@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class AffiliateReportApplication extends Application {
     private static final String TAG = "AffiliateReport";
-    private static final String WEB_VERSION = "2.1.1";
+    private static final String WEB_VERSION = "2.1.2";
     private static final int API_PORT = 8765;
     private final ExecutorService runtimeExecutor = Executors.newSingleThreadExecutor();
     private final CountDownLatch startupFinished = new CountDownLatch(1);

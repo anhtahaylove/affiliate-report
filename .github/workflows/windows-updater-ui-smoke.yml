@@ -11,7 +11,7 @@ on:
       current_version:
         description: Public version expected from the signed stable feed
         required: true
-        default: "2.1.1"
+        default: "2.1.2"
       release_sha:
         description: Exact trusted source commit for release-gated runs
         required: false

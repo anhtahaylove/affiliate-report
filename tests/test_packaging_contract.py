@@ -243,7 +243,7 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "current_version:" in workflow
     assert f'default: "{APP_VERSION}"' in workflow
     assert "previous_version:" in workflow
-    assert APP_VERSION == "2.1.1"
+    assert APP_VERSION == "2.1.2"
     assert 'default: "2.0.29"' in workflow
     assert "fresh-install:" in workflow
     assert "upgrade-install:" in workflow
@@ -377,7 +377,7 @@ def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed(
     assert not re.search(r"-f previous_version=\d+\.\d+\.\d+", release_workflow)
 
     # Cặp canary: v2.0.7 tự cài v2.0.9 bằng chính bootstrap độc lập đã ký của nó.
-    assert 'default: "2.1.1"' in updater_ui
+    assert 'default: "2.1.2"' in updater_ui
     assert 'default: "2.0.29"' in updater_ui
     assert "UPDATE_SIGNING_KEY_B64" not in updater_ui
     assert "UPDATE_FEED_TOKEN" not in updater_ui
@@ -448,19 +448,19 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "arm64Release" in android and "ciRelease" in android and "ciDebug" in android
     assert "verify --verbose --print-certs $apk" in android
     assert "vn\\.io\\.huuhungn\\.affiliatereport" in android
-    assert "versionCode='2001001'" in android
+    assert "versionCode='2001002'" in android
     assert "versionName='2\\.1\\.1'" in android
     assert "affiliate-report-android-${{ github.sha }}" in android
     assert "actions/upload-artifact@v7" in android
     assert "signed-update-smoke:" in android
     assert "needs: signed-candidate" in android
-    assert "AffiliateReport-v2.1.1-x86_64-release.apk" in android
     assert "AffiliateReport-v2.1.2-x86_64-release.apk" in android
+    assert "AffiliateReport-v2.1.3-x86_64-release.apk" in android
     assert 'adb install -r "$target"' in upgrade_smoke
-    assert "--expected-version 2.1.2" in upgrade_smoke
-    assert "versionCode=2001002" in upgrade_smoke
+    assert "--expected-version 2.1.3" in upgrade_smoke
+    assert "versionCode=2001003" in upgrade_smoke
     assert "storeType 'PKCS12'" in gradle
-    assert '"version": "2.1.1"' in package
+    assert '"version": "2.1.2"' in package
 
     assert "Require successful signed Android candidate for this exact main commit" in release
     assert "android-candidate.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed" in release

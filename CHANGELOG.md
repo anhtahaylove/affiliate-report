@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.1.2 - 2026-08-14
+
+**Trang Cập nhật ứng dụng nói đúng chuyện đang xảy ra.** Trước đây tiến trình của lần cập
+nhật trước còn sót lại trên đĩa vẫn được vẽ ra như đang chạy, nên máy đã ở bản mới nhất mà
+vẫn thấy timeline và thanh tiến độ 100% của một phiên bản cũ hơn. Nay phiên bản đang chạy
+là nguồn thông tin chính; tiến trình cũ chỉ còn là dự phòng và chỉ hiện khi thật sự liên quan.
+
+Mỗi trạng thái có đúng một hành động chính: đang kiểm tra, đã mới nhất, có bản mới, cần cài
+thủ công, đang cập nhật, đang kết nối lại, vừa hoàn tất, lỗi và mất kết nối. Timeline chỉ
+hiện khi đang cập nhật hoặc vừa xong, thanh tiến độ chỉ hiện lúc đang tải.
+
+- Sửa lỗi thanh tiến độ tải bị cắt cụt còn 8 px: một luật CSS của biểu đồ trang chủ vô tình
+  áp lên hộp tiến độ của trang cập nhật, khiến nhãn và số byte bị che, còn dòng đếm byte bị
+  tô thành một thanh màu. Đã tách riêng và bổ sung kiểm thử chống tái diễn.
+- Bổ sung dung lượng gói cài vào thông tin bản phát hành, kèm ghi chú phiên bản và chi tiết
+  xác minh Ed25519/SHA-256 thu gọn.
+- Máy Android được gate riêng, không còn lộ điều khiển cập nhật dành cho Windows.
+
 ## v2.1.1 - 2026-08-14
 
 - Bỏ gate điện thoại Android vật lý theo xác nhận của chủ dự án; vẫn giữ emulator API 24/36, APK signing và synthetic same-key upgrade.
