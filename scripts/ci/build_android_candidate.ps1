@@ -134,9 +134,20 @@ if ($LASTEXITCODE -ne 0 -or $signature -notmatch "(?m)^Verifies$") {
     throw "APK signature verification failed: $signature"
 }
 if ($isRelease) {
-    $match = [regex]::Match($signature, "Signer #1 certificate SHA-256 digest:\s*([0-9a-fA-F]+)")
-    if (-not $match.Success) { throw "Release APK signer fingerprint is missing." }
-    if ($match.Groups[1].Value.ToLowerInvariant() -ne $releaseCertificateSha256) {
+    # apksigner giữ cùng ý nghĩa nhưng cách viết nhãn/dấu phân cách có thể khác giữa
+    # các build-tools. Chỉ chọn đúng dòng certificate SHA-256 rồi chuẩn hoá separator;
+    # không lấy public-key digest và không in fingerprint/secret vào log CI.
+    $certificateLines = @($signature -split "`r?`n" | Where-Object {
+        $_ -match '(?i)certificate' -and $_ -match '(?i)SHA[^0-9]*256' -and $_ -match '(?i)digest'
+    })
+    $fingerprints = @($certificateLines | ForEach-Object {
+        $value = if ($_ -match ':') { ($_ -split ':', 2)[1] } else { $_ }
+        ([regex]::Replace($value, '[^0-9a-fA-F]', '')).ToLowerInvariant()
+    } | Where-Object { $_ -match '^[0-9a-f]{64}$' } | Select-Object -Unique)
+    if ($fingerprints.Count -ne 1) {
+        throw "Release APK signer fingerprint is missing or ambiguous (certificate SHA-256 fields: $($certificateLines.Count))."
+    }
+    if ($fingerprints[0] -ne $releaseCertificateSha256) {
         throw "Release APK was signed by an unexpected certificate."
     }
 }

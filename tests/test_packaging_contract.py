@@ -278,6 +278,16 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "timeout-minutes: 8" in workflow
 
 
+def test_android_signer_fingerprint_parser_is_build_tools_tolerant():
+    builder = Path("scripts/ci/build_android_candidate.ps1").read_text(encoding="utf-8")
+
+    assert "SHA[^0-9]*256" in builder
+    assert "[^0-9a-fA-F]" in builder
+    assert "^[0-9a-f]{64}$" in builder
+    assert "certificate SHA-256 fields" in builder
+    assert "Signer #1 certificate SHA-256 digest" not in builder
+
+
 def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed():
     candidate = Path(".github/workflows/windows-installer-smoke.yml").read_text(encoding="utf-8")
     release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
