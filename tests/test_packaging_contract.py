@@ -273,6 +273,9 @@ def test_windows_installer_smoke_is_version_parameterized():
     assert "daily_target_commission" in smoke
     assert "@{ target_commission = $Value }" not in smoke
     assert "v$PreviousVersion legacy account is missing" not in smoke
+    assert smoke.count("-TimeoutSec 15") >= 4
+    assert 'Write-SmokePhase "Beginning upgrade smoke v$PreviousVersion -> v$CurrentVersion"' in smoke
+    assert "timeout-minutes: 8" in workflow
 
 
 def test_v207_release_candidate_and_public_updater_ui_workflows_are_fail_closed():

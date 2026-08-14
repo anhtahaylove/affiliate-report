@@ -33,7 +33,7 @@ $thuMucCoThe = @(
     (Join-Path $env:LOCALAPPDATA 'AffiliateReport'),
     (Join-Path $env:LOCALAPPDATA 'TikTokAffiliateReport')
 )
-$tenExeCoThe = @('TikTokAffiliateReport.exe', 'TikTokAffiliateReport.exe')
+$tenExeCoThe = @('TikTokAffiliateReport.exe', 'AffiliateReport.exe')
 
 function Get-InstallDir() {
     try {
@@ -114,6 +114,10 @@ function Install-App([string]$Path) {
     }
 }
 
+function Write-SmokePhase([string]$Name) {
+    Write-Host "[$([DateTime]::UtcNow.ToString('o'))] $Name"
+}
+
 function Assert-InstalledVersion([string]$Version) {
     $actual = (Get-ItemProperty -LiteralPath $uninstallKey).DisplayVersion
     if ($actual -ne $Version) {
@@ -145,6 +149,7 @@ function Start-App([int]$Port) {
 }
 
 function Stop-App {
+    Write-SmokePhase "Stopping installed app: $appExe"
     for ($attempt = 1; $attempt -le 20; $attempt++) {
         $tenTienTrinh = Split-Path -Leaf $appExe
         $processes = @(Get-CimInstance Win32_Process -Filter "Name = '$tenTienTrinh'" |
@@ -173,8 +178,9 @@ function Assert-Routes([string]$BaseUrl, [switch]$IncludePreferences) {
 }
 
 function Set-Target([string]$BaseUrl, [string]$Account, [string]$Month, [int64]$Value) {
+    Write-SmokePhase "Writing target marker for $Account/$Month"
     $body = @{ daily_target_commission = $Value } | ConvertTo-Json -Compress
-    Invoke-RestMethod "$BaseUrl/api/v1/targets/$Account/$Month" -Method Put -ContentType 'application/json' -Body $body | Out-Null
+    Invoke-RestMethod "$BaseUrl/api/v1/targets/$Account/$Month" -Method Put -ContentType 'application/json' -Body $body -TimeoutSec 15 | Out-Null
 }
 
 function Assert-Target([string]$BaseUrl, [string]$Account, [string]$Month, [int64]$Value) {
@@ -213,14 +219,16 @@ if ($Mode -eq 'Bootstrap') {
 
 try {
     if ($Mode -eq 'Fresh') {
+        Write-SmokePhase "Beginning fresh-install smoke for v$CurrentVersion"
         Install-App $CurrentInstaller
         Assert-InstalledVersion $CurrentVersion
         $baseUrl = Start-App 43120
         $meta = Assert-Routes $baseUrl -IncludePreferences
         if (@($meta.accounts).Count -ne 0) { throw "Fresh v$CurrentVersion unexpectedly seeded accounts." }
 
+        Write-SmokePhase 'Creating fresh-install marker account'
         $body = @{ code = 'SMOKE'; display_name = 'Smoke Account'; display_order = 1 } | ConvertTo-Json -Compress
-        Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body | Out-Null
+        Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 15 | Out-Null
         Set-Target $baseUrl 'SMOKE' '2099-12' 123456789
         Assert-Target $baseUrl 'SMOKE' '2099-12' 123456789
         Stop-App
@@ -230,18 +238,22 @@ try {
         if ('SMOKE' -notin @($meta.accounts)) { throw 'Fresh-install data did not persist after restart.' }
         Assert-Target $baseUrl 'SMOKE' '2099-12' 123456789
     } elseif ($Mode -eq 'Upgrade') {
+        Write-SmokePhase "Beginning upgrade smoke v$PreviousVersion -> v$CurrentVersion"
         Install-App $PreviousInstaller
         Assert-InstalledVersion $PreviousVersion
         $baseUrl = Start-App 43122
+        Write-SmokePhase "Checking v$PreviousVersion routes and metadata"
         $meta = Assert-Routes $baseUrl
         if ('SMOKE' -notin @($meta.accounts)) {
+            Write-SmokePhase "Creating marker account on v$PreviousVersion"
             $body = @{ code = 'SMOKE'; display_name = 'Smoke Account'; display_order = 1 } | ConvertTo-Json -Compress
-            Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body | Out-Null
+            Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 15 | Out-Null
         }
         Set-Target $baseUrl 'SMOKE' '2099-12' 987654321
         Assert-Target $baseUrl 'SMOKE' '2099-12' 987654321
         Stop-App
 
+        Write-SmokePhase "Installing candidate v$CurrentVersion over v$PreviousVersion"
         Install-App $CurrentInstaller
         Assert-InstalledVersion $CurrentVersion
         $baseUrl = Start-App 43123
@@ -249,11 +261,12 @@ try {
         if ('SMOKE' -notin @($meta.accounts)) { throw 'Smoke account was not preserved during upgrade.' }
         Assert-Target $baseUrl 'SMOKE' '2099-12' 987654321
     } else {
+        Write-SmokePhase "Beginning bootstrap runtime smoke for v$CurrentVersion"
         Install-App $CurrentInstaller
         Assert-InstalledVersion $CurrentVersion
         $baseUrl = Start-App 43124
         $body = @{ code = 'SMOKE'; display_name = 'Bootstrap Smoke'; display_order = 1 } | ConvertTo-Json -Compress
-        Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body | Out-Null
+        Invoke-RestMethod "$baseUrl/api/v1/accounts" -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 15 | Out-Null
         Set-Target $baseUrl 'SMOKE' '2099-12' 246813579
         Stop-App
 

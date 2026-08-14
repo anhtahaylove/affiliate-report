@@ -217,7 +217,9 @@ jobs:
     if: always() && needs.candidate-build.result == 'success'
     needs: candidate-build
     runs-on: windows-latest
-    timeout-minutes: 15
+    # Mọi thao tác con đều có timeout riêng. Giới hạn job ngắn hơn để một bản legacy
+    # không thể giữ runner/PR gate vô hạn nếu Windows hoặc HTTP stack mất phản hồi.
+    timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
