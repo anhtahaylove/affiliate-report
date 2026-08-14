@@ -679,7 +679,10 @@ def test_windows_update_helper_replaces_existing_status_file(tmp_path):
         ],
         capture_output=True,
         text=True,
-        timeout=10,
+        # The helper can legitimately spend up to five seconds on each atomic
+        # status promotion. Leave enough process budget for both promotions
+        # plus Windows PowerShell startup and antivirus scanning on CI runners.
+        timeout=30,
         check=False,
     )
 
