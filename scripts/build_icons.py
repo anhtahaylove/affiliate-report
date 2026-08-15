@@ -22,8 +22,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PIL import Image
-
 REPO = Path(__file__).resolve().parent.parent
 ICON_DIR = REPO / "packaging" / "icon"
 MASTER = ICON_DIR / "icon.svg"
@@ -75,6 +73,11 @@ def render(specs: list[dict], workdir: Path) -> None:
 
 
 def build_ico(parts: list[Path], target: Path) -> None:
+    # Pillow chỉ có mặt trên Windows: requirements-api.txt ghim pystray theo
+    # sys_platform == "win32" và Pillow đi kèm nó. Import ở cấp module sẽ làm mọi test chỉ
+    # đọc hằng số từ file này vỡ ngay trên CI Linux, nên nhập ngay trước lúc dùng.
+    from PIL import Image
+
     largest = Image.open(parts[-1]).convert("RGBA")
     largest.save(target, format="ICO", sizes=[(size, size) for size in ICO_SIZES])
 

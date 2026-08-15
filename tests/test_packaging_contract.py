@@ -480,27 +480,50 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "Sort-Object publishedAt -Descending | Select-Object -First 1" not in release
 
 
+def _png_size(path: Path) -> tuple[int, int]:
+    """Đọc kích thước PNG từ khối IHDR, không cần Pillow.
+
+    Pillow chỉ có trên Windows (đi kèm pystray, mà requirements-api.txt ghim theo
+    sys_platform == "win32"), nên test hợp đồng không được phụ thuộc vào nó — nếu không
+    nó xanh ở máy Windows và đỏ trên CI Linux.
+    """
+    raw = path.read_bytes()
+    assert raw[:8] == b"\x89PNG\r\n\x1a\n", f"{path}: không phải PNG"
+    return int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big")
+
+
+def _ico_sizes(path: Path) -> list[tuple[int, int]]:
+    """Đọc danh sách độ phân giải trong .ico từ bảng thư mục ảnh."""
+    raw = path.read_bytes()
+    assert raw[:4] == b"\x00\x00\x01\x00", f"{path}: không phải ICO"
+    count = int.from_bytes(raw[4:6], "little")
+    sizes = []
+    for index in range(count):
+        entry = 6 + index * 16
+        # 0 trong trường bề rộng/cao nghĩa là 256 — ICO chỉ dành một byte cho mỗi chiều.
+        sizes.append((raw[entry] or 256, raw[entry + 1] or 256))
+    return sorted(sizes)
+
+
 def test_app_icons_are_generated_from_the_single_svg_source():
     from scripts.build_icons import ANDROID_RES, DENSITIES, ICO_SIZES, MASTER, WEB_ICONS
-
-    from PIL import Image
 
     assert MASTER.is_file()
     icon = Path("packaging/app.ico")
     assert icon.is_file()
     # Windows chọn cỡ theo ngữ cảnh: thiếu 16/32 là taskbar phải tự thu nhỏ bản lớn và bị răng cưa.
-    assert sorted(Image.open(icon).info["sizes"]) == sorted((size, size) for size in ICO_SIZES)
+    assert _ico_sizes(icon) == sorted((size, size) for size in ICO_SIZES)
 
     for size, path in WEB_ICONS.items():
         assert path.is_file(), path
-        assert Image.open(path).size == (size, size)
+        assert _png_size(path) == (size, size), path
 
     for density, scale in DENSITIES.items():
         folder = ANDROID_RES / f"mipmap-{density}"
         for name, base in (("ic_launcher.png", 48), ("ic_launcher_round.png", 48), ("ic_launcher_foreground.png", 108)):
             path = folder / name
             assert path.is_file(), path
-            assert Image.open(path).size == (round(base * scale), round(base * scale)), path
+            assert _png_size(path) == (round(base * scale), round(base * scale)), path
 
 
 def test_android_adaptive_background_matches_the_icon_artwork():
