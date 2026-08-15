@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, CurrentUser, dailyReportExportUrl, loadCurrentUser, loadMeta, loadUiPreferences, saveUiPreferences, type MetaResponse, type UiPreferences } from "@/lib/api";
-import { AppShell, AuthCard } from "@/components/app-shell";
+import { AppShell, ConnectionErrorCard, SignInCard } from "@/components/app-shell";
 import { FilterBar, useUrlFilters } from "@/components/filters";
 import { Notice, canWrite, isOwner } from "@/components/ui";
 import { UpdateBanner } from "@/components/update-banner";
@@ -42,32 +42,40 @@ export function OperationsPage({ route }: { route: RouteKind }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [metaData, setMetaData] = useState<MetaResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  // 401 chỉ nổi lên ở bản triển khai OIDC khi phiên hết hạn — bản cài một danh tính không
+  // bao giờ trả 401 (xem app-shell.tsx). Mọi lỗi khác (offline, backend chết, 500…) là vấn
+  // đề kết nối, không phải "chưa đăng nhập", nên tách riêng để không hiện nhầm nút Đăng nhập.
+  const [connectionError, setConnectionError] = useState("");
   const [authError, setAuthError] = useState("");
   const [preferences, setPreferences] = useState<UiPreferences | null>(null);
+  // Nút "Thử lại" trên ConnectionErrorCard tăng số này thay vì gọi thẳng một hàm tải dùng
+  // chung — effect bên dưới phụ thuộc reloadToken nên tự chạy lại khi nó đổi, đúng khuôn
+  // React khuyến nghị (effect chỉ phản ứng theo dependency, không bị gọi trực tiếp từ nơi
+  // khác) và không dính react-hooks/set-state-in-effect. Cách này cũng thay cho việc nạp lại
+  // toàn bộ tài liệu, mà guard tĩnh account-directory-static.test.mjs đã cấm ở mọi nơi trừ
+  // trang Cập nhật vì nó từng làm mất trạng thái người dùng.
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
-    let active = true;
     async function load() {
       try {
         const [currentUser, meta, uiPreferences] = await Promise.all([loadCurrentUser(), loadMeta(), loadUiPreferences()]);
-        if (!active) return;
         setUser(currentUser);
         setMetaData(meta);
         setPreferences(uiPreferences);
         applyThemePreference(uiPreferences.theme);
-        setLoadError("");
+        setConnectionError("");
+        setAuthError("");
       } catch (reason) {
-        if (!active) return;
         if (reason instanceof ApiError && reason.status === 401) setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
-        else setLoadError(errorMessage(reason, "Không thể tải cấu hình ứng dụng."));
+        else setConnectionError(errorMessage(reason, "Không thể tải cấu hình ứng dụng."));
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
       }
     }
     void load();
-    return () => { active = false; };
-  }, []);
+  }, [reloadToken]);
+  const retry = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const refreshAccountMetadata = useCallback(async () => {
     const refreshed = await loadMeta();
@@ -79,8 +87,9 @@ export function OperationsPage({ route }: { route: RouteKind }) {
   );
 
   if (loading) return <main className="auth-shell"><section className="auth-card panel"><div className="brand-badge">AFF</div><h1>Đang tải trung tâm vận hành…</h1><p className="hint">Đang kiểm tra phiên đăng nhập và kết nối dữ liệu.</p></section></main>;
-  if (authError || loadError || !user) return <AuthCard message={authError || loadError || "Chưa xác thực."} />;
-  if (!preferences || !metaData) return <AuthCard message="Không thể tải cấu hình ứng dụng." />;
+  if (authError) return <SignInCard message={authError} />;
+  if (connectionError || !user) return <ConnectionErrorCard message={connectionError || "Không thể tải cấu hình ứng dụng."} onRetry={retry} />;
+  if (!preferences || !metaData) return <ConnectionErrorCard message="Không thể tải cấu hình ứng dụng." onRetry={retry} />;
   const pageMeta = routeMeta[route];
   async function updatePreferences(changes: Partial<Pick<UiPreferences, "theme" | "sidebar_collapsed" | "dashboard_layout">>) {
     const updated = await saveUiPreferences(changes);

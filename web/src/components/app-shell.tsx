@@ -5,7 +5,7 @@ import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings, Shield, Target, UploadCloud, Users, X, XCircle, type LucideIcon } from "lucide-react";
+import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogIn, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings, Shield, Target, UploadCloud, Users, WifiOff, X, XCircle, type LucideIcon } from "lucide-react";
 import { apiUrl, CurrentUser, exitApplication, logout, type MetaResponse } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { BottomSheet } from "@/components/primitives";
@@ -226,15 +226,39 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
   );
 }
 
-export function AuthCard({ message }: { message: string }) {
+// Chỉ dùng khi backend trả 401 — trong bản cài một danh tính, principal_from_session()
+// luôn trả về local_principal() bất kể session, nên 401 KHÔNG BAO GIỜ xảy ra ở đó (trừ khi
+// truy cập ngoài loopback, việc đó trả 403 riêng). 401 chỉ nổi lên ở bản triển khai OIDC
+// dùng chung khi phiên hết hạn — nút Đăng nhập lúc đó thật sự làm được việc.
+export function SignInCard({ message }: { message: string }) {
   return (
     <main className="auth-shell">
       <section className="auth-card panel">
         <div className="brand-badge">AFF</div>
         <h1>Affiliate Report</h1>
-        <p>Vui lòng đăng nhập để mở trung tâm báo cáo vận hành.</p>
-        <a className="button-link" href={`${apiUrl()}/auth/login`}>Đăng nhập</a>
+        <p>Phiên đăng nhập đã hết hạn hoặc chưa xác thực.</p>
+        <a className="button-link" href={`${apiUrl()}/auth/login`}><LogIn size={17} aria-hidden="true" />Đăng nhập</a>
         <p className="hint">{message}</p>
+      </section>
+    </main>
+  );
+}
+
+// Dùng khi không gọi được API — app bị Thoát, mạng đứt, hoặc backend lỗi. Trước đây các
+// trường hợp này bị gộp chung với SignInCard và cùng hiện nút "Đăng nhập", dù backend đã
+// chết hẳn nên bấm vào cũng gọi lại đúng chỗ không phản hồi. "Thử lại" mới là hành động có
+// tác dụng thật.
+export function ConnectionErrorCard({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <main className="auth-shell">
+      <section className="auth-card panel">
+        <div className="brand-badge brand-badge-warning"><WifiOff size={24} aria-hidden="true" /></div>
+        <h1>Không kết nối được tới ứng dụng</h1>
+        <p className="hint">{message}</p>
+        {/* Bấm Thử lại đặt loading=true, và nhánh "if (loading)" của OperationsPage vẽ lại
+            trước khi component này kịp render busy state — nên không cần disabled/nhãn riêng,
+            màn hình "Đang tải…" đã là chỉ báo bận sẵn có. */}
+        <button className="button-link" type="button" onClick={onRetry}><RefreshCw size={17} aria-hidden="true" />Thử lại</button>
       </section>
     </main>
   );
