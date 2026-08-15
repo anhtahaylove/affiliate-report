@@ -12,7 +12,7 @@ import { BottomSheet } from "@/components/primitives";
 import { roleLabel } from "@/lib/format";
 import { routeIsActive } from "@/lib/navigation";
 
-type NavItem = { href: string; label: string; desc: string; icon: LucideIcon; roles?: Array<CurrentUser["role"]>; mobilePrimary?: boolean };
+type NavItem = { href: string; label: string; desc: string; icon: LucideIcon; roles?: Array<CurrentUser["role"]>; mobilePrimary?: boolean; sharedDeploymentOnly?: boolean };
 
 const navGroups: Array<{ title: string; items: NavItem[] }> = [
   {
@@ -38,13 +38,27 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
       { href: "/settings/data", label: "Dữ liệu", desc: "Xóa, sao lưu, khôi phục", icon: Database, roles: ["owner"] },
       { href: "/settings/sync", label: "Thiết bị & đồng bộ", desc: "Chuyển dữ liệu bằng gói mã hóa", icon: RefreshCw, roles: ["owner"] },
       { href: "/settings/update", label: "Cập nhật", desc: "Kiểm tra và cài bản mới", icon: FileSpreadsheet, roles: ["owner"] },
-      { href: "/settings/users", label: "Người dùng", desc: "Vai trò và phạm vi tài khoản", icon: Users, roles: ["owner"] },
+      { href: "/settings/users", label: "Người dùng", desc: "Vai trò và phạm vi tài khoản", icon: Users, roles: ["owner"], sharedDeploymentOnly: true },
     ],
   },
 ];
 
+// Bản cài trên máy chỉ có đúng một danh tính: auth.py trả local_principal() bất kể session
+// token, nên không có ai để phân vai và "Đăng xuất" không đăng xuất được gì — bấm xong chỉ
+// tải lại trang rồi quay về đúng chỗ cũ. Ẩn cả cụm đó đi thay vì bày ra rồi không làm gì.
+// Chế độ oidc dùng chung vẫn cần đủ, nên gate theo auth_method chứ không xoá.
+export function isSharedDeployment(user: CurrentUser) {
+  return user.auth_method !== "local";
+}
+
 function allowedItems(user: CurrentUser) {
-  return navGroups.map((group) => ({ ...group, items: group.items.filter((item) => !item.roles || item.roles.includes(user.role)) })).filter((group) => group.items.length);
+  const shared = isSharedDeployment(user);
+  return navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => (!item.roles || item.roles.includes(user.role)) && (shared || !item.sharedDeploymentOnly)),
+    }))
+    .filter((group) => group.items.length);
 }
 
 function NavLink({ item, active, onClick, compact = false, iconOnly = false }: { item: NavItem; active: boolean; onClick?: () => void; compact?: boolean; iconOnly?: boolean }) {
@@ -72,7 +86,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
   const [commandQuery, setCommandQuery] = useState("");
   const [savingSidebar, setSavingSidebar] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
-  const identityLabel = user.auth_method === "local" ? (runtimePlatform === "android" ? "Cục bộ trên Android" : "Chế độ cục bộ") : user.email;
+  const sharedDeployment = isSharedDeployment(user);
   const commandItems = allItems.filter((item) => `${item.label} ${item.desc}`.toLocaleLowerCase("vi").includes(commandQuery.trim().toLocaleLowerCase("vi")));
 
   useEffect(() => {
@@ -141,7 +155,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
         <div className="sidebar-footer">
           {exitError ? <span className="exit-error" role="alert">{exitError}</span> : null}
           <div className="sidebar-actions">
-            <button type="button" onClick={handleLogout} aria-label="Đăng xuất" title={collapsed ? "Đăng xuất" : undefined}><LogOut size={16} aria-hidden="true" /><span>Đăng xuất</span></button>
+            {sharedDeployment ? <button type="button" onClick={handleLogout} aria-label="Đăng xuất" title={collapsed ? "Đăng xuất" : undefined}><LogOut size={16} aria-hidden="true" /><span>Đăng xuất</span></button> : null}
             {runtimePlatform !== "android" && user.desktop_app && user.desktop_control_token ? <button className="exit-button" type="button" onClick={() => setAskExit(true)} disabled={exiting} aria-label="Thoát ứng dụng" title={collapsed ? "Thoát ứng dụng" : undefined}><XCircle size={16} aria-hidden="true" /><span>{exiting ? "Đang thoát…" : "Thoát"}</span></button> : null}
           </div>
         </div>
@@ -153,11 +167,13 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
           <button className="command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-label="Mở tìm kiếm nhanh">
             <Search size={16} aria-hidden="true" /><span>Tìm nhanh</span><kbd>Ctrl K</kbd>
           </button>
-          <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
-            <Shield size={16} aria-hidden="true" />
-            <span className="user-email" title={user.email}>{identityLabel}</span>
-            <strong>{roleLabel(user.role)}</strong>
-          </div>
+          {sharedDeployment ? (
+            <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
+              <Shield size={16} aria-hidden="true" />
+              <span className="user-email" title={user.email}>{user.email}</span>
+              <strong>{roleLabel(user.role)}</strong>
+            </div>
+          ) : null}
         </header>
         {children}
       </section>
@@ -173,7 +189,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
       <BottomSheet open={moreOpen} onOpenChange={setMoreOpen} restoreFocusRef={moreButtonRef} title="Thêm mục" description="Các khu vực ít dùng hơn trong trung tâm vận hành.">
         <div className="more-sheet-list">
           {moreItems.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} onClick={() => setMoreOpen(false)} />)}
-          <button className="more-sheet-action" type="button" onClick={() => void handleLogout()}><LogOut size={18} aria-hidden="true" />Đăng xuất</button>
+          {sharedDeployment ? <button className="more-sheet-action" type="button" onClick={() => void handleLogout()}><LogOut size={18} aria-hidden="true" />Đăng xuất</button> : null}
         </div>
       </BottomSheet>
 

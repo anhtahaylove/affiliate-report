@@ -126,7 +126,9 @@ test("Android chỉ hiển thị trạng thái APK và không gọi updater Wind
   expect(packageGetCalls).toBe(0);
   await expect(page.getByRole("button", { name: "Thoát ứng dụng" })).toHaveCount(0);
   expect(windowsUpdaterCalls).toBe(0);
-  await expect(page.getByText("Cục bộ trên Android")).toBeVisible();
+  // Android cũng là bản cài một danh tính, nên không bày chip vai trò lẫn Đăng xuất.
+  await expect(page.locator(".user-menu")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Đăng xuất" })).toHaveCount(0);
 });
 
 test("Android không hỗ trợ update hiển thị lý do và không lộ control Windows", async ({ page }) => {

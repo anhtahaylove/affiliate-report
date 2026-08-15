@@ -11,7 +11,9 @@ const ROUTES = [
   ["/settings/data/", "/settings/data/"],
   ["/settings/sync/", "/settings/sync/"],
   ["/settings/update/", "/settings/update/"],
-  ["/settings/users/", "/settings/users/"],
+  // /settings/users/ cố ý vắng mặt: bản cài trên máy chỉ có một danh tính nên mục này bị
+  // ẩn khỏi sidebar. Trang vẫn tồn tại và vẫn hiện đủ ở bản triển khai dùng chung —
+  // local-identity.spec.ts kiểm cả hai chiều.
 ] as const;
 
 test("sidebar giữ đúng route, highlight mọi page và mở rộng không điều hướng về Tổng quan", async ({ page }) => {
