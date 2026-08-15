@@ -121,7 +121,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--phase", choices=("seed", "persist", "restore"), required=True)
     parser.add_argument("--base-url", default="http://127.0.0.1:9876")
-    parser.add_argument("--fixture", type=Path, default=Path("tests/fixtures/e2e-sample.xlsx"))
+    parser.add_argument("--fixture", type=Path, default=Path("tests/fixtures/affiliate_orders_e2e-sample.xlsx"))
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--expected-version", default="2.1.3")
     parser.add_argument("--android-token", default=os.getenv("ANDROID_LOCAL_TOKEN", ""))

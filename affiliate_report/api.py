@@ -48,7 +48,7 @@ from .db import accounts as account_registry
 from .db import ensure_device_identity, get_engine, import_batches, import_rows, init_db, monthly_targets, sync_tombstones, target_sync_id
 from .imports import order_line_history, undo_import, undo_preview
 from .pairing import PairingRunner
-from .parser import read_xlsx
+from .parser import FILENAME_REJECT_MESSAGE, is_valid_export_filename, read_xlsx
 from .reports import (
     ORDER_EXPORT_COLUMNS,
     analytics,
@@ -1120,8 +1120,8 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         if account == "ALL":
             raise HTTPException(status_code=422, detail="ALL is a virtual report scope and cannot receive imports")
         permitted_accounts(current, [account])
-        if not (file.filename or "").lower().endswith(".xlsx"):
-            raise HTTPException(status_code=415, detail="only .xlsx files are supported")
+        if not is_valid_export_filename(file.filename or ""):
+            raise HTTPException(status_code=415, detail=FILENAME_REJECT_MESSAGE)
         data = await _read_upload(file)
 
         # Parse + ghi DB là công việc đồng bộ nặng; chạy trong threadpool để event loop
@@ -1160,7 +1160,12 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
     def _pairing_importer(app: FastAPI) -> Callable[[str, str, bytes], dict[str, Any]]:
         def nhan_tep(account: str, filename: str, data: bytes) -> dict[str, Any]:
             # Cả LAN lẫn cloud đều đi đúng đường nhập của máy tính: cùng read_xlsx, cùng
-            # import_rows, nên chống trùng SHA-256 và mọi kiểm tra dữ liệu giữ nguyên.
+            # import_rows, nên chống trùng SHA-256 và mọi kiểm tra dữ liệu giữ nguyên. Kiểm tra
+            # tên tệp ở ĐÚNG MỘT chỗ này thay vì lặp lại trong pairing.py/cloud_pairing.py: cả
+            # hai nơi đó đã bọc sẵn try/except ValueError quanh lệnh gọi nhan_tep và tự chuyển
+            # thành lỗi hiện lên điện thoại, nên raise thẳng ValueError là đủ.
+            if not is_valid_export_filename(filename):
+                raise ValueError(FILENAME_REJECT_MESSAGE)
             return import_rows(
                 _engine(app),
                 filename=filename,

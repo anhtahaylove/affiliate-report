@@ -5,7 +5,7 @@ from io import BytesIO
 import pandas as pd
 import pytest
 
-from affiliate_report.parser import EXPECTED_HEADERS, normalize_row, normalize_status, parse_date, parse_int, read_xlsx
+from affiliate_report.parser import EXPECTED_HEADERS, is_valid_export_filename, normalize_row, normalize_status, parse_date, parse_int, read_xlsx
 
 
 def raw_row(**overrides):
@@ -112,6 +112,15 @@ def test_final_received_keeps_missing_distinct_from_zero():
     row = normalize_row(raw_row(**{"Tổng số tiền nhận được cuối cùng": "/"}), "CHIISTORE")
 
     assert row["final_received"] is None
+
+
+def test_is_valid_export_filename_requires_affiliate_orders_prefix():
+    assert is_valid_export_filename("affiliate_orders_7674048855708600085.xlsx")
+    assert is_valid_export_filename("AFFILIATE_ORDERS_1.XLSX"), "TikTok/hệ điều hành có thể viết hoa tên tệp"
+    assert not is_valid_export_filename("orders.xlsx")
+    assert not is_valid_export_filename("affiliate_orders.csv")
+    assert not is_valid_export_filename("bao-cao-affiliate_orders.xlsx"), "phải bắt đầu bằng tiền tố, không chỉ chứa nó"
+    assert not is_valid_export_filename("")
 
 
 def test_read_xlsx_rejects_excessive_row_count(monkeypatch):

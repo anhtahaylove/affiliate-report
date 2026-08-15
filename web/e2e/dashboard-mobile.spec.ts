@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 
-const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "e2e-sample.xlsx");
+const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "affiliate_orders_e2e-sample.xlsx");
 const ACCOUNT = "MOBILESHOP";
 const SCOPE = `?start=2026-03-01&end=2026-03-31&account=${ACCOUNT}`;
 

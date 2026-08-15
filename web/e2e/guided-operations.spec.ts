@@ -93,7 +93,7 @@ test("imports zero-account state is safe and successful import keeps results plu
   let historyItems: unknown[] = [];
   await page.route("**/api/v1/imports**", async (route) => {
     if (route.request().method() === "POST") {
-      historyItems = [{ id: 1, filename: "orders.xlsx", account: "SHOP_A", inserted: 2, updated: 0, unchanged: 0, rejected: 0, created_at: "2026-08-12T00:00:00Z" }];
+      historyItems = [{ id: 1, filename: "affiliate_orders.xlsx", account: "SHOP_A", inserted: 2, updated: 0, unchanged: 0, rejected: 0, created_at: "2026-08-12T00:00:00Z" }];
       return route.fulfill({ json: { inserted: 2, updated: 0, unchanged: 0, rejected: 0, duplicate: false, rejected_rows: [] } });
     }
     return route.fulfill({ json: { items: historyItems, count: historyItems.length, limit: 20 } });
@@ -101,7 +101,7 @@ test("imports zero-account state is safe and successful import keeps results plu
   await page.reload();
   await expect(page.getByLabel("1. Tài khoản TikTok")).toHaveValue("SHOP_A");
   await expect(page.getByLabel("1. Tài khoản TikTok").locator("option")).toHaveText("Gian hàng chính — SHOP_A");
-  await page.getByLabel("File Excel đã xuất từ TikTok").setInputFiles({ name: "orders.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("fixture") });
+  await page.getByLabel("File Excel đã xuất từ TikTok").setInputFiles({ name: "affiliate_orders.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("fixture") });
   await page.getByRole("button", { name: "Nhập dữ liệu" }).click();
   await expect(page.getByText("2 dòng mới", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "Xem Dashboard" })).toBeVisible();

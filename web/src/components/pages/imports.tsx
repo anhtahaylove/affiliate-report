@@ -29,6 +29,12 @@ const OUTCOME_LABELS: Record<FileOutcome, string> = {
 
 const IMPORT_STEPS = ["Tài khoản", "Chọn tệp", "Hàng đợi", "Nhập dữ liệu"] as const;
 
+// TikTok luôn xuất tệp dạng affiliate_orders<phần đuôi đổi mỗi lần xuất>.xlsx (vd.
+// affiliate_orders_7674048855708600085.xlsx). Khớp affiliate_report/parser.py:FILENAME_PATTERN —
+// đổi một bên mà quên bên kia thì phía không đổi vẫn nhận/chặn nhầm tệp.
+const EXPORT_FILENAME_RE = /^affiliate_orders.*\.xlsx$/i;
+const EXPORT_FILENAME_HINT = 'Chỉ nhận tệp .xlsx có tên bắt đầu bằng "affiliate_orders" (đúng tên TikTok xuất ra, vd. affiliate_orders_1234567890.xlsx).';
+
 function fileSizeText(size: number) {
   if (size < 1024 * 1024) return `${integer.format(Math.max(1, Math.round(size / 1024)))} KB`;
   return `${integer.format(Math.round((size / 1024 / 1024) * 10) / 10)} MB`;
@@ -73,8 +79,8 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir }
     for (const [index, file] of queued.entries()) {
       setCurrentFile(file.name);
       setMessage(`Đang xử lý file ${integer.format(index + 1)}/${integer.format(queued.length)}: ${file.name}`);
-      if (!file.name.toLowerCase().endsWith(".xlsx")) {
-        collected.push({ file: file.name, outcome: "skipped", detail: "Không phải định dạng .xlsx", rejectedTotal: 0, rejectedRows: [] });
+      if (!EXPORT_FILENAME_RE.test(file.name)) {
+        collected.push({ file: file.name, outcome: "skipped", detail: EXPORT_FILENAME_HINT, rejectedTotal: 0, rejectedRows: [] });
         setProcessedFiles(index + 1);
         setResults([...collected]);
         continue;
@@ -141,13 +147,13 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir }
           <div>
             <p className="section-label">Nhập tuần tự</p>
             <h2>Chọn account → Chọn tệp → Xem hàng đợi → Nhập</h2>
-            <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp; chỉ hỗ trợ định dạng .xlsx.</p>
+            <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp. {EXPORT_FILENAME_HINT}</p>
           </div>
         </div>
         {inboxDir ? (
           <div className="inbox-hint" role="note">
             <p><strong>Hoặc thả tệp vào thư mục, ứng dụng tự nhập</strong></p>
-            <p>Chép tệp vào <code>{inboxDir}</code>, trong thư mục con mang tên account. Ứng dụng quét mỗi 15 giây; nhập xong dời tệp sang <code>.done</code>, tệp lỗi sang <code>.failed</code> kèm ghi chú.</p>
+            <p>Chép tệp vào <code>{inboxDir}</code>, trong thư mục con mang tên account. Ứng dụng quét mỗi 15 giây; nhập xong dời tệp sang <code>.done</code>, tệp lỗi sang <code>.failed</code> kèm ghi chú. {EXPORT_FILENAME_HINT}</p>
             <p className="subtle">Cắm thư mục này vào Google Drive, OneDrive hoặc Syncthing là điện thoại lưu tệp xong máy tính tự nhập, khỏi phải chuyển tệp sang.</p>
           </div>
         ) : null}
@@ -177,7 +183,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir }
                 {fileQueue.map((file, index) => (
                   <li key={`${file.name}-${file.lastModified}`} data-state={index < processedFiles ? "done" : file.name === currentFile ? "active" : "pending"}>
                     <span>{file.name}</span>
-                    <small>{fileSizeText(file.size)} · {file.name.toLowerCase().endsWith(".xlsx") ? "Sẵn sàng" : "Sẽ bỏ qua"}</small>
+                    <small>{fileSizeText(file.size)} · {EXPORT_FILENAME_RE.test(file.name) ? "Sẵn sàng" : "Sẽ bỏ qua"}</small>
                   </li>
                 ))}
               </ol>

@@ -6,7 +6,7 @@ import { resolve } from "node:path";
  * đổi thiết kế. Gắn thẻ @shots để KHÔNG chạy chung với test thật: cả hai dùng chung một
  * database tạm, chạy song song thì mỗi bên thấy dữ liệu của bên kia. Chạy bằng: pnpm shots
  */
-const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "e2e-sample.xlsx");
+const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "affiliate_orders_e2e-sample.xlsx");
 const ACCOUNT = "SHOTSHOP";
 const SCOPE = `?start=2026-03-01&end=2026-03-31&account=${ACCOUNT}`;
 

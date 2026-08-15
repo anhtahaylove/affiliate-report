@@ -178,7 +178,7 @@ def test_operator_requires_csrf_and_cannot_upload_another_account(tmp_path):
     auth.update_user(operator.user_id or 0, role="operator", accounts=["CHIISTORE"])
     upload = {
         "data": {"account": "CHIISTORE"},
-        "files": {"file": ("orders.xlsx", xlsx_bytes([raw_export_row()]))},
+        "files": {"file": ("affiliate_orders.xlsx", xlsx_bytes([raw_export_row()]))},
     }
 
     assert client.post("/api/v1/imports", **upload).status_code == 403

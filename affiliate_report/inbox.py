@@ -11,6 +11,10 @@ account nào:
     <data>/inbox/<MÃ ACCOUNT>/.done/      đã nhập xong
     <data>/inbox/<MÃ ACCOUNT>/.failed/    không nhập được, kèm .txt giải thích
 
+Chỉ tệp tên bắt đầu bằng "affiliate_orders" mới được nhận (xem parser.is_valid_export_filename)
+— thư mục đồng bộ chung (Drive, OneDrive, Download trên điện thoại) luôn lẫn cả tệp không liên
+quan, tệp sai tên bị dời sang .failed kèm lý do chứ không lặng lẽ bỏ qua.
+
 Trùng lặp không phải lo: import_rows đã băm SHA-256 nội dung tệp, thả lại đúng tệp cũ chỉ báo
 "duplicate" chứ không nhân đôi dữ liệu.
 """
@@ -27,7 +31,7 @@ from sqlalchemy.engine import Engine
 
 from .accounts import active_account_codes
 from .db import import_rows
-from .parser import read_xlsx
+from .parser import FILENAME_REJECT_MESSAGE, is_valid_export_filename, read_xlsx
 
 INBOX_DIRNAME = "inbox"
 DONE_DIRNAME = ".done"
@@ -115,6 +119,10 @@ def scan_inbox(engine: Engine, data_dir: Path, *, stable_delay: float = STABLE_C
             continue
 
         for path in files:
+            if not is_valid_export_filename(path.name):
+                _move_aside(path, FAILED_DIRNAME, FILENAME_REJECT_MESSAGE)
+                results.append(InboxResult(account, path.name, "rejected", FILENAME_REJECT_MESSAGE))
+                continue
             try:
                 size = path.stat().st_size
             except OSError:

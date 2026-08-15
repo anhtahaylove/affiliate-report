@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 // Fixture có ngày cố định trong 03/2026, nên mọi trang báo cáo đều mở kèm start/end tường minh
 // thay vì phụ thuộc tháng hiện tại.
-const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "e2e-sample.xlsx");
+const SAMPLE = resolve(__dirname, "..", "..", "tests", "fixtures", "affiliate_orders_e2e-sample.xlsx");
 const ACCOUNT = "E2ESHOP";
 const SCOPE = `?start=2026-03-01&end=2026-03-31&account=${ACCOUNT}`;
 

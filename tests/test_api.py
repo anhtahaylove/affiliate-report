@@ -24,7 +24,7 @@ from affiliate_report.db import (
     monthly_targets,
     order_line_versions,
 )
-from affiliate_report.parser import EXPECTED_HEADERS, normalize_row
+from affiliate_report.parser import EXPECTED_HEADERS, FILENAME_REJECT_MESSAGE, normalize_row
 from affiliate_report.version import APP_VERSION
 
 
@@ -449,37 +449,44 @@ def test_import_requires_account_and_imports_xlsx(tmp_path):
     client, _ = api(tmp_path)
     data = xlsx_bytes([raw_export_row()])
 
-    missing = client.post("/api/v1/imports", files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
+    missing = client.post("/api/v1/imports", files={"file": ("affiliate_orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})
     virtual = client.post(
         "/api/v1/imports",
         data={"account": "ALL"},
-        files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("affiliate_orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     unknown = client.post(
         "/api/v1/imports",
         data={"account": "NOT_ALLOWED"},
-        files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("affiliate_orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     wrong_type = client.post(
         "/api/v1/imports",
         data={"account": "CHIISTORE"},
         files={"file": ("orders.csv", data, "text/csv")},
     )
-    created = client.post(
+    wrong_name = client.post(
         "/api/v1/imports",
         data={"account": "CHIISTORE"},
         files={"file": ("orders.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
+    created = client.post(
+        "/api/v1/imports",
+        data={"account": "CHIISTORE"},
+        files={"file": ("affiliate_orders_7674048855708600085.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
     duplicate = client.post(
         "/api/v1/imports",
         data={"account": "CHIISTORE"},
-        files={"file": ("orders-copy.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("affiliate_orders-copy.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert missing.status_code == 422
     assert virtual.status_code == 422
     assert unknown.status_code == 403
     assert wrong_type.status_code == 415
+    assert wrong_name.status_code == 415
+    assert wrong_name.json()["detail"] == FILENAME_REJECT_MESSAGE
     assert created.status_code == 200
     assert created.json() | {"batch_id": created.json()["batch_id"]} == {
         "batch_id": created.json()["batch_id"],
@@ -501,7 +508,7 @@ def test_import_rejects_file_when_stream_crosses_size_limit(tmp_path, monkeypatc
     response = client.post(
         "/api/v1/imports",
         data={"account": "CHIISTORE"},
-        files={"file": ("orders.xlsx", b"x", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        files={"file": ("affiliate_orders.xlsx", b"x", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
 
     assert response.status_code == 413

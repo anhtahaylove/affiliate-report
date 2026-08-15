@@ -65,6 +65,22 @@ STATUS_MAP = {
 }
 
 
+# Tên tệp export TikTok luôn ở dạng affiliate_orders<phần đuôi đổi mỗi lần xuất>.xlsx (vd.
+# affiliate_orders_7674048855708600085.xlsx). Thư mục quét tự động (inbox máy bàn, thư mục đồng
+# bộ Android) đứng cạnh đủ loại tệp không liên quan (ảnh, tệp app khác) — lọc theo tiền tố này ở
+# MỌI điểm nhận tệp (upload tay, ghép cặp điện thoại, quét thư mục) để không lỡ nhập nhầm, và báo
+# rõ lý do thay vì im lặng bỏ qua như trước.
+FILENAME_PATTERN = re.compile(r"^affiliate_orders.*\.xlsx$", re.IGNORECASE)
+FILENAME_REJECT_MESSAGE = (
+    'Chỉ nhận tệp export TikTok dạng .xlsx có tên bắt đầu bằng "affiliate_orders" '
+    "(vd. affiliate_orders_1234567890.xlsx)."
+)
+
+
+def is_valid_export_filename(filename: str) -> bool:
+    return bool(FILENAME_PATTERN.match((filename or "").strip()))
+
+
 def file_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

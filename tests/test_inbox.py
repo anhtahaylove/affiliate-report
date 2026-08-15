@@ -42,14 +42,14 @@ def test_file_dropped_into_the_account_folder_is_imported_and_filed_away(tmp_pat
     engine = _engine(tmp_path)
     data_dir = tmp_path / "data"
     root = inbox.ensure_inbox(data_dir, ["SHOTSHOP"])
-    path = _drop(root, "SHOTSHOP", "orders.xlsx", _xlsx_bytes())
+    path = _drop(root, "SHOTSHOP", "affiliate_orders.xlsx", _xlsx_bytes())
 
     results = inbox.scan_inbox(engine, data_dir, stable_delay=0)
 
     assert [r.status for r in results] == ["imported"]
     assert results[0].counts["inserted"] == 1
     assert not path.exists(), "tệp đã nhập phải được dời đi để lượt sau không nhập lại"
-    assert (root / "SHOTSHOP" / inbox.DONE_DIRNAME / "orders.xlsx").is_file()
+    assert (root / "SHOTSHOP" / inbox.DONE_DIRNAME / "affiliate_orders.xlsx").is_file()
 
 
 def test_the_same_file_dropped_twice_does_not_double_count(tmp_path):
@@ -59,9 +59,9 @@ def test_the_same_file_dropped_twice_does_not_double_count(tmp_path):
     root = inbox.ensure_inbox(data_dir, ["SHOTSHOP"])
     payload = _xlsx_bytes()
 
-    _drop(root, "SHOTSHOP", "orders.xlsx", payload)
+    _drop(root, "SHOTSHOP", "affiliate_orders.xlsx", payload)
     first = inbox.scan_inbox(engine, data_dir, stable_delay=0)
-    _drop(root, "SHOTSHOP", "orders.xlsx", payload)
+    _drop(root, "SHOTSHOP", "affiliate_orders.xlsx", payload)
     second = inbox.scan_inbox(engine, data_dir, stable_delay=0)
 
     assert first[0].status == "imported"
@@ -77,7 +77,7 @@ def test_a_half_synced_file_is_left_for_the_next_pass(tmp_path, monkeypatch):
     engine = _engine(tmp_path)
     data_dir = tmp_path / "data"
     root = inbox.ensure_inbox(data_dir, ["SHOTSHOP"])
-    path = _drop(root, "SHOTSHOP", "dang-tai.xlsx", b"MOT-NUA-TEP")
+    path = _drop(root, "SHOTSHOP", "affiliate_orders_dang-tai.xlsx", b"MOT-NUA-TEP")
 
     def grow_while_waiting(_seconds):
         path.write_bytes(path.read_bytes() + b"-THEM-DU-LIEU")
@@ -107,15 +107,31 @@ def test_a_corrupt_file_is_filed_with_a_readable_reason(tmp_path):
     engine = _engine(tmp_path)
     data_dir = tmp_path / "data"
     root = inbox.ensure_inbox(data_dir, ["SHOTSHOP"])
-    _drop(root, "SHOTSHOP", "hong.xlsx", b"day khong phai excel")
+    _drop(root, "SHOTSHOP", "affiliate_orders_hong.xlsx", b"day khong phai excel")
 
     results = inbox.scan_inbox(engine, data_dir, stable_delay=0)
 
     assert [r.status for r in results] == ["rejected"]
     failed = root / "SHOTSHOP" / inbox.FAILED_DIRNAME
-    assert (failed / "hong.xlsx").is_file()
-    note = (failed / "hong.xlsx.txt").read_text(encoding="utf-8")
+    assert (failed / "affiliate_orders_hong.xlsx").is_file()
+    note = (failed / "affiliate_orders_hong.xlsx.txt").read_text(encoding="utf-8")
     assert "Không nhập được" in note
+
+
+def test_a_file_with_the_wrong_name_is_rejected_not_silently_ignored(tmp_path):
+    """Thư mục Download trên điện thoại lẫn đủ loại tệp khác; chỉ tên bắt đầu affiliate_orders
+    mới được nhận (xem parser.FILENAME_PATTERN), tệp khác phải báo rõ lý do như mọi rejection khác
+    trong module này chứ không lặng lẽ bỏ qua."""
+    engine = _engine(tmp_path)
+    data_dir = tmp_path / "data"
+    root = inbox.ensure_inbox(data_dir, ["SHOTSHOP"])
+    _drop(root, "SHOTSHOP", "bao-cao-thang.xlsx", _xlsx_bytes())
+
+    results = inbox.scan_inbox(engine, data_dir, stable_delay=0)
+
+    assert [r.status for r in results] == ["rejected"]
+    assert "affiliate_orders" in results[0].detail
+    assert (root / "SHOTSHOP" / inbox.FAILED_DIRNAME / "bao-cao-thang.xlsx").is_file()
 
 
 def test_scan_is_a_no_op_when_the_inbox_was_never_created(tmp_path):
