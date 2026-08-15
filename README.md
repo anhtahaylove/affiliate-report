@@ -19,7 +19,7 @@
 
 ## Cài và chạy trên máy Windows không cần Python
 
-Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.1.3.exe`.
+Tải installer từ [public GitHub Releases](https://github.com/anhtahaylove/affiliate-report/releases), đối chiếu `SHA256SUMS.txt`, rồi chạy `AffiliateReportSetup-v2.1.4.exe`.
 
 Installer cài theo user vào `%LOCALAPPDATA%\AffiliateReport`, tạo shortcut Desktop/Start Menu. Double-click app sẽ:
 
@@ -36,7 +36,7 @@ App chỉ chạy một instance. Nếu mở shortcut lần nữa, instance mới
 2. Mở PowerShell tại thư mục tải xuống và kiểm tra hash nếu cần:
 
    ```powershell
-   Get-FileHash .\AffiliateReportSetup-v2.1.3.exe -Algorithm SHA256
+   Get-FileHash .\AffiliateReportSetup-v2.1.4.exe -Algorithm SHA256
    ```
 
    Giá trị phải trùng dòng tương ứng trong `SHA256SUMS.txt`.
@@ -64,7 +64,7 @@ Mỗi máy cài đặt hoạt động độc lập với database riêng. Ngư�
 
 ## Cài và sử dụng trên Android
 
-Tải `AffiliateReport-v2.1.3-arm64.apk` từ cùng trang Releases và đối chiếu dòng tương ứng trong `SHA256SUMS.txt`. APK hỗ trợ thiết bị Android 7.0 trở lên dùng ABI `arm64-v8a`.
+Tải `AffiliateReport-v2.1.4-arm64.apk` từ cùng trang Releases và đối chiếu dòng tương ứng trong `SHA256SUMS.txt`. APK hỗ trợ thiết bị Android 7.0 trở lên dùng ABI `arm64-v8a`.
 
 1. Mở APK, cho phép trình duyệt hoặc trình quản lý tệp cài ứng dụng không rõ nguồn khi Android yêu cầu, rồi xác nhận cài đặt.
 2. Mở **Affiliate Report**. FastAPI và SQLite chạy cục bộ trong ứng dụng; không cần máy Windows, Docker hay server riêng.
@@ -171,8 +171,8 @@ Tool copy dữ liệu nghiệp vụ và user/account mapping, không copy sessio
 
 Artifact phát hành:
 
-- `artifacts\installer\AffiliateReportSetup-v2.1.3.exe`
-- `artifacts\android\AffiliateReport-v2.1.3-arm64.apk`
+- `artifacts\installer\AffiliateReportSetup-v2.1.4.exe`
+- `artifacts\android\AffiliateReport-v2.1.4-arm64.apk`
 - `artifacts\installer\TikTokAffiliateUpdater-v1.0.0.ps1`
 - `artifacts\installer\SHA256SUMS.txt`
 - `artifacts\installer\stable.json`

@@ -23,6 +23,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 VERSION_FILE = REPO / "affiliate_report" / "version.py"
 
+# Console mặc định của Windows (cp1252) không encode được các print() tiếng Việt bên dưới —
+# script "thành công" nhưng crash ở bước in kết quả, và test_packaging_contract.py đọc thành
+# returncode != 0 dù version đã đồng bộ đúng. Ép UTF-8 ở đây để không phụ thuộc PYTHONIOENCODING
+# của môi trường gọi (subprocess.run trong test không set biến này).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 def read_app_version() -> str:
     """Đọc thẳng file, không import.
