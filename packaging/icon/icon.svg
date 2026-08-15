@@ -1,0 +1,26 @@
+<!-- Nguồn sự thật cho icon Windows, PWA và Android. Mọi PNG/.ico đều sinh từ đây bằng
+     scripts/build_icons.py — đừng sửa ảnh đã sinh.
+
+     Thiết kế: ba cột biểu đồ tăng dần + một đồng xu, dùng đúng bảng màu app
+     (--teal #007985, --accent-line #77cbd0, trắng).
+
+     Ràng buộc chi phối mọi lựa chọn ở đây là đọc được ở 16px trên thanh taskbar:
+     - cột trắng đặc và dày, khe hẹp, để nhóm cột đọc thành một khối chứ không rời rạc;
+     - vành xu mảnh và nằm sát mép đĩa trắng, nên khi thu nhỏ nó tan đi thành một chấm
+       tròn đặc thay vì bịt lại thành mảng nhòe;
+     - khe teal quanh xu cùng màu nền, tách xu khỏi cột mà không cần thêm nét viền;
+     - màu phụ chỉ dùng cho lõi xu, không đụng vào bóng ngoài của hình. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect width="1024" height="1024" rx="228" fill="#007985"/>
+
+  <g fill="#ffffff">
+    <rect x="190" y="570" width="140" height="190" rx="38"/>
+    <rect x="366" y="460" width="140" height="300" rx="38"/>
+    <rect x="542" y="350" width="140" height="410" rx="38"/>
+  </g>
+
+  <circle cx="712" cy="300" r="212" fill="#007985"/>
+  <circle cx="712" cy="300" r="172" fill="#ffffff"/>
+  <circle cx="712" cy="300" r="134" fill="none" stroke="#007985" stroke-width="26"/>
+  <circle cx="712" cy="300" r="62" fill="#77cbd0"/>
+</svg>

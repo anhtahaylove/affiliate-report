@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Trùng đúng nền teal của packaging/icon/icon.svg để icon Android và
+         icon Windows là cùng một thiết kế. Đổi ở đây phải đổi cả khe quanh đồng xu trong
+         icon-foreground.svg, vì khe đó tô cùng màu này để đọc thành khoảng hở. -->
+    <color name="ic_launcher_background">#007985</color>
 </resources>

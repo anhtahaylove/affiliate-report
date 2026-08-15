@@ -1,0 +1,22 @@
+<!-- Lớp foreground cho adaptive icon Android. Nền do @color/ic_launcher_background lo,
+     nên ở đây không vẽ nền.
+
+     Android cắt icon theo mặt nạ tuỳ hãng (tròn, vuông bo, squircle...) và chỉ bảo đảm
+     phần 72dp giữa của canvas 108dp luôn hiện — tức 66%. Vì vậy toàn bộ nét được thu về
+     giữa với hệ số 0.88 thay vì tràn ra như bản icon.svg đầy đủ.
+
+     Khe quanh đồng xu vẫn tô #007985 trùng đúng màu nền adaptive, nên nó đọc thành khoảng
+     hở y hệt bản Windows. Nếu sau này đổi màu nền adaptive thì phải đổi cả chỗ này. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <g transform="translate(512 512) scale(0.88) translate(-557 -424)">
+    <g fill="#ffffff">
+      <rect x="190" y="570" width="140" height="190" rx="38"/>
+      <rect x="366" y="460" width="140" height="300" rx="38"/>
+      <rect x="542" y="350" width="140" height="410" rx="38"/>
+    </g>
+    <circle cx="712" cy="300" r="212" fill="#007985"/>
+    <circle cx="712" cy="300" r="172" fill="#ffffff"/>
+    <circle cx="712" cy="300" r="134" fill="none" stroke="#007985" stroke-width="26"/>
+    <circle cx="712" cy="300" r="62" fill="#77cbd0"/>
+  </g>
+</svg>

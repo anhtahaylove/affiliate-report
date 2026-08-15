@@ -480,6 +480,43 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "Sort-Object publishedAt -Descending | Select-Object -First 1" not in release
 
 
+def test_app_icons_are_generated_from_the_single_svg_source():
+    from scripts.build_icons import ANDROID_RES, DENSITIES, ICO_SIZES, MASTER, WEB_ICONS
+
+    from PIL import Image
+
+    assert MASTER.is_file()
+    icon = Path("packaging/app.ico")
+    assert icon.is_file()
+    # Windows chọn cỡ theo ngữ cảnh: thiếu 16/32 là taskbar phải tự thu nhỏ bản lớn và bị răng cưa.
+    assert sorted(Image.open(icon).info["sizes"]) == sorted((size, size) for size in ICO_SIZES)
+
+    for size, path in WEB_ICONS.items():
+        assert path.is_file(), path
+        assert Image.open(path).size == (size, size)
+
+    for density, scale in DENSITIES.items():
+        folder = ANDROID_RES / f"mipmap-{density}"
+        for name, base in (("ic_launcher.png", 48), ("ic_launcher_round.png", 48), ("ic_launcher_foreground.png", 108)):
+            path = folder / name
+            assert path.is_file(), path
+            assert Image.open(path).size == (round(base * scale), round(base * scale)), path
+
+
+def test_android_adaptive_background_matches_the_icon_artwork():
+    # Khe quanh đồng xu trong icon-foreground.svg được tô đúng màu nền adaptive để đọc thành
+    # khoảng hở. Lệch hai giá trị này là khe biến thành một vòng tròn màu lạ trên launcher.
+    from scripts.build_icons import ICON_DIR
+
+    background = Path("android/native/app/src/main/res/values/ic_launcher_background.xml").read_text(encoding="utf-8")
+    colour = re.search(r'name="ic_launcher_background">(#[0-9A-Fa-f]{6})<', background)
+    assert colour, "không đọc được màu nền adaptive"
+    master = (ICON_DIR / "icon.svg").read_text(encoding="utf-8")
+    foreground = (ICON_DIR / "icon-foreground.svg").read_text(encoding="utf-8")
+    assert colour.group(1).lower() in master.lower()
+    assert colour.group(1).lower() in foreground.lower()
+
+
 def test_powershell_scripts_with_non_ascii_keep_a_utf8_bom():
     # Windows PowerShell 5.1 đọc .ps1 không BOM theo bảng mã ANSI, nên chuỗi tiếng Việt
     # bị vỡ và script chết với "string is missing the terminator" — khó lần ra nguyên nhân.
