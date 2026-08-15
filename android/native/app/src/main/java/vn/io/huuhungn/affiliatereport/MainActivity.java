@@ -185,6 +185,12 @@ public final class MainActivity extends BridgeActivity {
                     accepted -> {
                         if (Boolean.TRUE.equals(accepted)) {
                             CookieManager.getInstance().flush();
+                            // APK vừa cài bản web mới (khác lần trước tái dùng bundle cũ):
+                            // WebView vẫn có thể giữ HTML/JS cache từ bản trước dù server giờ
+                            // trả bản mới. Xoá đúng một lần ở đây thay vì mọi lần mở app.
+                            if (application.isWebBundleFreshlyInstalled()) {
+                                getBridge().getWebView().clearCache(true);
+                            }
                             getBridge().getWebView().loadUrl(APP_URL);
                         } else {
                             showStartupFailure("Không thể mở phiên dữ liệu riêng tư.");

@@ -27,6 +27,7 @@ public final class AffiliateReportApplication extends Application {
     private final ExecutorService runtimeExecutor = Executors.newSingleThreadExecutor();
     private final CountDownLatch startupFinished = new CountDownLatch(1);
     private volatile boolean runtimeReady;
+    private volatile boolean webBundleFreshlyInstalled;
     private String localToken;
 
     @Override
@@ -86,6 +87,12 @@ public final class AffiliateReportApplication extends Application {
         return localToken;
     }
 
+    /** True chỉ khi lần chạy này thật sự cài bản web mới (khác lần trước tái dùng bundle cũ đã
+     * sẵn sàng) — dùng để xoá cache WebView đúng một lần thay vì mỗi lần mở app. */
+    boolean isWebBundleFreshlyInstalled() {
+        return webBundleFreshlyInstalled;
+    }
+
     private String loadOrCreateLocalToken() throws IOException {
         File tokenFile = new File(getFilesDir(), "android-local-token");
         if (tokenFile.isFile()) {
@@ -119,6 +126,7 @@ public final class AffiliateReportApplication extends Application {
         if (ready.isFile() && new File(webDir, "index.html").isFile()) {
             return webDir;
         }
+        webBundleFreshlyInstalled = true;
         deleteRecursively(webDir);
         if (!webDir.mkdirs() && !webDir.isDirectory()) {
             throw new IOException("Cannot create web bundle directory");

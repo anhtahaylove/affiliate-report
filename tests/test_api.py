@@ -680,7 +680,11 @@ def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
     client, _ = api(tmp_path)
 
     assert client.get("/health").json() == {"status": "ok", "app_version": APP_VERSION}
-    assert "Ops Cockpit" in client.get("/").text
+    index = client.get("/")
+    assert "Ops Cockpit" in index.text
+    # Không có header này, WebView/trình duyệt có thể tự phục vụ bản HTML cũ sau khi app đã
+    # update xong mà không hỏi lại server — đúng triệu chứng "update xong vẫn thấy UI cũ".
+    assert index.headers["cache-control"] == "no-cache"
     service_worker = client.get("/sw.js")
     assert service_worker.status_code == 200
     assert "__APP_VERSION__" not in service_worker.text

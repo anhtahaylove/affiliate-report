@@ -36,6 +36,17 @@ class StaticExportFiles(StaticFiles):
     """Serve a Next.js static export, including flattened client-navigation payload URLs."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
+        # Không có Cache-Control thì trình duyệt/WebView tự áp heuristic freshness cho HTML/RSC
+        # payload và có thể phục vụ bản cũ sau khi cập nhật xong mà không hỏi lại server — kể cả
+        # khi service worker (network-first, đúng) chạy, vì fetch() bên trong nó vẫn có thể bị
+        # cache HTTP chặn trước khi ra tới mạng thật. no-cache (khác no-store) vẫn cho trình
+        # duyệt giữ bản đã tải để so sánh ETag/Last-Modified, chỉ bắt buộc hỏi lại server trước
+        # khi dùng — không tốn băng thông tải lại toàn bộ mỗi lần như no-store.
+        response = await self._resolve_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    async def _resolve_response(self, path: str, scope: Scope) -> Response:
         missing_error: HTTPException | None = None
         try:
             response = await super().get_response(path, scope)
