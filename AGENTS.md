@@ -85,6 +85,26 @@ dashboard và bị cắt còn 8px — lỗi lọt tới bản phát hành.
 Vòng quét route **không** chạm tới trạng thái có điều kiện. Thêm UI chỉ hiện ở một trạng thái
 thì phải tự quét trạng thái đó.
 
+## Validate dữ liệu: vài quy tắc có nhiều bản sao cố ý
+
+Đừng gộp thành "một nguồn chung" tưởng sạch hơn — mỗi bản một vai trò khác nhau, gộp sai từng
+gây lỗ hổng thật:
+
+**Cạm bẫy đã trả giá:** mã account tồn tại ở BA bản `ACCOUNT_CODE_RE` cùng tên khác module —
+`accounts.ACCOUNT_CODE_RE` và `db.ACCOUNT_CODE_RE` (giá trị **đã** `.upper()`, chỉ
+`A-Z0-9_.-`) khác `api.AccountCreate.code` (`Field(pattern=...)`, input **thô** từ form, chấp
+nhận cả chữ thường vd. `sarah.reign`). `api._sanitize_view_filters`'s `valid_account()` dựa vào
+`ACCOUNT_CODE_RE` chỉ nhận chữ hoa để tự chặn `"all"` viết thường lọt qua so sánh case-sensitive
+`!= "ALL"`. Từng thử gộp hai pattern (thêm `a-z` vào `ACCOUNT_CODE_RE`) — làm `"all"` lọt qua,
+bắt được nhờ `test_saved_views_are_csrf_protected_scoped_and_sanitized` khi chạy full suite chứ
+không phải lúc code review.
+
+Tên tệp export TikTok (`affiliate_orders*.xlsx`) cũng có ba bản tay, không chia sẻ được code vì
+khác ngôn ngữ: `parser.FILENAME_PATTERN` (Python, thẩm quyền cuối — server luôn kiểm lại),
+`imports.tsx`'s `EXPORT_FILENAME_RE` (JS, pre-check phía trình duyệt), `MainActivity.java`'s
+`isValidSyncFilename` (Java, lọc trước khi upload từ thư mục đồng bộ Android). Lệch giữa ba bản
+chỉ gây bỏ sót/thử thừa, không phải lỗ hổng — nhưng vẫn nên sửa cả ba khi đổi quy tắc.
+
 ## Gate cục bộ trước khi đề nghị push
 
 ```bash
