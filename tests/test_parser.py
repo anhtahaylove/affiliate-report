@@ -61,7 +61,7 @@ def test_read_xlsx_requires_exact_47_headers():
     bad = BytesIO()
     pd.DataFrame([{"ID đơn hàng": "1"}]).to_excel(bad, index=False)
     bad.seek(0)
-    with pytest.raises(ValueError, match="47 cột"):
+    with pytest.raises(ValueError, match="cột bắt buộc"):
         read_xlsx(bad, "EMLINHNOIY")
 
 

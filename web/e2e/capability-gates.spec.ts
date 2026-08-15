@@ -86,8 +86,8 @@ test("PostgreSQL/OIDC settings explain unavailable local operations without call
   expect(updateCalls).toBe(0);
 
   await page.goto("/settings/users/");
-  await expect(page.getByRole("heading", { name: "OIDC allowlist được kiểm tra liên tục" })).toBeVisible();
-  await expect(page.getByText("Trạng thái “Đang hoạt động” là điều kiện cần", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Chỉ email được cấp phép mới đăng nhập được" })).toBeVisible();
+  await expect(page.getByText("chưa chắc đủ để họ đăng nhập được", { exact: false })).toBeVisible();
   const accessibility = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();

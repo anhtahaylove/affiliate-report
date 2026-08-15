@@ -38,8 +38,8 @@ test("chọn rõ LAN hoặc Cloud và cloud không lộ URL capability", async (
   await expect(page.getByRole("button", { name: /Cùng Wi-Fi/ })).toBeVisible();
   await page.getByRole("button", { name: /Khác mạng/ }).click();
 
-  await expect(page.getByText("Cloud Pairing · khác mạng")).toBeVisible();
-  await expect(page.getByText("Relay: aff-report.huuhungn.io.vn")).toBeVisible();
+  await expect(page.getByText("Khác mạng")).toBeVisible();
+  await expect(page.getByText("Đường truyền: đã mã hóa qua máy chủ trung chuyển")).toBeVisible();
   await expect(page.getByText(/http.*pair/i)).toHaveCount(0);
   await expect(page.locator(".pairing-qr svg")).toBeVisible();
 

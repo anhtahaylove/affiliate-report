@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminUser, CurrentUser, IdentityPolicy, loadUsers, updateUser } from "@/lib/api";
 import { errorMessage, integer, roleLabel } from "@/lib/format";
+import { ConfirmDialog } from "@/components/ui";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { AccountIdentity } from "@/components/account-identity";
 import type { AccountDirectory } from "@/lib/account-directory";
@@ -11,6 +12,7 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{ user: AdminUser; role: AdminUser["role"] } | null>(null);
   const refresh = useCallback(async () => {
     const data = await loadUsers();
     setUsers(data.items);
@@ -40,6 +42,18 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
     const next = user.accounts.includes(account) ? user.accounts.filter((item) => item !== account) : [...user.accounts, account];
     void patch(user, { accounts: next });
   }
+  // Đổi thành/từ "owner" (toàn quyền) áp dụng ngay lập tức không có cách xem lại — khác mọi thao
+  // tác nhạy cảm khác trong app đều có ConfirmDialog. Đổi qua lại operator/viewer vẫn tức thời vì
+  // rủi ro thấp hơn nhiều.
+  function requestRoleChange(user: AdminUser, role: AdminUser["role"]) {
+    if (role === "owner" || user.role === "owner") setPendingRoleChange({ user, role });
+    else void patch(user, { role });
+  }
+  async function confirmRoleChange() {
+    if (!pendingRoleChange) return;
+    await patch(pendingRoleChange.user, { role: pendingRoleChange.role });
+    setPendingRoleChange(null);
+  }
   return (
     <section className="section panel wide users-settings-page">
       <div className="section-heading">
@@ -59,9 +73,9 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
         <aside className="identity-policy" aria-labelledby="identity-policy-title">
           <KeyRound size={20} aria-hidden="true" />
           <div>
-            <h3 id="identity-policy-title">OIDC allowlist được kiểm tra liên tục</h3>
-            <p>Email phải là <code>AUTH_BOOTSTRAP_OWNER_EMAIL</code> hoặc nằm trong <code>AUTH_ALLOWED_EMAILS</code>. Quy tắc áp dụng cho lần đăng nhập mới, người dùng hiện hữu và phiên đang hoạt động.</p>
-            <p className="hint"><ShieldCheck size={15} aria-hidden="true" /> Trạng thái “Đang hoạt động” là điều kiện cần, nhưng không vượt qua allowlist. Sau khi đổi cấu hình và khởi động lại service, phiên không còn hợp lệ sẽ bị thu hồi ở request tiếp theo.</p>
+            <h3 id="identity-policy-title">Chỉ email được cấp phép mới đăng nhập được</h3>
+            <p>Hệ thống chỉ cho những email đã được người quản trị cấp phép đăng nhập. Quy định này áp dụng cho cả lượt đăng nhập mới lẫn người đang dùng ứng dụng.</p>
+            <p className="hint"><ShieldCheck size={15} aria-hidden="true" /> Bật &quot;Đang hoạt động&quot; cho một người dùng chưa chắc đủ để họ đăng nhập được — email của họ còn phải nằm trong danh sách được cấp phép. Nếu người quản trị vừa cập nhật danh sách này, những người không còn được phép sẽ bị đăng xuất trong lượt thao tác kế tiếp.</p>
           </div>
         </aside>
       ) : null}
@@ -77,7 +91,7 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
               <div className="user-permission-grid">
                 <div className="field">
                   <label htmlFor={`role-${user.id}`}>Vai trò</label>
-                  <select id={`role-${user.id}`} value={user.role} onChange={(event) => void patch(user, { role: event.target.value as AdminUser["role"] })} disabled={saving === user.id || lockedSelf}>
+                  <select id={`role-${user.id}`} value={user.role} onChange={(event) => requestRoleChange(user, event.target.value as AdminUser["role"])} disabled={saving === user.id || lockedSelf}>
                     <option value="owner">{roleLabel("owner")}</option>
                     <option value="operator">{roleLabel("operator")}</option>
                     <option value="viewer">{roleLabel("viewer")}</option>
@@ -100,6 +114,18 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
         {!users.length ? <p className="empty">Chưa có người dùng nào.</p> : null}
       </div>
       {message ? <p className="upload-result" role="status">{message}</p> : null}
+      <ConfirmDialog
+        open={pendingRoleChange !== null}
+        title={`Đổi vai trò của ${pendingRoleChange?.user.email ?? ""} thành "${roleLabel(pendingRoleChange?.role)}"?`}
+        confirmLabel="Đổi vai trò"
+        busy={saving === pendingRoleChange?.user.id}
+        onCancel={() => setPendingRoleChange(null)}
+        onConfirm={() => void confirmRoleChange()}
+      >
+        <p>{pendingRoleChange?.role === "owner"
+          ? "Chủ sở hữu có toàn quyền quản lý tài khoản, người dùng và dữ liệu của cửa hàng."
+          : "Người này sẽ mất toàn quyền quản lý tài khoản, người dùng và dữ liệu của cửa hàng."}</p>
+      </ConfirmDialog>
     </section>
   );
 }

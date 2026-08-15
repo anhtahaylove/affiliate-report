@@ -94,6 +94,8 @@ export function ConfirmDialog({
         <div className="field">
           <label htmlFor={`${id}-phrase`}>Nhập chính xác <strong>{confirmation}</strong></label>
           <input id={`${id}-phrase`} value={phrase} autoComplete="off" onChange={(event) => setPhrase(event.target.value)} />
+          {/* Không khớp thì nút Xác nhận chỉ mờ đi, không nói lý do — dễ khiến tưởng app treo. */}
+          {phrase && !ready ? <small className="hint" aria-live="polite">Chưa khớp với cụm ở trên.</small> : null}
         </div>
       ) : null}
       <div className="row-actions">

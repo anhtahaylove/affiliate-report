@@ -148,7 +148,7 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
     return (
       <article className="account-card" key={record.code} data-state={record.active ? "active" : "archived"}>
         <div className="record-title">
-          <div><strong>{record.display_name}</strong><span>Mã: {record.code} · {record.active ? "Sẵn sàng lọc, nhập tệp và gán người dùng" : "Đã ẩn khỏi luồng vận hành mặc định"}</span></div>
+          <div><strong>{record.display_name}</strong><span>Mã: {record.code} · {record.active ? "Sẵn sàng lọc, nhập tệp và gán người dùng" : "Không hiện trong danh sách lọc, nhập tệp hoặc gán người dùng"}</span></div>
           <span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span>
         </div>
         <dl className="account-meta">

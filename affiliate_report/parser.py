@@ -168,7 +168,15 @@ def read_xlsx(path_or_buffer: Any, account: str) -> list[dict[str, Any]]:
     headers = list(df.columns)
     missing = [h for h in EXPECTED_HEADERS if h not in headers]
     if missing:
-        raise ValueError(f"Export phải có đủ 47 cột TikTok. Thiếu={missing}")
+        # Trước đây in thẳng list Python (dấu ngoặc vuông, nháy đơn: "Thiếu=['Người bán', ...]")
+        # — trông như lỗi lập trình. Nêu tên vài cột cụ thể thay vì chỉ nói "thiếu 47 cột" chung
+        # chung: người dùng nhận ra ngay cột nào quen mắt bị thiếu, dễ đoán ra lý do hơn một con số.
+        vi_du = ", ".join(missing[:3])
+        con_lai = "…" if len(missing) > 3 else ""
+        raise ValueError(
+            f"File thiếu {len(missing)} cột bắt buộc của TikTok (vd. {vi_du}{con_lai}). "
+            "Hãy kiểm tra lại đúng file affiliate_orders vừa xuất từ TikTok."
+        )
     unknown = [h for h in headers if h not in EXPECTED_HEADERS]
     if unknown:
         warnings.warn(f"Bỏ qua {len(unknown)} cột lạ ngoài 47 cột TikTok: {unknown}", stacklevel=2)

@@ -119,17 +119,17 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
             <Wifi aria-hidden="true" size={21} strokeWidth={1.8} />
             <span>
               <strong>Cùng Wi-Fi</strong>
-              <small>Nhanh nhất · file đi thẳng tới máy tính</small>
+              <small>Nhanh nhất · tệp đi thẳng tới máy tính</small>
             </span>
-            <span className="pairing-choice-action">{busy === "lan" ? "Đang tạo…" : "Tạo mã LAN"}</span>
+            <span className="pairing-choice-action">{busy === "lan" ? "Đang tạo…" : "Tạo mã"}</span>
           </button>
           <button type="button" className="pairing-choice" onClick={() => void bat("cloud")}>
             <Cloud aria-hidden="true" size={21} strokeWidth={1.8} />
             <span>
               <strong>Khác mạng</strong>
-              <small>Dùng 4G/5G hoặc Wi-Fi khác qua Cloudflare</small>
+              <small>Dùng khi điện thoại không cùng Wi-Fi với máy tính</small>
             </span>
-            <span className="pairing-choice-action">{busy === "cloud" ? "Đang kết nối…" : "Tạo mã Cloud"}</span>
+            <span className="pairing-choice-action">{busy === "cloud" ? "Đang kết nối…" : "Tạo mã"}</span>
           </button>
         </fieldset>
       ) : null}
@@ -140,20 +140,20 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
           <div className="pairing-meta">
             <div className="pairing-active-mode">
               {cloud ? <Cloud aria-hidden="true" size={18} /> : <Wifi aria-hidden="true" size={18} />}
-              <strong>{cloud ? "Cloud Pairing · khác mạng" : "LAN Pairing · cùng Wi-Fi"}</strong>
+              <strong>{cloud ? "Khác mạng" : "Cùng Wi-Fi"}</strong>
             </div>
             <p>
               Mã còn hiệu lực <strong>{phut}:{giay}</strong> và chỉ dùng được <strong>một lần</strong>.
             </p>
             <p className="hint">
               {cloud
-                ? "Điện thoại có thể ở bất kỳ mạng nào. Relay chỉ giữ bản mã hóa ngắn hạn; khóa giải mã không rời mã QR và ứng dụng này."
-                : "Điện thoại phải cùng Wi-Fi/LAN với máy tính; file không đi qua dịch vụ cloud."}
+                ? "Điện thoại có thể dùng mạng khác với máy tính (kể cả 4G/5G). Dữ liệu được mã hóa trong lúc truyền đi và chỉ máy tính này mở được — hệ thống trung chuyển ở giữa không đọc được nội dung."
+                : "Điện thoại phải cùng Wi-Fi với máy tính; tệp không đi qua Internet."}
             </p>
             {cloud ? (
-              <p className="pairing-relay"><ShieldCheck aria-hidden="true" size={17} /> Relay: {status.relay_host || "Cloudflare Workers"}</p>
+              <p className="pairing-relay"><ShieldCheck aria-hidden="true" size={17} /> Đường truyền: đã mã hóa qua máy chủ trung chuyển</p>
             ) : status.url ? (
-              <code className="pairing-url">{status.url}</code>
+              <p className="hint">Không quét được mã? Mở địa chỉ này trên trình duyệt điện thoại: <code className="pairing-url">{status.url}</code></p>
             ) : null}
             {status.message ? <p className="pairing-progress" role="status" aria-live="polite">{status.message}</p> : null}
           </div>
