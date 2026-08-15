@@ -31,7 +31,7 @@ pwsh -File scripts/ci/build_android_candidate.ps1 -Variant arm64Release
 ```
 
 The production artifact is written to
-`artifacts/android/AffiliateReport-v2.1.2-arm64.apk`. The build script never creates or
+`artifacts/android/AffiliateReport-v2.1.3-arm64.apk`. The build script never creates or
 falls back to a signing key.
 
 ## Storage and lifecycle

@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.1.3 - 2026-08-15
+
+**Biểu tượng ứng dụng mới, dùng chung cho cả máy tính và điện thoại.** Trước đây bản
+Windows và bản Android mang hai icon khác hẳn nhau vì Android vẫn giữ nguyên icon mặc
+định của bộ công cụ. Nay cả hai vẽ từ cùng một bản thiết kế: ba cột biểu đồ tăng dần và
+một đồng xu, theo đúng màu của ứng dụng.
+
+**Bản cài trên máy không còn bày những thứ không dùng tới.** Máy cá nhân chỉ có một người
+dùng nên nút Đăng xuất không đăng xuất được gì, trang Người dùng không có ai để phân vai,
+còn ô hiển thị vai trò chỉ lặp lại điều đã biết. Ba mục đó được ẩn đi. Bản triển khai dùng
+chung nhiều người vẫn giữ đầy đủ.
+
+**Dễ bấm hơn trên điện thoại.** Dòng "Chi tiết" của mỗi đơn hàng trước đây chỉ cao 24 px,
+thấp hơn nhiều so với ngưỡng chạm thoải mái; mỗi trang đơn hàng có khoảng 92 chỗ như vậy.
+Nút trong phần tuỳ chỉnh trang chủ và ô chọn số dòng cũng bị hụt tương tự. Tất cả đã được
+nâng lên 44 px.
+
+- Sửa lỗi thanh tiến độ tải bản cập nhật bị một luật CSS khác cắt cụt còn 8 px, khiến nhãn
+  và số byte bị che mất.
+- Nội bộ: phiên bản nay chỉ khai ở một nơi và các chỗ còn lại được sinh tự động, nên không
+  còn cảnh sót một file khi phát hành.
+
 ## v2.1.2 - 2026-08-14
 
 **Trang Cập nhật ứng dụng nói đúng chuyện đang xảy ra.** Trước đây tiến trình của lần cập

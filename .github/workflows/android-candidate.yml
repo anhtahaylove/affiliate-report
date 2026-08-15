@@ -61,7 +61,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ANDROID_CI_NAME }}
-          path: artifacts/android/AffiliateReport-v2.1.2-x86_64-debug.apk
+          path: artifacts/android/AffiliateReport-v2.1.3-x86_64-debug.apk
           if-no-files-found: error
           retention-days: 3
 
@@ -168,12 +168,12 @@ jobs:
             .\scripts\ci\build_android_candidate.ps1 -Variant arm64Release -SkipWebBuild
             .\scripts\ci\build_android_candidate.ps1 -Variant ciRelease -SkipWebBuild
 
-            if ($versionPy -notmatch 'APP_VERSION = "2\.1\.2"' -or $gradle -notmatch 'versionCode 2001002' -or $gradle -notmatch 'versionName "2\.1\.2"') {
-              throw "Synthetic Android upgrade source is not the exact 2.1.2 candidate"
+            if ($versionPy -notmatch 'APP_VERSION = "2\.1\.3"' -or $gradle -notmatch 'versionCode 2001003' -or $gradle -notmatch 'versionName "2\.1\.3"') {
+              throw "Synthetic Android upgrade source is not the exact 2.1.3 candidate"
             }
-            $versionPy.Replace('APP_VERSION = "2.1.2"', 'APP_VERSION = "2.1.3"') | Set-Content -Encoding utf8 $versionPath
-            $gradle.Replace('versionCode 2001002', 'versionCode 2001003').Replace('versionName "2.1.2"', 'versionName "2.1.3"') | Set-Content -Encoding utf8 $gradlePath
-            $builder.Replace('$version = "2.1.2"', '$version = "2.1.3"').Replace('$versionCode = "2001002"', '$versionCode = "2001003"') | Set-Content -Encoding utf8 $builderPath
+            $versionPy.Replace('APP_VERSION = "2.1.3"', 'APP_VERSION = "2.1.4"') | Set-Content -Encoding utf8 $versionPath
+            $gradle.Replace('versionCode 2001003', 'versionCode 2001004').Replace('versionName "2.1.3"', 'versionName "2.1.4"') | Set-Content -Encoding utf8 $gradlePath
+            $builder.Replace('$version = "2.1.3"', '$version = "2.1.4"').Replace('$versionCode = "2001003"', '$versionCode = "2001004"') | Set-Content -Encoding utf8 $builderPath
             .\scripts\ci\build_android_candidate.ps1 -Variant ciRelease -SkipWebBuild
           }
           finally {
@@ -199,8 +199,8 @@ jobs:
           if ($cert -ne $env:ANDROID_CERT_SHA256) { throw "Android signing certificate does not match the pinned release key" }
           $aapt2 = Join-Path $env:ANDROID_HOME "build-tools\36.0.0\aapt2.exe"
           $badging = (& $aapt2 dump badging $apk) -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $badging -notmatch "package: name='vn\.io\.huuhungn\.affiliatereport'.*versionCode='2001002'.*versionName='2\.1\.2'") {
-            throw "APK package/version metadata is not the v2.1.2 release contract"
+          if ($LASTEXITCODE -ne 0 -or $badging -notmatch "package: name='vn\.io\.huuhungn\.affiliatereport'.*versionCode='2001003'.*versionName='2\.1\.3'") {
+            throw "APK package/version metadata is not the v2.1.3 release contract"
           }
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $apk).Hash
           $size = (Get-Item -LiteralPath $apk).Length
@@ -216,15 +216,15 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ANDROID_CANDIDATE_NAME }}
-          path: artifacts/android/AffiliateReport-v2.1.2-arm64.apk
+          path: artifacts/android/AffiliateReport-v2.1.3-arm64.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v7
         with:
           name: affiliate-report-android-upgrade-${{ github.sha }}
           path: |
-            artifacts/android/AffiliateReport-v2.1.2-x86_64-release.apk
             artifacts/android/AffiliateReport-v2.1.3-x86_64-release.apk
+            artifacts/android/AffiliateReport-v2.1.4-x86_64-release.apk
           if-no-files-found: error
           retention-days: 1
 
@@ -250,7 +250,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Same-key synthetic 2.1.2 to 2.1.3 upgrade preserves SQLite
+      - name: Same-key synthetic 2.1.3 to 2.1.4 upgrade preserves SQLite
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
