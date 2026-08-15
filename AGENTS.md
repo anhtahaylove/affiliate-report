@@ -85,6 +85,16 @@ dashboard và bị cắt còn 8px — lỗi lọt tới bản phát hành.
 Vòng quét route **không** chạm tới trạng thái có điều kiện. Thêm UI chỉ hiện ở một trạng thái
 thì phải tự quét trạng thái đó.
 
+**`web/src/lib/format.ts` phải giữ zero-dependency.** File này và các `*.test.mjs` cạnh nó chạy
+thẳng qua `node --test src/lib/*.test.mjs` — không qua bundler, không hiểu alias `@/*`, không tự
+suy ra `.ts` từ specifier thiếu đuôi. Từng thử sửa `errorMessage()` bằng
+`import { ApiError } from "@/lib/api"` — vỡ ở `node --test` (`ERR_MODULE_NOT_FOUND`, alias không
+phải package thật); đổi sang relative extension-less (`from "./api"`) vỡ y hệt; đổi sang `.ts`
+extension thì Node chạy được nhưng `tsc --noEmit` từ chối (`TS5097`, thiếu
+`allowImportingTsExtensions`). Không tổ hợp specifier nào chạy được ở cả hai runtime cùng lúc.
+Khi cần phân biệt loại lỗi ngay trong `format.ts`, duck-type thay vì import nominal type (vd.
+`"status" in reason` thay vì `instanceof ApiError`).
+
 ## Validate dữ liệu: vài quy tắc có nhiều bản sao cố ý
 
 Đừng gộp thành "một nguồn chung" tưởng sạch hơn — mỗi bản một vai trò khác nhau, gộp sai từng
