@@ -1843,8 +1843,6 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .chart-data-disclosure { margin-top: 10px; }
 .chart-data-disclosure summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent-strong); cursor: pointer; font-weight: 700; }
 
-.workflow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
-.workflow-steps > * { min-width: 0; }
 .orders-sticky-toolbar { position: sticky; z-index: 5; top: 10px; display: flex; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: color-mix(in srgb, var(--surface) 96%, transparent); box-shadow: 0 4px 8px rgba(15, 40, 39, .08); }
 .saved-view-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .saved-view-chip { padding: 5px 8px; border-radius: 999px; background: var(--teal-soft); color: var(--accent-strong); font-size: .76rem; font-weight: 700; }
@@ -1871,9 +1869,9 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .account-meta dd { overflow-wrap: anywhere; }
 .user-permission-grid { display: grid; grid-template-columns: minmax(180px, 280px) auto; align-items: end; gap: 10px; }
 .user-permission-grid .row-actions button { min-height: 44px; }
-.upload-progress, .download-progress { display: grid; gap: 7px; }
-.upload-progress progress, .download-progress progress { width: 100%; }
-.upload-progress > span, .download-progress > span { color: var(--ink-soft); font-size: .82rem; }
+.download-progress { display: grid; gap: 7px; }
+.download-progress progress { width: 100%; }
+.download-progress > span { color: var(--ink-soft); font-size: .82rem; }
 .column-controls { min-width: 180px; }
 .column-controls summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; }
 .column-controls[open] { flex-basis: 100%; }
@@ -1946,7 +1944,6 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .saved-view-picker { padding-top: 12px; }
   .saved-view-create { justify-content: stretch; }
   .saved-view-create > * { flex: 1 1 auto; }
-  .workflow-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .update-stages { grid-template-columns: 1fr; }
   .update-stages li + li { border-left: 0; border-top: 1px solid var(--line); }
 }
@@ -2010,7 +2007,6 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .quality-list li a, .pace-list > div a { display: inline-flex; align-items: center; justify-content: flex-end; min-width: 44px; min-height: 44px; }
   .orders-sticky-toolbar select, .orders-sticky-toolbar button { min-height: 44px; }
   .orders-sticky-toolbar { position: static; display: grid; }
-  .workflow-steps { grid-template-columns: 1fr 1fr; }
   .update-primary-panel, .update-support-panel { padding: 18px; }
   .update-overview, .download-progress > div { align-items: stretch; flex-direction: column; }
   .update-state-actions { display: grid; grid-template-columns: 1fr; width: 100%; }

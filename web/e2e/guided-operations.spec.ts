@@ -84,7 +84,7 @@ test("imports zero-account state is safe and successful import keeps results plu
   await page.goto("/imports/");
   await expect(page.getByRole("heading", { name: "Tạo account trước khi nhập dữ liệu" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Tạo account đầu tiên" })).toBeVisible();
-  await expect(page.getByLabel("1. Tài khoản TikTok")).toHaveCount(0);
+  await expect(page.getByLabel("Tài khoản TikTok")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Nhập dữ liệu" })).toHaveCount(0);
 
   await page.unrouteAll({ behavior: "wait" });
@@ -99,8 +99,8 @@ test("imports zero-account state is safe and successful import keeps results plu
     return route.fulfill({ json: { items: historyItems, count: historyItems.length, limit: 20 } });
   });
   await page.reload();
-  await expect(page.getByLabel("1. Tài khoản TikTok")).toHaveValue("SHOP_A");
-  await expect(page.getByLabel("1. Tài khoản TikTok").locator("option")).toHaveText("Gian hàng chính — SHOP_A");
+  await expect(page.getByLabel("Tài khoản TikTok")).toHaveValue("SHOP_A");
+  await expect(page.getByLabel("Tài khoản TikTok").locator("option")).toHaveText("Gian hàng chính — SHOP_A");
   await page.getByLabel("File Excel đã xuất từ TikTok").setInputFiles({ name: "affiliate_orders.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("fixture") });
   await page.getByRole("button", { name: "Nhập dữ liệu" }).click();
   await expect(page.getByText("2 dòng mới", { exact: false })).toBeVisible();

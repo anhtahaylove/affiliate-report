@@ -27,8 +27,6 @@ const OUTCOME_LABELS: Record<FileOutcome, string> = {
   failed: "Lỗi",
 };
 
-const IMPORT_STEPS = ["Tài khoản", "Chọn tệp", "Hàng đợi", "Nhập dữ liệu"] as const;
-
 // TikTok luôn xuất tệp dạng affiliate_orders<phần đuôi đổi mỗi lần xuất>.xlsx (vd.
 // affiliate_orders_7674048855708600085.xlsx). Khớp affiliate_report/parser.py:FILENAME_PATTERN —
 // đổi một bên mà quên bên kia thì phía không đổi vẫn nhận/chặn nhầm tệp.
@@ -52,7 +50,6 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
   const [undo, setUndo] = useState<UndoImportPreview | null>(null);
   const fileQueue = useMemo(() => Array.from(files ?? []), [files]);
   const selectedAccount = accounts.includes(account) ? account : accounts[0] ?? "";
-  const activeStep = busy ? 3 : fileQueue.length ? 2 : selectedAccount ? 1 : 0;
   const refreshHistory = useCallback(async () => {
     const data = await loadImportHistory(20);
     setHistory(data.items);
@@ -145,23 +142,20 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
       <section className="section panel">
         <div className="section-heading">
           <div>
-            <p className="section-label">Nhập tuần tự</p>
-            <h2>Chọn account → Chọn tệp → Xem hàng đợi → Nhập</h2>
+            <p className="section-label">Nhập dữ liệu</p>
+            <h2>Chọn tài khoản và tệp cần nhập</h2>
             <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp. {EXPORT_FILENAME_HINT}</p>
           </div>
         </div>
         {canWrite(user) ? <PairingPanel account={selectedAccount} onNhanTep={refreshHistory} /> : null}
         {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có account khả dụng</p><h3>{isOwner(user) ? "Tạo account trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp account"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một account để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi account được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo account đầu tiên</Link> : null}</div> : <>
-        <ol className="workflow-steps" aria-label="Quy trình nhập dữ liệu">
-          {IMPORT_STEPS.map((step, index) => <li key={step} data-state={index < activeStep ? "done" : index === activeStep ? "active" : "pending"}>{step}</li>)}
-        </ol>
         <div className="upload-form">
           <div className="field">
-            <label htmlFor="import-account">1. Tài khoản TikTok</label>
+            <label htmlFor="import-account">Tài khoản TikTok</label>
             <select id="import-account" value={selectedAccount} onChange={(event) => setAccount(event.target.value)} disabled={busy}>{accounts.map((item) => <option key={item} value={item}>{directory.label(item)}</option>)}</select>
           </div>
           <div className="field dropzone">
-            <span className="field-label">2. Tệp Excel đã xuất từ TikTok</span>
+            <span className="field-label">Tệp Excel đã xuất từ TikTok</span>
             <div className="file-picker">
               <input className="sr-only" id="import-files" aria-label="File Excel đã xuất từ TikTok" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} disabled={busy} />
               <label className="file-picker-button" htmlFor="import-files">Chọn tệp Excel</label>
@@ -169,9 +163,9 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
             </div>
             <span>Có thể chọn nhiều tệp; hệ thống sẽ nhập lần lượt và tự chống trùng.</span>
           </div>
-          <div className="import-queue" aria-live="polite">
-            <div className="record-title"><strong>3. Hàng đợi</strong><span>{integer.format(fileQueue.length)} tệp</span></div>
-            {fileQueue.length ? (
+          {fileQueue.length ? (
+            <div className="import-queue" aria-live="polite">
+              <div className="record-title"><strong>Tệp đã chọn</strong><span>{busy ? `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} đã xử lý` : `${integer.format(fileQueue.length)} tệp`}</span></div>
               <ol>
                 {fileQueue.map((file, index) => (
                   <li key={`${file.name}-${file.lastModified}`} data-state={index < processedFiles ? "done" : file.name === currentFile ? "active" : "pending"}>
@@ -180,13 +174,8 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
                   </li>
                 ))}
               </ol>
-            ) : <p className="empty">Chưa chọn tệp.</p>}
-          </div>
-          <div className="upload-progress" aria-live="polite">
-            <label htmlFor="import-progress">4. Tiến độ tải lên</label>
-            <progress id="import-progress" max={Math.max(1, fileQueue.length)} value={processedFiles} />
-            <span>{busy && currentFile ? `Đang xử lý ${currentFile}` : `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} tệp đã xử lý`}</span>
-          </div>
+            </div>
+          ) : null}
           <button className="primary" type="button" onClick={() => void submit()} disabled={busy || !selectedAccount || !fileQueue.length}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>
           {message ? <p className="upload-result" role="status">{message}</p> : null}
           {results.length ? (
