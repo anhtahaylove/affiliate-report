@@ -4,6 +4,7 @@ import { Bookmark, ChevronDown, Save, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createSavedView, deleteSavedView, loadSavedViews, type SavedReportView, type SavedViewRoute, updateSavedView } from "@/lib/api";
+import { ConfirmDialog } from "@/components/ui";
 
 const ARRAY_FILTERS = new Set(["account", "status"]);
 const NUMBER_FILTERS = new Set(["size", "top"]);
@@ -20,6 +21,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const current = views.find((view) => String(view.id) === selected);
   const currentFilters = captureFilters(searchParams, route);
 
@@ -79,7 +81,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
   }
 
   async function remove() {
-    if (!current || busy || !window.confirm(`Xóa chế độ xem “${current.name}”?`)) return;
+    if (!current) return;
     setBusy(true);
     setError("");
     try {
@@ -90,6 +92,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
       setError(reason instanceof Error ? reason.message : "Không thể xóa chế độ xem.");
     } finally {
       setBusy(false);
+      setConfirmingRemove(false);
     }
   }
 
@@ -107,9 +110,19 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
       </button>
       <div className={`saved-views-content${mobileOpen ? " is-open" : ""}`} id={`saved-views-content-${route}`}>
         <div className="saved-view-picker"><Bookmark size={17} aria-hidden="true" /><label htmlFor={`saved-view-${route}`}>Chế độ xem</label><select id={`saved-view-${route}`} value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Chọn chế độ xem…</option>{views.map((view) => <option key={view.id} value={view.id}>{view.is_default ? "★ " : ""}{view.name}</option>)}</select><button type="button" onClick={() => apply(current)} disabled={!current || busy}>Áp dụng</button></div>
-        <div className="saved-view-create"><input aria-label="Tên chế độ xem mới" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} placeholder="Lưu phạm vi hiện tại…" /><label><input type="checkbox" checked={makeDefault} onChange={(event) => setMakeDefault(event.target.checked)} />Mặc định</label><button className="primary" type="button" onClick={() => void saveNew()} disabled={!name.trim() || busy}><Save size={16} aria-hidden="true" />Lưu mới</button>{current ? <><button type="button" onClick={() => void overwrite()} disabled={busy}>Ghi đè</button><button className="danger-action" type="button" onClick={() => void remove()} disabled={busy} aria-label="Xóa chế độ xem"><Trash2 size={16} aria-hidden="true" /></button></> : null}</div>
+        <div className="saved-view-create"><input aria-label="Tên chế độ xem mới" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} placeholder="Lưu phạm vi hiện tại…" /><label><input type="checkbox" checked={makeDefault} onChange={(event) => setMakeDefault(event.target.checked)} />Mặc định</label><button className="primary" type="button" onClick={() => void saveNew()} disabled={!name.trim() || busy}><Save size={16} aria-hidden="true" />Lưu mới</button>{current ? <><button type="button" onClick={() => void overwrite()} disabled={busy}>Ghi đè</button><button className="danger-action" type="button" onClick={() => setConfirmingRemove(true)} disabled={busy} aria-label="Xóa chế độ xem"><Trash2 size={16} aria-hidden="true" /></button></> : null}</div>
       </div>
       {error ? <p className="filter-error" role="alert">{error}</p> : null}
+      <ConfirmDialog
+        open={confirmingRemove}
+        title={`Xóa chế độ xem "${current?.name ?? ""}"?`}
+        confirmLabel="Xóa chế độ xem"
+        busy={busy}
+        onCancel={() => setConfirmingRemove(false)}
+        onConfirm={() => void remove()}
+      >
+        <p>Bộ lọc đã lưu này sẽ bị xóa. Dữ liệu báo cáo không bị ảnh hưởng.</p>
+      </ConfirmDialog>
     </section>
   );
 }

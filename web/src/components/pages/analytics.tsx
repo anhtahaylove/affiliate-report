@@ -8,7 +8,7 @@ import { UrlFilters } from "@/components/filters";
 import { Notice, Skeleton, StateCard, StatusBadge } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
 import { qualityIssueCount, qualityIssues, rejectedAllTime } from "@/lib/data-quality";
-import { formatDateTime, formatMoney, integer, percent, statusLabel } from "@/lib/format";
+import { agingBucketLabel, formatDateTime, formatMoney, integer, percent, statusLabel } from "@/lib/format";
 import { AccountIdentity } from "@/components/account-identity";
 import type { AccountDirectory } from "@/lib/account-directory";
 
@@ -29,10 +29,10 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
   const { data, error, loading } = useApi<AnalyticsResponse>(
     `analytics-v2:${JSON.stringify([filters.accounts, filters.statuses, filters.start, filters.end])}`,
     () => loadAnalytics({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end }),
-    "Không thể tải Commerce Intelligence.",
+    "Không thể tải dữ liệu phân tích.",
   );
   if (error) return <Notice text={error} />;
-  if (loading) return <Skeleton rows={4} tall label="Đang tải Commerce Intelligence" />;
+  if (loading) return <Skeleton rows={4} tall label="Đang tải Phân tích" />;
   if (!data) return <StateCard text="Chưa có dữ liệu phân tích." />;
 
   const previous = data.previous_period?.summary;
@@ -104,8 +104,17 @@ export function AnalyticsPage({ filters, directory }: { filters: UrlFilters; dir
           <DimensionLeaderboard title="Sản phẩm dẫn đầu" eyebrow="Hiệu suất sản phẩm" rows={data.products} total={data.summary.actual_commission} />
           <DimensionLeaderboard title="Cửa hàng tạo doanh thu" eyebrow="Đóng góp cửa hàng" rows={data.shops} total={data.summary.actual_commission} />
           {/* Nội dung nhận diện bằng ID 19 chữ số, không có tên. Chữ đều giúp đọc và đối chiếu
-              được; title cho phép xem đủ khi ô bị cắt. */}
-          <DimensionLeaderboard title="Nội dung chuyển đổi" eyebrow="Hiệu suất nội dung" rows={data.content} total={data.summary.actual_commission} mono />
+              được; title cho phép xem đủ khi ô bị cắt; labelPrefix + footnote nói rõ đó là MÃ,
+              không phải chọn nhầm hiển thị lỗi, và chỉ người dùng tra được ở đâu. */}
+          <DimensionLeaderboard
+            title="Nội dung chuyển đổi"
+            eyebrow="Hiệu suất nội dung"
+            rows={data.content}
+            total={data.summary.actual_commission}
+            mono
+            labelPrefix="Mã nội dung: "
+            footnote="TikTok chưa cung cấp tên nội dung, chỉ có mã — bạn có thể tra mã này trong Trung tâm nhà bán TikTok để biết đó là video nào."
+          />
         </Tabs.Content>
 
         <Tabs.Content value="settlement" className="analytics-tab-panel">
@@ -143,19 +152,21 @@ function BreakdownTable({ rows, mode, directory }: { rows: AnalyticsBreakdownRow
   return <section className="canvas-panel desktop-data-table"><div className="panel-heading"><div><p className="section-label">Chi tiết</p><h2>Bảng đóng góp</h2></div></div><div className="table-wrap" role="region" aria-label="Bảng đóng góp theo tài khoản" tabIndex={0}><table><thead><tr><th>{mode === "status" ? "Trạng thái" : "Tài khoản"}</th><th>Đơn</th><th>GMV thực tế</th><th>Hoa hồng</th><th>Tỷ trọng</th></tr></thead><tbody>{rows.map((row) => <tr key={row[mode === "status" ? "status" : "account"] ?? "unknown"}><td>{mode === "status" ? <StatusBadge status={row.status} /> : directory ? <AccountIdentity directory={directory} code={row.account} /> : row.account}</td><td>{integer.format(row.orders)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.commission_share)}</td></tr>)}</tbody></table></div></section>;
 }
 
-function DimensionLeaderboard({ title, eyebrow, rows, total, mono = false }: { title: string; eyebrow: string; rows: AnalyticsDimensionRow[]; total: number; mono?: boolean }) {
+function DimensionLeaderboard({ title, eyebrow, rows, total, mono = false, labelPrefix, footnote }: { title: string; eyebrow: string; rows: AnalyticsDimensionRow[]; total: number; mono?: boolean; labelPrefix?: string; footnote?: string }) {
   // Đo trên dữ liệu thật: 3 dòng đầu chiếm 56% hoa hồng ở cả sản phẩm lẫn cửa hàng. Mức tập
   // trung đó mới là điều cần thấy, chứ không phải một danh sách phẳng — nên mỗi dòng hiện
   // phần trăm đóng góp, và phần đầu bảng nói thẳng nhóm dẫn đầu chiếm bao nhiêu.
   const dan_dau = rows.slice(0, 3).reduce((con, row) => con + row.actual_commission, 0);
   const ty_trong = (giatri: number) => (total > 0 ? giatri / total : 0);
+  const label = (value: string) => (labelPrefix ? `${labelPrefix}${value}` : value);
   return (
     <section className="canvas-panel dimension-leaderboard">
       <div className="panel-heading"><div><p className="section-label">{eyebrow}</p><h2>{title}</h2></div><span>Top {rows.length}</span></div>
       {rows.length ? <>
         {total > 0 ? <p className="dimension-concentration">3 dòng đầu chiếm <strong>{percent(ty_trong(dan_dau))}</strong> hoa hồng trong phạm vi</p> : null}
-        <ol className="dimension-ranks">{rows.slice(0, 5).map((row, index) => <li key={row.id}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong className="dimension-label" data-mono={mono ? "true" : undefined} title={row.label}>{row.label}</strong><small>{integer.format(row.orders)} đơn · {integer.format(row.units_sold)} sản phẩm</small></div><div><b>{formatMoney(row.actual_commission)}</b><small>{percent(ty_trong(row.actual_commission))} · Huỷ {percent(row.cancellation_rate)}</small></div></li>)}</ol>
-        <div className="table-wrap desktop-data-table" role="region" aria-label={`Bảng ${title.toLowerCase()}`} tabIndex={0}><table><thead><tr><th>Tên</th><th>Đơn</th><th>SL</th><th>Hoàn</th><th>GMV</th><th>Hoa hồng</th><th>Tỷ lệ huỷ</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td className="dimension-cell" data-mono={mono ? "true" : undefined} title={row.label}>{row.label}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{integer.format(row.units_refunded)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.cancellation_rate)}</td></tr>)}</tbody></table></div>
+        <ol className="dimension-ranks">{rows.slice(0, 5).map((row, index) => <li key={row.id}><span className="rank-index">{String(index + 1).padStart(2, "0")}</span><div><strong className="dimension-label" data-mono={mono ? "true" : undefined} title={row.label}>{label(row.label)}</strong><small>{integer.format(row.orders)} đơn · {integer.format(row.units_sold)} sản phẩm</small></div><div><b>{formatMoney(row.actual_commission)}</b><small>{percent(ty_trong(row.actual_commission))} · Huỷ {percent(row.cancellation_rate)}</small></div></li>)}</ol>
+        <div className="table-wrap desktop-data-table" role="region" aria-label={`Bảng ${title.toLowerCase()}`} tabIndex={0}><table><thead><tr><th>Tên</th><th>Đơn</th><th>SL</th><th>SL hoàn</th><th>GMV</th><th>Hoa hồng</th><th>Tỷ lệ huỷ</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td className="dimension-cell" data-mono={mono ? "true" : undefined} title={row.label}>{label(row.label)}</td><td>{integer.format(row.orders)}</td><td>{integer.format(row.units_sold)}</td><td>{integer.format(row.units_refunded)}</td><td>{formatMoney(row.actual_gmv)}</td><td>{formatMoney(row.actual_commission)}</td><td>{percent(row.cancellation_rate)}</td></tr>)}</tbody></table></div>
+        {footnote ? <p className="hint">{footnote}</p> : null}
       </> : <p className="empty">Chưa có dữ liệu trong phạm vi này.</p>}
     </section>
   );
@@ -166,9 +177,9 @@ function SettlementStudio({ data }: { data: AnalyticsResponse }) {
     <div className="settlement-studio">
       <section className="settlement-hero canvas-panel">
         <div><p className="section-label">Dòng tiền nhận về</p><h2>{formatMoney(data.summary.final_received)}</h2><p>Tiền đã nhận cuối cùng trong phạm vi đang xem.</p></div>
-        <div className="settlement-kpis"><InsightMetric label="Đã quyết toán" value={integer.format(data.settlement.settled_lines)} note={`Trung vị ${data.settlement.median_lag_days ?? "—"} ngày`} /><InsightMetric label="Đang chờ" value={integer.format(data.settlement.pending_lines)} note="Theo dõi các bucket bên dưới" tone={data.settlement.pending_lines ? "warning" : "success"} /><InsightMetric label="Chênh tiền về" value={formatMoney(data.summary.final_received_variance)} note="So với hoa hồng thực tế" tone={data.summary.final_received_variance < 0 ? "danger" : "neutral"} /></div>
+        <div className="settlement-kpis"><InsightMetric label="Đã quyết toán" value={integer.format(data.settlement.settled_lines)} note={`Thường mất ${data.settlement.median_lag_days ?? "—"} ngày`} /><InsightMetric label="Đang chờ" value={integer.format(data.settlement.pending_lines)} note="Xem chi tiết bên dưới" tone={data.settlement.pending_lines ? "warning" : "success"} /><InsightMetric label="Chênh tiền về" value={formatMoney(data.summary.final_received_variance)} note="So với hoa hồng thực tế" tone={data.summary.final_received_variance < 0 ? "danger" : "neutral"} /></div>
       </section>
-      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Tuổi khoản chờ</p><h2>Khoản chưa quyết toán theo thời gian</h2></div></div>{data.settlement.pending_aging.length ? <div className="aging-grid">{data.settlement.pending_aging.map((row) => <article key={row.bucket}><span>{row.bucket}</span><strong>{integer.format(row.count)}</strong><small>dòng đang chờ</small></article>)}</div> : <p className="empty">Không có khoản đang chờ trong phạm vi này.</p>}</section>
+      <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Tuổi khoản chờ</p><h2>Khoản chưa quyết toán theo thời gian</h2></div></div>{data.settlement.pending_aging.length ? <div className="aging-grid">{data.settlement.pending_aging.map((row) => <article key={row.bucket}><span>{agingBucketLabel(row.bucket)}</span><strong>{integer.format(row.count)}</strong><small>dòng đang chờ</small></article>)}</div> : <p className="empty">Không có khoản đang chờ trong phạm vi này.</p>}</section>
     </div>
   );
 }
@@ -179,7 +190,7 @@ function QualityStudio({ data }: { data: AnalyticsResponse }) {
   const issues = qualityIssues(quality);
   return (
     <div className="quality-studio">
-      <section className="canvas-panel quality-summary"><div className="panel-heading"><div><p className="section-label">Dòng dữ liệu</p><h2>Lịch sử xử lý dữ liệu</h2></div><span>Cập nhật {formatDateTime(quality.latest_import_at)}</span></div><div className="quality-flow"><InsightMetric label="Lượt import" value={integer.format(quality.import_batches)} note="batch nguồn bất biến" /><InsightMetric label="Dòng mới" value={integer.format(quality.import_inserted)} note="được thêm vào lịch sử" tone="success" /><InsightMetric label="Đã cập nhật" value={integer.format(quality.import_updated)} note="snapshot mới hơn" /><InsightMetric label="Không thay đổi" value={integer.format(quality.import_unchanged)} note="đã chống trùng" /></div></section>
+      <section className="canvas-panel quality-summary"><div className="panel-heading"><div><p className="section-label">Dòng dữ liệu</p><h2>Lịch sử xử lý dữ liệu</h2></div><span>Cập nhật {formatDateTime(quality.latest_import_at)}</span></div><div className="quality-flow"><InsightMetric label="Lượt nhập" value={integer.format(quality.import_batches)} note="mỗi lần nhập tệp tính 1 lượt" /><InsightMetric label="Dòng mới" value={integer.format(quality.import_inserted)} note="được thêm vào lịch sử" tone="success" /><InsightMetric label="Đã cập nhật" value={integer.format(quality.import_updated)} note="đơn đã có, cập nhật thông tin mới" /><InsightMetric label="Không thay đổi" value={integer.format(quality.import_unchanged)} note="trùng lần nhập trước, đã tự bỏ qua" /></div></section>
       <section className="canvas-panel"><div className="panel-heading"><div><p className="section-label">Ngoại lệ dữ liệu</p><h2>Vấn đề cần làm sạch</h2></div><Link className="text-action" href="/imports">Mở lịch sử import</Link></div><div className="exception-list">{issues.map(({ label, value, help }) => <article data-tone={value ? "warning" : "success"} key={label}><div><strong>{label}</strong><p>{help}</p></div><span>{integer.format(value)}</span></article>)}</div>
         {/* Cố ý nằm NGOÀI danh sách vấn đề: TikTok để trống ngày quyết toán cho mọi đơn chưa
             được trả tiền, nên đây là tình trạng bình thường chứ không phải dữ liệu bẩn. */}

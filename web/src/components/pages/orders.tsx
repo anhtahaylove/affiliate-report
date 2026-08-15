@@ -10,6 +10,26 @@ import { errorMessage, formatDateTime, formatMoney, integer, statusLabel } from 
 import { AccountIdentity } from "@/components/account-identity";
 import type { AccountDirectory } from "@/lib/account-directory";
 
+// TikTok trả giá trị thô tiếng Anh (vd. "Affiliate", "Standard"), khác hẳn `status` vốn đã có
+// statusLabel() dịch sẵn. Thiếu khoá nào thì rơi xuống giá trị gốc — không giấu giá trị lạ.
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  affiliate: "Tiếp thị liên kết",
+};
+
+const COMMISSION_TYPE_LABELS: Record<string, string> = {
+  standard: "Tiêu chuẩn",
+};
+
+function orderTypeLabel(value: string | null | undefined) {
+  if (!value) return "—";
+  return ORDER_TYPE_LABELS[value.trim().toLowerCase()] ?? value;
+}
+
+function commissionTypeLabel(value: string | null | undefined) {
+  if (!value) return "—";
+  return COMMISSION_TYPE_LABELS[value.trim().toLowerCase()] ?? value;
+}
+
 function csvCell(value: unknown) {
   const text = value == null ? "" : String(value);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -148,8 +168,9 @@ export function OrdersPage({ filters, directory }: { filters: UrlFilters; direct
             </select>
           </label>
           <a className="button-link" download="affiliate-orders.xlsx" href={ordersExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end, search: filters.search })}>Xuất toàn bộ ra Excel</a>
-          <button type="button" onClick={() => downloadCsv(`orders-${filters.start}-${filters.end}.csv`, orders)} disabled={!orders.length}>Xuất CSV trang này</button>
+          <button type="button" onClick={() => downloadCsv(`orders-${filters.start}-${filters.end}.csv`, orders)} disabled={!orders.length}>Xuất CSV (chỉ trang đang xem)</button>
         </div>
+        <p className="hint">Excel: toàn bộ đơn theo bộ lọc hiện tại · CSV: chỉ những đơn đang hiện trên màn hình.</p>
         <details className="column-controls">
           <summary>Cột hiển thị ({integer.format(activeColumns.length)}/{integer.format(ORDER_COLUMNS.length)})</summary>
           <div className="column-control-grid">
@@ -217,11 +238,11 @@ function OrderDetails({ row, index }: { row: OrderRow; index: number }) {
   return (
     <details className="order-detail">
       <summary>{`Chi tiết ${row.order_id ?? row.sku_id ?? index + 1}`}</summary>
-      <span>ID sản phẩm: {row.product_id ?? "—"}</span>
+      <span>Mã sản phẩm: {row.product_id ?? "—"}</span>
       <span>Cửa hàng: {row.shop_name ?? "—"} ({row.shop_id ?? "—"})</span>
       <span>Nội dung: {row.content_type ?? "—"} / {row.content_id ?? "—"}</span>
-      <span>Loại đơn: {row.order_type ?? "—"}</span>
-      <span>Loại hoa hồng: {row.commission_type ?? "—"}</span>
+      <span>Loại đơn: {orderTypeLabel(row.order_type)}</span>
+      <span>Loại hoa hồng: {commissionTypeLabel(row.commission_type)}</span>
       <span>Ngày quyết toán: {formatDateTime(row.settlement_date)}</span>
       <span>Hoa hồng thực tế (sau khi trừ không đủ điều kiện): {formatMoney(row.actual_commission)}</span>
       <span>Đã nhận: {formatMoney(row.final_received)}</span>
@@ -246,7 +267,7 @@ function OrderVersions({ businessKey }: { businessKey: string }) {
       <summary>Lịch sử phiên bản</summary>
       {error ? <span role="alert">{error}</span> : null}
       {!rows && !error ? <span>Đang tải…</span> : null}
-      {rows?.map((row) => <span key={row.version}>Bản {integer.format(row.version)}{row.is_current ? " (đang dùng)" : ""} · {statusLabel(row.status)} · GMV {formatMoney(row.gmv)} · HH {formatMoney(row.estimated_commission)} · từ {row.filename ?? "—"} lúc {formatDateTime(row.recorded_at)}</span>)}
+      {rows?.map((row) => <span key={row.version}>Bản {integer.format(row.version)}{row.is_current ? " (đang dùng)" : ""} · {statusLabel(row.status)} · GMV {formatMoney(row.gmv)} · Hoa hồng {formatMoney(row.estimated_commission)} · từ {row.filename ?? "—"} lúc {formatDateTime(row.recorded_at)}</span>)}
       {rows?.length === 0 ? <span>Chưa có lịch sử phiên bản.</span> : null}
     </details>
   );

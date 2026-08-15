@@ -26,7 +26,7 @@ import { RecentImports } from "@/components/recent-imports";
 import { AccountIdentity } from "@/components/account-identity";
 import { useApi } from "@/lib/use-api";
 import { qualityIssueCount } from "@/lib/data-quality";
-import { achievementTone, currentMonth, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
+import { achievementTone, agingBucketLabel, currentMonth, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
 import type { AccountDirectory } from "@/lib/account-directory";
 
 const CommissionTrendChart = dynamic(
@@ -126,8 +126,8 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
         </div>
         <div className="pulse-metrics">
           <PulseMetric primary label="Hoa hồng thực tế" value={formatMoney(summary.actual_commission)} delta={commissionDelta == null ? "Chưa có kỳ so sánh" : deltaMoney(commissionDelta)} tone={commissionDelta != null && commissionDelta < 0 ? "danger" : "success"} />
-          <PulseMetric label="GMV thực tế" value={formatMoney(summary.actual_gmv ?? total?.actual_gmv)} delta={`Tỷ lệ HH ${percent(summary.effective_commission_rate)}`} />
-          <PulseMetric label="Đơn hàng" value={integer.format(summary.orders)} delta={orderDelta == null ? `${integer.format(summary.order_lines)} dòng` : deltaCount(orderDelta)} tone={orderDelta != null && orderDelta < 0 ? "danger" : "success"} />
+          <PulseMetric label="GMV thực tế" value={formatMoney(summary.actual_gmv ?? total?.actual_gmv)} delta={`Tỷ lệ hoa hồng ${percent(summary.effective_commission_rate)}`} />
+          <PulseMetric label="Đơn hàng" value={integer.format(summary.orders)} delta={orderDelta == null ? `${integer.format(summary.order_lines)} sản phẩm trong đơn` : deltaCount(orderDelta)} tone={orderDelta != null && orderDelta < 0 ? "danger" : "success"} />
           <PulseMetric label="Đã nhận cuối cùng" value={formatMoney(summary.final_received)} delta={`Chênh ${formatMoney(summary.final_received_variance)}`} />
         </div>
       </section>
@@ -179,7 +179,7 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
       <DashboardDisclosure
         compact={compactDashboard}
         label="Xu hướng hoa hồng"
-        hint={`${integer.format(analytics.trend.length)} kỳ trong phạm vi`}
+        hint={`${integer.format(analytics.trend.length)} mốc thời gian trong phạm vi`}
         style={widgetStyle("trend")}
         widgetId="trend"
       >
@@ -219,9 +219,9 @@ export function DashboardHome({ user, filters, accounts, directory, preferences,
           <article className="canvas-panel">
             <div className="panel-heading"><div><p className="section-label">Đối soát</p><h2>Dòng tiền đối soát</h2></div><Link className="text-action" href="/analytics">Mở đối soát</Link></div>
             <div className="settlement-metrics">
-              <PulseMetric label="Đã quyết toán" value={integer.format(analytics.settlement.settled_lines)} delta={`Trung vị ${analytics.settlement.median_lag_days ?? "—"} ngày`} />
+              <PulseMetric label="Đã quyết toán" value={integer.format(analytics.settlement.settled_lines)} delta={`Thường mất ${analytics.settlement.median_lag_days ?? "—"} ngày`} />
               <PulseMetric label="Đang chờ" value={integer.format(analytics.settlement.pending_lines)} delta={agingLabel(analytics.settlement.pending_aging)} tone={analytics.settlement.pending_lines ? "warning" : "success"} />
-              <PulseMetric label="Hoàn/không hợp lệ" value={percent((summary.refund_rate ?? 0) + (summary.ineligible_rate ?? 0))} delta={`Mất ${formatMoney(activeKpi?.ineligible_commission)}`} tone="danger" />
+              <PulseMetric label="Hoàn/không hợp lệ" value={percent((summary.refund_rate ?? 0) + (summary.ineligible_rate ?? 0))} delta={`Riêng không hợp lệ mất ${formatMoney(activeKpi?.ineligible_commission)}`} tone="danger" />
             </div>
           </article>
         </section>
@@ -276,7 +276,7 @@ function DashboardCustomizer({ compact, preferences, onPreferencesChange }: { co
     try {
       await onPreferencesChange({ dashboard_layout: { schema: 1, order, hidden } });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể lưu bố cục dashboard.");
+      setError(reason instanceof Error ? reason.message : "Không thể lưu bố cục trang Tổng quan.");
     } finally {
       setSaving(false);
     }
@@ -297,7 +297,7 @@ function DashboardCustomizer({ compact, preferences, onPreferencesChange }: { co
 
   return (
     <details className="dashboard-customizer panel" style={compact ? { order: 98 } : undefined}>
-      <summary><span><SlidersHorizontal size={17} aria-hidden="true" /><strong>Tùy chỉnh dashboard</strong></span><small>Ẩn, hiện hoặc đổi thứ tự widget</small></summary>
+      <summary><span><SlidersHorizontal size={17} aria-hidden="true" /><strong>Tùy chỉnh Tổng quan</strong></span><small>Ẩn, hiện hoặc đổi thứ tự các khối</small></summary>
       <div className="dashboard-widget-list" aria-busy={saving}>
         {layout.order.map((id, index) => (
           <div key={id} className="dashboard-widget-row">
@@ -407,7 +407,7 @@ function buildAlerts(analytics: AnalyticsResponse, filters: UrlFilters, achievem
   if (target && achievement != null && achievement < target.elapsed_days / Math.max(target.scope_days, 1)) {
     alerts.push({ tone: "warning", title: "Nhịp mục tiêu đang chậm", copy: `Cần ${formatMoney(target.required_per_remaining_day)} mỗi ngày trong ${target.remaining_days} ngày còn lại.`, href: "/targets", action: "Mở planner" });
   }
-  if (quality.unknown_status_rows > 0) alerts.push({ tone: "danger", title: "Có trạng thái chưa xác định", copy: `${integer.format(quality.unknown_status_rows)} dòng cần kiểm tra mapping trước khi chốt báo cáo.`, href: unknownHref, action: "Xem đơn" });
+  if (quality.unknown_status_rows > 0) alerts.push({ tone: "danger", title: "Có trạng thái chưa xác định", copy: `${integer.format(quality.unknown_status_rows)} dòng cần kiểm tra vì hệ thống chưa nhận diện được trạng thái đơn này.`, href: unknownHref, action: "Xem đơn" });
   if (quality.import_rejected > 0) alerts.push({ tone: "danger", title: "Import có dòng bị từ chối", copy: `${integer.format(quality.import_rejected)} dòng chưa đi vào báo cáo.`, href: "/imports", action: "Xem kết quả" });
   if (analytics.settlement.pending_lines > 0) alerts.push({ tone: "info", title: "Dòng tiền đang chờ quyết toán", copy: `${integer.format(analytics.settlement.pending_lines)} dòng đang chờ TikTok xác nhận.`, href: "/analytics", action: "Mở đối soát" });
   if (!alerts.length) alerts.push({ tone: "success", title: "Không có cảnh báo ưu tiên", copy: "Dữ liệu hiện tại sạch và nhịp mục tiêu chưa phát sinh rủi ro cần xử lý.", href: "/analytics", action: "Xem phân tích" });
@@ -481,7 +481,7 @@ function AccountComparison({ rows, kpi, directory }: { rows: OverviewRow[]; kpi:
 
 function deltaMoney(value: number) { return `${value >= 0 ? "+" : "−"}${formatMoney(Math.abs(value))} so kỳ trước`; }
 function deltaCount(value: number) { return `${value >= 0 ? "+" : "−"}${integer.format(Math.abs(value))} đơn so kỳ trước`; }
-function agingLabel(rows: AnalyticsResponse["settlement"]["pending_aging"]) { return rows.length ? rows.map((row) => `${row.bucket}: ${integer.format(row.count)}`).join(" · ") : "Không có tồn đọng"; }
+function agingLabel(rows: AnalyticsResponse["settlement"]["pending_aging"]) { return rows.length ? rows.map((row) => `${agingBucketLabel(row.bucket)}: ${integer.format(row.count)}`).join(" · ") : "Không có tồn đọng"; }
 function qualitySummary(analytics: AnalyticsResponse) {
   const issues = qualityIssueCount(analytics.data_quality);
   return issues ? `${integer.format(issues)} điểm cần kiểm tra` : "Không có cảnh báo";
