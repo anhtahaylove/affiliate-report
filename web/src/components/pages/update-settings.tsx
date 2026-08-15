@@ -202,10 +202,10 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
           <span className="update-state-icon"><Smartphone size={24} aria-hidden="true" /></span>
           <div>
             <p className="section-label">Ứng dụng Android</p>
-            <h2>{checking ? "Đang kiểm tra bản APK" : unsupported ? "Cập nhật APK chưa được hỗ trợ" : failed ? "Chưa kiểm tra được bản APK" : hasNewerRelease ? `Có APK ${latest} sẵn sàng` : "Bạn đang dùng bản mới nhất"}</h2>
+            <h2>{checking ? "Đang kiểm tra bản cập nhật" : unsupported ? "Cập nhật chưa được hỗ trợ" : failed ? "Chưa kiểm tra được bản cập nhật" : hasNewerRelease ? `Có bản cập nhật ${latest} sẵn sàng` : "Bạn đang dùng bản mới nhất"}</h2>
             <p>{checking ? "Ứng dụng đang kiểm tra nguồn cập nhật có chữ ký trong nền." : unsupported ? capability?.reason : liveStatus?.error ?? liveStatus?.message ?? (available
-              ? "APK được xác minh chữ ký và SHA-256 trước khi chuyển sang trình cài đặt của Android."
-              : capability?.reason ?? "Kênh cập nhật APK đang được chuẩn bị.")}</p>
+              ? "Ứng dụng luôn kiểm tra kỹ để chắc chắn file cài đặt còn nguyên vẹn trước khi đưa vào trình cài đặt của Android."
+              : capability?.reason ?? "Kênh cập nhật đang được chuẩn bị.")}</p>
           </div>
         </div>
       </div>
@@ -215,12 +215,12 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
         <div><span>Bản khả dụng</span><strong>{latest ?? "Không có bản mới hơn"}</strong></div>
         <div><span>Cài đặt</span><strong>Android xác nhận</strong></div>
       </section>
-      <div className="update-safeguards"><ShieldCheck size={18} aria-hidden="true" /><p><strong>Không chạy installer Windows</strong><span>Ứng dụng chỉ tải APK dành cho Android; bước cài đặt cuối luôn cần bạn xác nhận trong hệ thống.</span></p></div>
-      {preparing ? <div className="android-update-progress" role="status" aria-live="polite"><progress aria-label="Đang tải và xác minh APK" /><span>Đang tải APK, kiểm tra dung lượng và SHA-256…</span></div> : null}
+      <div className="update-safeguards"><ShieldCheck size={18} aria-hidden="true" /><p><strong>Không tự ý cài phần mềm trên máy tính</strong><span>Ứng dụng chỉ tải bản cập nhật dành cho Android; bước cài đặt cuối luôn cần bạn xác nhận trên điện thoại.</span></p></div>
+      {preparing ? <div className="android-update-progress" role="status" aria-live="polite"><progress aria-label="Đang tải và kiểm tra bản cập nhật" /><span>Đang tải và kiểm tra file cài đặt…</span></div> : null}
       {prepared ? <div className="android-update-result" role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>APK {prepared.version} đã được xác minh và chuyển sang trình cài đặt Android. Hãy xác nhận cài đặt trong màn hình hệ thống.</span></div> : null}
       {prepareError ? <div className="android-update-error" role="alert">{prepareError}</div> : null}
       <div className="row-actions update-actions">
-        {hasNewerRelease && liveStatus?.installable !== false ? <button className="primary" type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài APK"}</button> : null}
+        {hasNewerRelease && liveStatus?.installable !== false ? <button className="primary" type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài đặt"}</button> : null}
         {liveStatus?.release_url ? <a className="button-link secondary-link" href={liveStatus.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
       </div>
     </section>
@@ -430,10 +430,10 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
           <h2>Phiên bản được cập nhật tại máy chủ</h2>
           <p>{checkCapability.reason}</p>
           <dl className="capability-facts">
-            <div><dt><MonitorUp size={16} aria-hidden="true" />Kênh cập nhật</dt><dd>Pipeline triển khai máy chủ</dd></div>
-            <div><dt><ShieldCheck size={16} aria-hidden="true" />Ứng dụng</dt><dd>Không tải hoặc chạy installer Windows</dd></div>
+            <div><dt><MonitorUp size={16} aria-hidden="true" />Kênh cập nhật</dt><dd>Được máy chủ tự động cập nhật</dd></div>
+            <div><dt><ShieldCheck size={16} aria-hidden="true" />Ứng dụng</dt><dd>Không tự cài phần mềm trên máy này</dd></div>
           </dl>
-          <p className="hint">Khi quản trị viên triển khai phiên bản mới, người dùng chỉ cần tải lại trang. Dữ liệu PostgreSQL không bị thay thế bởi installer cục bộ.</p>
+          <p className="hint">Khi người quản trị cập nhật phiên bản mới, bạn chỉ cần tải lại trang là dùng được ngay. Dữ liệu của cửa hàng không bị ảnh hưởng.</p>
         </div>
       </section>
     );

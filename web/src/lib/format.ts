@@ -57,6 +57,16 @@ export function roleLabel(value: string | null | undefined) {
   return ROLE_LABELS[value.trim().toLowerCase()] ?? value;
 }
 
+const BACKEND_LABELS: Record<string, string> = {
+  sqlite: "Lưu trên máy (SQLite)",
+  postgresql: "Máy chủ dùng chung (PostgreSQL)",
+};
+
+export function backendLabel(value: string | null | undefined) {
+  if (!value) return "Chưa xác định";
+  return BACKEND_LABELS[value.trim().toLowerCase()] ?? value;
+}
+
 export function formatBytes(value: number | null | undefined) {
   if (value == null) return "—";
   if (value < 1024 * 1024) return `${integer.format(Math.max(1, Math.round(value / 1024)))} KB`;
@@ -88,7 +98,7 @@ export function previousMonth() {
   return `${previous.getFullYear()}-${String(previous.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Khoảng nhanh: n ngày gần nhất tính cả hôm nay. Tháng KPI bám theo ngày cuối khoảng. */
+/** Khoảng nhanh: n ngày gần nhất tính cả hôm nay. Tháng báo cáo bám theo ngày cuối khoảng. */
 export function lastDays(days: number) {
   const end = new Date();
   const start = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (days - 1));
@@ -99,20 +109,42 @@ export function wholeMonth(month: string) {
   return { start: firstDayOfMonth(month), end: lastDayOfMonth(month), month };
 }
 
+// Khoá là tên bảng SQL thật (xem accounts._dependency_counts, reset_data._table_counts) — thiếu
+// khoá nào thì countsText() rơi xuống in thẳng tên bảng đó (vd. "raw_import_rows: 15000") thay vì
+// nhãn tiếng Việt, đúng lúc người dùng cần đọc rõ nhất (xem trước khi xoá tài khoản/dữ liệu).
 const COUNT_LABELS: Record<string, string> = {
   accounts: "Tài khoản",
   targets: "Mục tiêu",
+  monthly_targets: "Mục tiêu",
   import_batches: "Lượt nhập",
   imports: "Lượt nhập",
   raw_rows: "Dòng dữ liệu gốc",
+  raw_import_rows: "Dòng dữ liệu gốc",
   rows: "Dòng dữ liệu",
   tombstones: "Bản ghi đã xóa",
+  sync_tombstones: "Bản ghi đã xóa",
+  sync_history: "Lượt đồng bộ",
   order_line_versions: "Phiên bản đơn hàng",
   user_account_access: "Phân quyền tài khoản",
   app_users: "Người dùng",
+  auth_sessions: "Phiên đăng nhập",
+  oidc_login_states: "Yêu cầu đăng nhập đang chờ",
   user_ui_preferences: "Tùy chọn giao diện",
   saved_report_views: "Bộ lọc đã lưu",
 };
+
+// Khoá "aging bucket" thô từ reports.py — chưa dịch thì lộ nguyên "0-7"/"31+"/"unknown" ra UI.
+const AGING_BUCKET_LABELS: Record<string, string> = {
+  "0-7": "0–7 ngày",
+  "8-14": "8–14 ngày",
+  "15-30": "15–30 ngày",
+  "31+": "Trên 31 ngày",
+  unknown: "Chưa xác định",
+};
+
+export function agingBucketLabel(bucket: string) {
+  return AGING_BUCKET_LABELS[bucket] ?? bucket;
+}
 
 export function countsText(counts: Record<string, number> | undefined) {
   const entries = Object.entries(counts ?? {});

@@ -19,11 +19,11 @@ export type AccountDirectory = Readonly<{
 
 const ALL_ACCOUNT: AccountIdentity = Object.freeze({
   code: "ALL",
-  displayName: "Tất cả account",
-  primary: "Tất cả account",
+  displayName: "Tất cả tài khoản",
+  primary: "Tất cả tài khoản",
   secondary: null,
-  inline: "Tất cả account",
-  accessibleName: "Tất cả account",
+  inline: "Tất cả tài khoản",
+  accessibleName: "Tất cả tài khoản",
   known: true,
 });
 

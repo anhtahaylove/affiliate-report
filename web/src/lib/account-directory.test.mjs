@@ -10,7 +10,7 @@ const directory = createAccountDirectory([
 
 test("AccountDirectory keeps ALL as a virtual all-account scope", () => {
   const identity = directory.get("ALL");
-  assert.equal(identity.primary, "Tất cả account");
+  assert.equal(identity.primary, "Tất cả tài khoản");
   assert.equal(identity.secondary, null);
   assert.equal(identity.known, true);
 });

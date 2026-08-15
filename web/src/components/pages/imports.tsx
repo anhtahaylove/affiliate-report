@@ -57,7 +57,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
   useEffect(() => {
     async function load() {
       try { await refreshHistory(); }
-      catch (reason) { setMessage(errorMessage(reason, "Không thể tải lịch sử import.")); }
+      catch (reason) { setMessage(errorMessage(reason, "Không thể tải lịch sử nhập.")); }
     }
     void load();
   }, [refreshHistory]);
@@ -105,7 +105,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
       await refreshHistory();
       setMessage(`Hoàn tất ${integer.format(collected.length)}/${integer.format(queued.length)} file trong hàng đợi.`);
     } catch (reason) {
-      setMessage(errorMessage(reason, "Không thể tải lịch sử import."));
+      setMessage(errorMessage(reason, "Không thể tải lịch sử nhập."));
     }
     setBusy(false);
     setCurrentFile("");
@@ -127,7 +127,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
     try {
       const result = await undoImport(undo.batch_id, undo.confirmation);
       invalidateApiCache();
-      setMessage(`Đã hoàn tác ${result.filename}: gỡ hẳn ${integer.format(result.removed_lines)} dòng đơn, trả ${integer.format(result.restored_lines)} dòng về phiên bản trước.${result.backup_path ? ` Bản sao lưu: ${result.backup_path}.` : ""}`);
+      setMessage(`Đã hoàn tác ${result.filename}: gỡ ${integer.format(result.removed_lines)} dòng vừa nhập, đưa ${integer.format(result.restored_lines)} dòng bị ghi đè về đúng số liệu trước đó. Các đơn hàng khác không bị ảnh hưởng.`);
       setUndo(null);
       await refreshHistory();
     } catch (reason) {
@@ -148,7 +148,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
           </div>
         </div>
         {canWrite(user) ? <PairingPanel account={selectedAccount} onNhanTep={refreshHistory} /> : null}
-        {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có account khả dụng</p><h3>{isOwner(user) ? "Tạo account trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp account"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một account để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi account được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo account đầu tiên</Link> : null}</div> : <>
+        {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có tài khoản khả dụng</p><h3>{isOwner(user) ? "Tạo tài khoản trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp tài khoản"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một tài khoản để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi tài khoản được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo tài khoản đầu tiên</Link> : null}</div> : <>
         <div className="upload-form">
           <div className="field">
             <label htmlFor="import-account">Tài khoản TikTok</label>
@@ -209,7 +209,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
         onCancel={() => setUndo(null)}
         onConfirm={() => void confirmUndo()}
       >
-        <p>Gỡ hẳn {integer.format(undo?.removed_lines ?? 0)} dòng đơn · trả {integer.format(undo?.restored_lines ?? 0)} dòng về phiên bản trước · xoá {integer.format(undo?.removed_versions ?? 0)} bản ghi phiên bản.</p>
+        <p>Hệ thống sẽ gỡ {integer.format(undo?.removed_lines ?? 0)} dòng vừa nhập, và đưa {integer.format(undo?.restored_lines ?? 0)} dòng bị ghi đè về đúng số liệu trước lần nhập này. Các đơn hàng khác không bị ảnh hưởng.</p>
         {undo?.warning ? <p className="hint">{undo.warning}</p> : null}
       </ConfirmDialog>
     </div>

@@ -74,7 +74,7 @@ test("wizard .affsync export, preview xung đột và xác nhận import", async
   await page.getByRole("button", { name: "Xuất file .affsync" }).click();
   expect((await download).suggestedFilename()).toBe("AffiliateReport-test.affsync");
 
-  await page.getByLabel("File đồng bộ").setInputFiles({ name: "phone.affsync", mimeType: "application/octet-stream", buffer: Buffer.from("AFFSYNC1-test") });
+  await page.getByLabel("Tệp đồng bộ").setInputFiles({ name: "phone.affsync", mimeType: "application/octet-stream", buffer: Buffer.from("AFFSYNC1-test") });
   await page.getByLabel("Mật khẩu mở gói").fill("mat-khau-rat-dai");
   await page.getByRole("button", { name: "Mở và xem trước" }).click();
   await expect(page.getByRole("heading", { name: "Ảnh hưởng của gói" })).toBeVisible();
@@ -109,9 +109,9 @@ test("Android chỉ hiển thị trạng thái APK và không gọi updater Wind
   await page.goto("/settings/update/");
   await page.evaluate(() => { document.cookie = "csrf_token=test-csrf; path=/"; });
   await expect(page.locator('meta[name="viewport"]')).toHaveAttribute("content", /viewport-fit=cover/);
-  await expect(page.getByRole("heading", { name: "Có APK 2.1.1 sẵn sàng" })).toBeVisible();
-  await expect(page.getByText("Không chạy installer Windows")).toBeVisible();
-  await page.getByRole("button", { name: "Tải và cài APK" }).click();
+  await expect(page.getByRole("heading", { name: "Có bản cập nhật 2.1.1 sẵn sàng" })).toBeVisible();
+  await expect(page.getByText("Không tự ý cài phần mềm trên máy tính")).toBeVisible();
+  await page.getByRole("button", { name: "Tải và cài đặt" }).click();
   await expect.poll(() => page.evaluate(() => (window as Window & { __affiliateReportNativeDownloads?: unknown[] }).__affiliateReportNativeDownloads?.length ?? 0)).toBe(1);
   expect(await page.evaluate(() => (window as Window & { __affiliateReportNativeDownloads?: Array<Record<string, string>> }).__affiliateReportNativeDownloads?.[0])).toMatchObject({
     filename: "AffiliateReport-v2.1.1-arm64.apk",
@@ -139,7 +139,7 @@ test("Android không hỗ trợ update hiển thị lý do và không lộ contr
   await page.route("**/api/v1/update/android/status", (route) => { androidStatusCalls += 1; return route.fulfill({ status: 500 }); });
 
   await page.goto("/settings/update/");
-  await expect(page.getByRole("heading", { name: "Cập nhật APK chưa được hỗ trợ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cập nhật chưa được hỗ trợ" })).toBeVisible();
   await expect(page.getByText("Thiết bị này chưa hỗ trợ kênh cập nhật APK.")).toBeVisible();
   await expect(page.getByRole("button", { name: /Tải và cài|Kiểm tra lại/ })).toHaveCount(0);
   expect(windowsUpdaterCalls).toBe(0);

@@ -60,7 +60,7 @@ test("PostgreSQL/OIDC settings explain unavailable local operations without call
   }));
 
   await page.goto("/settings/data/");
-  await expect(page.getByRole("heading", { name: "Sao lưu và Reset Data được quản lý ngoài ứng dụng" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sao lưu và xóa dữ liệu được quản lý ngoài ứng dụng" })).toBeVisible();
   await expect(page.getByText("Không gửi lệnh xóa hoặc khôi phục cục bộ")).toBeVisible();
   await expect(page.getByRole("button", { name: "Xóa dữ liệu báo cáo" })).toHaveCount(0);
   expect(backupCalls).toBe(0);
@@ -81,7 +81,7 @@ test("PostgreSQL/OIDC settings explain unavailable local operations without call
 
   await page.goto("/settings/update/");
   await expect(page.getByRole("heading", { name: "Phiên bản được cập nhật tại máy chủ" })).toBeVisible();
-  await expect(page.getByText("Không tải hoặc chạy installer Windows")).toBeVisible();
+  await expect(page.getByText("Không tự cài phần mềm trên máy này")).toBeVisible();
   await expect(page.getByRole("button", { name: "Cài bản cập nhật" })).toHaveCount(0);
   expect(updateCalls).toBe(0);
 

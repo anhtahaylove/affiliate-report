@@ -568,7 +568,7 @@ export function apiUrl() {
 // FastAPI/Pydantic trả `detail` dạng CHUỖI cho lỗi ứng dụng (HTTPException(detail=str)), nhưng
 // dạng MẢNG {msg, loc, ...} khi Pydantic tự chặn request trước khi code app kịp chạy (ví dụ
 // pattern không khớp). Trước đây request() chỉ giải mã dạng chuỗi, nên lỗi validate-pattern rơi
-// vào "API trả về HTTP 422" chung chung — thông báo tiếng Việt cụ thể ở backend không bao giờ
+// vào httpFallbackMessage() chung chung — thông báo tiếng Việt cụ thể ở backend không bao giờ
 // tới được người dùng dù nó tồn tại sẵn. Đây là điểm giải mã duy nhất nên fix áp dụng cho mọi
 // form trong app, không riêng gì một chỗ.
 function detailMessage(detail: unknown): string | undefined {
@@ -585,6 +585,12 @@ function detailMessage(detail: unknown): string | undefined {
     })
     .filter((part): part is string => Boolean(part));
   return parts.length ? `Dữ liệu không hợp lệ (${parts.join("; ")}).` : "Dữ liệu không hợp lệ.";
+}
+
+// "API trả về HTTP 500" không nói được người dùng phải làm gì — chỉ dùng khi backend không kèm
+// `detail` đọc được (crash thật sự), nên vẫn giữ mã số để tra cứu hỗ trợ kỹ thuật nếu cần.
+function httpFallbackMessage(status: number) {
+  return `Hệ thống đang gặp sự cố (mã lỗi ${status}). Vui lòng thử lại sau ít phút.`;
 }
 
 function csrfToken() {
@@ -616,7 +622,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
   }
   if (!response.ok) {
-    let message = `API trả về HTTP ${response.status}`;
+    let message = httpFallbackMessage(response.status);
     try {
       const payload = (await response.json()) as { detail?: unknown };
       message = detailMessage(payload.detail) ?? message;
@@ -643,7 +649,7 @@ async function requestBlob(path: string, init?: RequestInit) {
     throw new ApiError(NETWORK_ERROR_MESSAGE, 0);
   }
   if (!response.ok) {
-    let message = `API trả về HTTP ${response.status}`;
+    let message = httpFallbackMessage(response.status);
     try {
       const payload = (await response.json()) as { detail?: unknown };
       message = detailMessage(payload.detail) ?? message;

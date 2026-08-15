@@ -432,7 +432,7 @@ function TrendFallback({ rows }: { rows: AnalyticsResponse["trend"] }) {
 
 /**
  * Hai ngữ cảnh khác hẳn nhau dùng chung component này:
- *  - `compact=false`: thật sự lần đầu, chưa có account hoặc chưa nhập gì. Checklist ba bước là
+ *  - `compact=false`: thật sự lần đầu, chưa có tài khoản hoặc chưa nhập gì. Checklist ba bước là
  *    toàn bộ nội dung trang, xứng đáng chiếm chỗ.
  *  - `compact=true`: đã chạy được rồi, chỉ còn sót một bước. Trước đây vẫn dựng nguyên checklist
  *    ba bước giữa dashboard, trong đó hai bước chỉ để khoe dấu "Hoàn tất" — 290px để nói một câu.
@@ -442,11 +442,11 @@ function FirstRun({ user, setup, compact = false }: { user: CurrentUser; setup: 
   const owner = isOwner(user);
   const writer = canWrite(user);
   if (!setup.hasAccounts && !owner) {
-    return <section className="canvas-panel first-run" aria-labelledby="first-run-title"><div className="panel-heading"><div><p className="section-label">Chưa có phạm vi dữ liệu</p><h2 id="first-run-title">Liên hệ chủ sở hữu để được cấp account</h2><p>{writer ? "Sau khi được cấp account, bạn có thể nhập tệp và đặt mục tiêu trong phạm vi được phép." : "Tài khoản của bạn đang ở chế độ chỉ xem và chưa được cấp phạm vi báo cáo."}</p></div></div><p className="first-run-guidance">Không có thao tác quản trị nào được mở cho vai trò hiện tại.</p></section>;
+    return <section className="canvas-panel first-run" aria-labelledby="first-run-title"><div className="panel-heading"><div><p className="section-label">Chưa có phạm vi dữ liệu</p><h2 id="first-run-title">Liên hệ chủ sở hữu để được cấp tài khoản</h2><p>{writer ? "Sau khi được cấp tài khoản, bạn có thể nhập tệp và đặt mục tiêu trong phạm vi được phép." : "Tài khoản của bạn đang ở chế độ chỉ xem và chưa được cấp phạm vi báo cáo."}</p></div></div><p className="first-run-guidance">Không có thao tác quản trị nào được mở cho vai trò hiện tại.</p></section>;
   }
   const steps = [
-    { done: setup.hasAccounts, href: owner ? "/accounts" : null, title: "Tạo account TikTok", copy: setup.hasAccounts ? "Đã có phạm vi account để vận hành." : "Tạo phạm vi báo cáo cho từng account affiliate." },
-    { done: setup.hasImports, href: writer && setup.hasAccounts ? "/imports" : null, title: "Nhập tệp Excel đầu tiên", copy: setup.hasImports ? "Đã có lịch sử import để dựng báo cáo." : "Chọn account, xem hàng đợi rồi nhập tệp TikTok." },
+    { done: setup.hasAccounts, href: owner ? "/accounts" : null, title: "Tạo tài khoản TikTok", copy: setup.hasAccounts ? "Đã có phạm vi tài khoản để vận hành." : "Tạo phạm vi báo cáo cho từng tài khoản affiliate." },
+    { done: setup.hasImports, href: writer && setup.hasAccounts ? "/imports" : null, title: "Nhập tệp Excel đầu tiên", copy: setup.hasImports ? "Đã có lịch sử nhập để dựng báo cáo." : "Chọn tài khoản và tệp TikTok cần nhập." },
     { done: setup.hasTarget, href: writer && setup.hasAccounts ? "/targets" : null, title: "Đặt mục tiêu tháng", copy: setup.hasTarget ? "Đã có mục tiêu cho tháng hiện tại." : "Mở planner để hệ thống tính pace và dự báo." },
   ];
   const pending = steps.filter((step) => !step.done);

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BackupItem, CapabilityState, loadBackups, resetData, restoreBackup } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
-import { countsText, errorMessage, formatBytes, formatDateTime, integer } from "@/lib/format";
+import { backendLabel, countsText, errorMessage, formatBytes, formatDateTime, integer } from "@/lib/format";
 import { Database, ServerCog, ShieldCheck } from "lucide-react";
 
 const RESET_PHRASE = "XOA DU LIEU";
@@ -38,14 +38,14 @@ export function DataSettingsPage({ capability, backend }: { capability: Capabili
       <section className="section panel wide capability-gate" role="status">
         <div className="capability-gate-icon"><ServerCog size={22} aria-hidden="true" /></div>
         <div className="capability-gate-copy">
-          <p className="section-label">Database dùng chung</p>
-          <h2>Sao lưu và Reset Data được quản lý ngoài ứng dụng</h2>
+          <p className="section-label">Cơ sở dữ liệu dùng chung</p>
+          <h2>Sao lưu và xóa dữ liệu được quản lý ngoài ứng dụng</h2>
           <p>{capability.reason}</p>
           <dl className="capability-facts">
-            <div><dt><Database size={16} aria-hidden="true" />Backend</dt><dd>{backend}</dd></div>
+            <div><dt><Database size={16} aria-hidden="true" />Nơi lưu dữ liệu</dt><dd>{backendLabel(backend)}</dd></div>
             <div><dt><ShieldCheck size={16} aria-hidden="true" />Bảo vệ dữ liệu</dt><dd>Không gửi lệnh xóa hoặc khôi phục cục bộ</dd></div>
           </dl>
-          <p className="hint">Để sao lưu, khôi phục hoặc làm sạch dữ liệu PostgreSQL, hãy dùng snapshot/backup của nhà cung cấp hoặc quy trình quản trị database đã được kiểm soát.</p>
+          <p className="hint">Việc sao lưu, khôi phục hoặc xóa dữ liệu lúc này do người quản trị hệ thống của cửa hàng phụ trách. Vui lòng liên hệ người đó nếu bạn cần thao tác này.</p>
         </div>
       </section>
     );
@@ -57,7 +57,7 @@ export function DataSettingsPage({ capability, backend }: { capability: Capabili
       const result = await resetData(RESET_PHRASE);
       invalidateApiCache();
       setAsking(null);
-      setMessage(`Đã xóa dữ liệu báo cáo. Bản sao lưu: ${result.backup_path}. Mục tiêu được giữ nguyên: ${result.targets_preserved ? "có" : "không"}.`);
+      setMessage(`Đã xóa dữ liệu báo cáo và tạo bản sao lưu an toàn trước khi xóa.${result.targets_preserved ? " Mục tiêu tháng của bạn vẫn được giữ nguyên." : ""}`);
       await refresh();
     } catch (reason) {
       setMessage(errorMessage(reason, "Xóa dữ liệu thất bại."));
@@ -73,7 +73,7 @@ export function DataSettingsPage({ capability, backend }: { capability: Capabili
       const result = await restoreBackup(selectedBackup.id, RESTORE_PHRASE);
       invalidateApiCache();
       setAsking(null);
-      setMessage(`Đã khôi phục. Bản sao lưu an toàn: ${result.safety_backup_path}. ${countsText(result.restored_counts)}.`);
+      setMessage(`Đã khôi phục xong. Hệ thống đã tự sao lưu dữ liệu trước đó để phòng khi cần quay lại. ${countsText(result.restored_counts)}.`);
       await refresh();
     } catch (reason) {
       setMessage(errorMessage(reason, "Khôi phục thất bại."));

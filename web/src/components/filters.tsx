@@ -65,7 +65,7 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
   const allStatusesSelected = statuses.length > 0 && draft.statuses.length === statuses.length;
   const compactSummary = [
     `${draft.start.split("-").reverse().join("/")} – ${draft.end.split("-").reverse().join("/")}`,
-    allAccountsSelected ? "Tất cả account" : `${draft.accounts.length}/${accounts.length} tài khoản`,
+    allAccountsSelected ? "Tất cả tài khoản" : `${draft.accounts.length}/${accounts.length} tài khoản`,
     statuses.length ? (allStatusesSelected ? "Tất cả trạng thái" : `${draft.statuses.length}/${statuses.length} trạng thái`) : null,
   ].filter(Boolean).join(" · ");
 
@@ -138,7 +138,7 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
           <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Đóng bộ lọc"><X size={18} aria-hidden="true" /></button>
         </div>
         <div className="field compact">
-          <label htmlFor="target-month">Tháng KPI</label>
+          <label htmlFor="target-month">Tháng báo cáo</label>
           <input
             id="target-month"
             type="month"
@@ -170,7 +170,7 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
           <div className="account-options">
             <label className="account-option select-all-option">
               <input type="checkbox" checked={allAccountsSelected} onChange={() => toggleAll("accounts", accounts)} />
-              Tất cả account
+              Tất cả tài khoản
             </label>
             {accounts.map((account) => (
               <label className="account-option" key={account}>

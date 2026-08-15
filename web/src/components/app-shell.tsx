@@ -27,7 +27,7 @@ const navGroups: Array<{ title: string; items: NavItem[] }> = [
     title: "Vận hành",
     items: [
       { href: "/imports", label: "Nhập dữ liệu", desc: "Nhập tệp TikTok .xlsx", icon: UploadCloud, roles: ["operator", "owner"], mobilePrimary: true },
-      { href: "/targets", label: "Mục tiêu", desc: "KPI ngày và mục tiêu tháng", icon: Target },
+      { href: "/targets", label: "Mục tiêu", desc: "Chỉ tiêu ngày và mục tiêu tháng", icon: Target },
       { href: "/accounts", label: "Tài khoản", desc: "Thêm, sửa và lưu trữ", icon: CircleDollarSign, roles: ["owner"] },
     ],
   },

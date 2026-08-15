@@ -55,7 +55,7 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
       await onAccountsChanged();
       setSyncWarning("");
     } catch {
-      setSyncWarning("Thay đổi đã được lưu, nhưng nhãn tài khoản ở các trang khác chưa đồng bộ. Hãy thử tải lại metadata.");
+      setSyncWarning("Thay đổi đã được lưu, nhưng nhãn tài khoản ở các trang khác chưa đồng bộ. Hãy thử đồng bộ lại.");
     }
   }
 
@@ -65,7 +65,7 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
       setSyncWarning("");
       report("success", "Đã đồng bộ tên tài khoản trên toàn ứng dụng.");
     } catch (reason) {
-      setSyncWarning(errorMessage(reason, "Chưa thể đồng bộ metadata tài khoản."));
+      setSyncWarning(errorMessage(reason, "Chưa đồng bộ được thông tin tài khoản trên các trang khác."));
     }
   }
 
@@ -135,7 +135,7 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
         });
       } else if (result.account) keepCommittedRecord(result.account);
       else setRecords((current) => current.map((record) => record.code === result.code ? { ...record, active: false } : record));
-      report("success", result.hard_deleted ? `Đã xóa vĩnh viễn ${result.code}. Bản sao lưu: ${result.backup_path}.` : `Đã lưu trữ ${result.code}.`);
+      report("success", result.hard_deleted ? `Đã xóa vĩnh viễn ${result.code}. Hệ thống đã tự tạo một bản sao lưu an toàn trước khi xóa.` : `Đã lưu trữ ${result.code}.`);
       setDeletePreview(null);
       await syncAfterMutation();
     } catch (reason) {
@@ -179,8 +179,8 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
         </div>
       </div>
       <div className="account-create-panel upload-form">
-        <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="Ví dụ: SHOP_1 hoặc username TikTok (vd. sarah.reign)" /></div>
-        <div className="field"><label htmlFor="new-account-name">Tên hiển thị mới (không bắt buộc)</label><input id="new-account-name" maxLength={128} value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Để trống sẽ dùng mã account" /></div>
+        <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="Ví dụ: SHOP_1 hoặc tên đăng nhập TikTok (vd. sarah.reign)" /></div>
+        <div className="field"><label htmlFor="new-account-name">Tên hiển thị mới (không bắt buộc)</label><input id="new-account-name" maxLength={128} value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Để trống sẽ dùng mã tài khoản" /></div>
         <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
       </div>
       {/* Ngay dưới panel tạo tài khoản, không phải cuối trang: trước đây thông báo lỗi nằm sau

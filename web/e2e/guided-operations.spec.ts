@@ -66,7 +66,7 @@ test("owner and operator receive role-aware first-run guidance", async ({ page }
   await mockEmptyDashboard(page, (month) => { onboardingTargetMonth = month; });
   await page.goto("/?month=2025-01&start=2025-01-01&end=2025-01-31");
   await expect(page.getByRole("heading", { name: "Hoàn tất thiết lập vận hành" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Tạo account TikTok" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Tạo tài khoản TikTok" })).toBeVisible();
   const now = new Date();
   await expect.poll(() => onboardingTargetMonth).toBe(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
 
@@ -74,7 +74,7 @@ test("owner and operator receive role-aware first-run guidance", async ({ page }
   await mockShell(page, { role: "operator" });
   await mockEmptyDashboard(page);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Liên hệ chủ sở hữu để được cấp account" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Liên hệ chủ sở hữu để được cấp tài khoản" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Tạo account TikTok" })).toHaveCount(0);
 });
 
@@ -82,8 +82,8 @@ test("imports zero-account state is safe and successful import keeps results plu
   await mockShell(page);
   await page.route("**/api/v1/imports**", (route) => route.fulfill({ json: { items: [], count: 0, limit: 20 } }));
   await page.goto("/imports/");
-  await expect(page.getByRole("heading", { name: "Tạo account trước khi nhập dữ liệu" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Tạo account đầu tiên" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tạo tài khoản trước khi nhập dữ liệu" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Tạo tài khoản đầu tiên" })).toBeVisible();
   await expect(page.getByLabel("Tài khoản TikTok")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Nhập dữ liệu" })).toHaveCount(0);
 
