@@ -1079,7 +1079,10 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   min-width: 190px;
 }
 
-.order-detail summary { cursor: pointer; font-weight: 700; }
+/* Đây là phần tử bấm được thật sự của mỗi dòng đơn hàng, đo được chỉ cao 24px trên mobile
+   — dưới ngưỡng chạm 44px mà phần còn lại của app đã tuân thủ. Mỗi trang đơn hàng có
+   khoảng 92 chỗ như vậy nên đây là điểm chạm hụt nhiều nhất trong toàn ứng dụng. */
+.order-detail summary { display: flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; }
 .order-detail span { display: block; margin-top: 6px; color: var(--ink-soft); }
 
 .order-history {
@@ -1993,7 +1996,12 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
   .dashboard-customizer summary small { display: none; }
   .dashboard-widget-row { align-items: flex-start; }
   .dashboard-widget-row .row-actions { display: grid; grid-template-columns: repeat(3, 1fr); }
-  .dashboard-widget-row button { padding-inline: 7px; }
+  /* Đo được 36px và 40px trên mobile, dưới ngưỡng chạm 44px của phần còn lại. */
+  .dashboard-widget-row button { min-height: 44px; padding-inline: 7px; }
+  /* Con số ở cuối mỗi dòng là một link riêng: bấm vào cả dòng không mở nó, nên vùng chạm
+     thật chỉ bằng bề rộng chữ — đo được 11x24px khi giá trị là "0". */
+  .quality-list li a, .pace-list > div a { display: inline-flex; align-items: center; justify-content: flex-end; min-width: 44px; min-height: 44px; }
+  .orders-sticky-toolbar select, .orders-sticky-toolbar button { min-height: 44px; }
   .orders-sticky-toolbar { position: static; display: grid; }
   .workflow-steps { grid-template-columns: 1fr 1fr; }
   .update-primary-panel, .update-support-panel { padding: 18px; }
