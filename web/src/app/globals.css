@@ -872,6 +872,11 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   line-height: 1.5;
 }
 
+/* Trước đây thành công và lỗi dùng chung màu --accent-strong — không phân biệt được bằng mắt.
+   --danger là token dùng cho CHỮ (xem .notice); --danger-line chỉ dành cho viền, để chữ dùng
+   nhầm token đó thì tương phản trên nền sáng quá thấp để đọc được. */
+.upload-result[data-tone="danger"] { color: var(--danger); }
+
 .sync-warning,
 .guided-empty-state {
   display: flex;

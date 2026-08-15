@@ -45,6 +45,9 @@ def test_account_helpers_list_update_archive_and_validate_display_name(tmp_path)
         create_account(engine, "ĐẸP")
     with pytest.raises(ValueError, match="128"):
         create_account(engine, "TOO_LONG_NAME", display_name="x" * 129)
+    # Username TikTok thật thường có dấu chấm (vd. sarah.reign) — chấp nhận để code có thể
+    # dùng thẳng làm định danh nhìn quen mắt, trong khi dấu cách vẫn bị từ chối như trên.
+    assert create_account(engine, "sarah.reign", display_name="Sarah")["code"] == "SARAH.REIGN"
 
 
 

@@ -741,6 +741,24 @@ def test_owner_account_crud_hard_delete_with_backup_and_restore(tmp_path):
     assert any(item["code"] == "NEW_ACC" for item in client.get("/api/v1/accounts").json()["items"])
 
 
+def test_create_account_with_space_in_code_returns_pydantic_array_detail(tmp_path):
+    # Pydantic tự chặn request TRƯỚC KHI create_account_endpoint chạy, nên response mang hình
+    # dạng detail khác hẳn — MẢNG {msg, loc, ...} thay vì chuỗi. web/src/lib/api.ts phải giải mã
+    # được hình dạng này; test ở tầng Python thuần (test_accounts.py) không đi qua Pydantic nên
+    # không tự phát hiện được lớp lỗi này.
+    client, _ = api(tmp_path)
+    response = client.post("/api/v1/accounts", json={"code": "bad code", "display_name": "X"})
+    assert response.status_code == 422
+    assert isinstance(response.json()["detail"], list)
+
+
+def test_create_account_accepts_period_in_code(tmp_path):
+    client, _ = api(tmp_path)
+    response = client.post("/api/v1/accounts", json={"code": "sarah.reign", "display_name": "Sarah"})
+    assert response.status_code == 201
+    assert response.json()["code"] == "SARAH.REIGN"
+
+
 def test_analytics_and_excel_exports_follow_account_scope(tmp_path):
     client, engine = api(tmp_path)
     import_rows(engine, filename="a.xlsx", file_bytes=b"a", account="CHIISTORE", rows=[normalized()])

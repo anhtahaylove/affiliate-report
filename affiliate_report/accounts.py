@@ -11,7 +11,12 @@ from sqlalchemy.engine import Connection, Engine
 
 from .db import account_sync_id, accounts, ensure_device_identity, import_batches, monthly_targets, order_line_versions, raw_import_rows, record_sync_tombstone, sync_tombstones, user_account_access
 
-ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_-]{1,64}$")
+# Chấp nhận cả dấu chấm: username TikTok thật thường có dạng "sarah.reign". CHỈ thêm dấu chấm,
+# không thêm chữ thường — giá trị đưa vào đây LUÔN đã qua .upper() trước (xem _normalize_code
+# bên dưới). api.py:_sanitize_view_filters dùng lại đúng hằng số này để kiểm giá trị filter THÔ
+# (chưa chuẩn hoá): "all" (thường) phải bị chặn ở đây vì so sánh "!= 'ALL'" ở đó phân biệt hoa
+# thường và không tự bắt được — thêm A-Za-z từng làm "all" lọt qua cả hai lớp kiểm tra.
+ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_.-]{1,64}$")
 
 
 @dataclass(frozen=True)
@@ -191,7 +196,7 @@ def _normalize_code(code: str) -> str:
     if value == "ALL":
         raise ValueError("ALL là mã tổng hợp nội bộ, không được dùng làm affiliate account.")
     if not ACCOUNT_CODE_RE.fullmatch(value):
-        raise ValueError("Account code phải dài 1-64 ký tự và chỉ gồm A-Z, 0-9, _ hoặc -.")
+        raise ValueError("Account code phải dài 1-64 ký tự và chỉ gồm A-Z, 0-9, _, - hoặc dấu chấm.")
     return value
 
 

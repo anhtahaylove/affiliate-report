@@ -567,6 +567,28 @@ export function apiUrl() {
   return (process.env.NEXT_PUBLIC_API_URL || browserOrigin()).replace(/\/$/, "");
 }
 
+// FastAPI/Pydantic trả `detail` dạng CHUỖI cho lỗi ứng dụng (HTTPException(detail=str)), nhưng
+// dạng MẢNG {msg, loc, ...} khi Pydantic tự chặn request trước khi code app kịp chạy (ví dụ
+// pattern không khớp). Trước đây request() chỉ giải mã dạng chuỗi, nên lỗi validate-pattern rơi
+// vào "API trả về HTTP 422" chung chung — thông báo tiếng Việt cụ thể ở backend không bao giờ
+// tới được người dùng dù nó tồn tại sẵn. Đây là điểm giải mã duy nhất nên fix áp dụng cho mọi
+// form trong app, không riêng gì một chỗ.
+function detailMessage(detail: unknown): string | undefined {
+  if (typeof detail === "string" && detail) return detail;
+  if (!Array.isArray(detail) || !detail.length) return undefined;
+  const parts = detail
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as { msg?: unknown; loc?: unknown };
+      const msg = typeof entry.msg === "string" ? entry.msg : null;
+      if (!msg) return null;
+      const loc = Array.isArray(entry.loc) ? entry.loc.filter((part) => part !== "body").join(".") : null;
+      return loc ? `${loc}: ${msg}` : msg;
+    })
+    .filter((part): part is string => Boolean(part));
+  return parts.length ? `Dữ liệu không hợp lệ (${parts.join("; ")}).` : "Dữ liệu không hợp lệ.";
+}
+
 function csrfToken() {
   if (typeof document === "undefined") return undefined;
   const names = new Set(["csrf_token", "csrftoken", "XSRF-TOKEN"]);
@@ -599,7 +621,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = `API trả về HTTP ${response.status}`;
     try {
       const payload = (await response.json()) as { detail?: unknown };
-      if (typeof payload.detail === "string" && payload.detail) message = payload.detail;
+      message = detailMessage(payload.detail) ?? message;
     } catch {
       // Keep HTTP fallback.
     }
@@ -626,7 +648,7 @@ async function requestBlob(path: string, init?: RequestInit) {
     let message = `API trả về HTTP ${response.status}`;
     try {
       const payload = (await response.json()) as { detail?: unknown };
-      if (typeof payload.detail === "string" && payload.detail) message = payload.detail;
+      message = detailMessage(payload.detail) ?? message;
     } catch {
       // Keep HTTP fallback.
     }

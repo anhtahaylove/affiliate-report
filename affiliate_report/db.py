@@ -39,7 +39,11 @@ from sqlalchemy.exc import IntegrityError
 from .parser import file_sha256
 
 DEFAULT_DATABASE_URL = "sqlite:///data/affiliate_report.db"
-ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_-]{1,64}$")
+# Bản sao thứ ba của cùng quy tắc "mã tài khoản hợp lệ" (xem accounts.ACCOUNT_CODE_RE) — dùng
+# ở đường tự tạo tài khoản khi import (import_rows -> _ensure_account) chứ không import lại
+# từ accounts.py để tránh vòng import module. Đổi ký tự chấp nhận ở một bản mà quên bản này là
+# đúng cách tài khoản tạo qua UI (chấp nhận dấu chấm) rồi lại bị import tự tạo lần hai từ chối.
+ACCOUNT_CODE_RE = re.compile(r"^[A-Z0-9_.-]{1,64}$")
 SYNC_ID_NAMESPACE = UUID("35788392-f297-47bb-8f2f-0a6a8e5af910")
 ANALYTICS_RAW_FIELDS = {
     "product_id": "ID sản phẩm",
@@ -379,7 +383,7 @@ def _normalize_account_code(code: str) -> str:
     if value == "ALL":
         raise ValueError("ALL là mã tổng hợp nội bộ, không được dùng làm affiliate account.")
     if not ACCOUNT_CODE_RE.fullmatch(value):
-        raise ValueError("Affiliate account phải dài 1-64 ký tự và chỉ gồm A-Z, 0-9, _ hoặc -.")
+        raise ValueError("Affiliate account phải dài 1-64 ký tự và chỉ gồm A-Z, 0-9, _, - hoặc dấu chấm.")
     return value
 
 

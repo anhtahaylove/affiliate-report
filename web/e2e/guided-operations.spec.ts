@@ -169,7 +169,9 @@ test("account mutations refresh metadata once only after a successful commit", a
     if (method === "GET") return route.fulfill({ json: { items: records, count: records.length, hard_delete_supported: true } });
     if (method === "POST") {
       const body = request.postDataJSON() as { code: string; display_name: string };
-      if (body.code === "FAIL") return route.fulfill({ status: 422, json: { detail: "Không thể tạo" } });
+      // Hình dạng thật của lỗi Pydantic khi pattern không khớp là MẢNG, không phải chuỗi — mock
+      // cũ trả chuỗi từng che mất đúng lớp lỗi mà request() (api.ts) không giải mã được.
+      if (body.code === "FAIL") return route.fulfill({ status: 422, json: { detail: [{ type: "string_pattern_mismatch", loc: ["body", "code"], msg: "String should match pattern" }] } });
       const created: AccountRecord = { code: body.code, display_name: body.display_name, active: true, display_order: records.length + 1, created_at: null, updated_at: null };
       records = [...records, created];
       return route.fulfill({ json: created });
@@ -206,7 +208,20 @@ test("account mutations refresh metadata once only after a successful commit", a
 
   await page.getByLabel("Mã tài khoản mới").fill("FAIL");
   await page.getByRole("button", { name: "Tạo tài khoản" }).click();
-  await expect(page.getByText("Không thể tạo", { exact: false })).toBeVisible();
+  await expect(page.getByText("Dữ liệu không hợp lệ", { exact: false })).toBeVisible();
+  expect(metaCalls).toBe(2);
+
+  // Dấu cách trong mã tài khoản phải bị chặn NGAY tại client, trước khi có bất kỳ round trip
+  // nào — trước đây request lọt qua tới API, Pydantic từ chối bằng detail dạng mảng mà api.ts
+  // chưa giải mã được, và người dùng chỉ thấy "API trả về HTTP 422" như thể nút không làm gì.
+  let accountsPostCalls = 0;
+  page.on("request", (req) => { if (req.method() === "POST" && req.url().includes("/api/v1/accounts")) accountsPostCalls += 1; });
+  await page.getByLabel("Mã tài khoản mới").fill("bad code");
+  const errorMessage = page.locator(".upload-result[data-tone='danger']");
+  await page.getByRole("button", { name: "Tạo tài khoản" }).click();
+  await expect(errorMessage).toHaveText(/A-Z, 0-9, _, - hoặc dấu chấm/);
+  await expect(errorMessage).toHaveAttribute("role", "alert");
+  expect(accountsPostCalls).toBe(0);
   expect(metaCalls).toBe(2);
 
   let card = page.locator(".account-card").filter({ hasText: "NEW_ACC" });

@@ -13,7 +13,14 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
   const [accountDrafts, setAccountDrafts] = useState<Record<string, { display_name: string; display_order: string }>>({});
   const [deletePreview, setDeletePreview] = useState<AccountDeletePreview | null>(null);
   const [message, setMessage] = useState("");
+  // Trạng thái riêng thay vì suy luận tone từ nội dung message (kiểu regex-đoán-theo-chữ-đầu ở
+  // targets.tsx) — cách đó dễ vỡ khi đổi câu chữ. State tường minh không mơ hồ.
+  const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
   const [syncWarning, setSyncWarning] = useState("");
+  function report(tone: "success" | "danger", text: string) {
+    setMessageTone(tone);
+    setMessage(text);
+  }
   const refreshAccounts = useCallback(async () => {
     const data = await loadAccounts();
     setRecords(data.items);
@@ -23,7 +30,7 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
   useEffect(() => {
     async function load() {
       try { await refreshAccounts(); }
-      catch (reason) { setMessage(errorMessage(reason, "Không thể tải danh sách tài khoản.")); }
+      catch (reason) { report("danger", errorMessage(reason, "Không thể tải danh sách tài khoản.")); }
     }
     void load();
   }, [refreshAccounts]);
@@ -56,7 +63,7 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
     try {
       await onAccountsChanged();
       setSyncWarning("");
-      setMessage("Đã đồng bộ tên tài khoản trên toàn ứng dụng.");
+      report("success", "Đã đồng bộ tên tài khoản trên toàn ứng dụng.");
     } catch (reason) {
       setSyncWarning(errorMessage(reason, "Chưa thể đồng bộ metadata tài khoản."));
     }
@@ -64,16 +71,22 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
 
   async function create() {
     const code = draft.code.trim().toUpperCase();
-    if (!code) return setMessage("Hãy nhập mã tài khoản.");
+    if (!code) return report("danger", "Hãy nhập mã tài khoản.");
+    // Khớp đúng ACCOUNT_CODE_RE ở backend (accounts.py) — chỉ chữ HOA vì `code` ở trên đã qua
+    // .toUpperCase(), đúng dạng ACCOUNT_CODE_RE thật sự kiểm (giá trị sau chuẩn hoá). Bắt lỗi
+    // tại chỗ thay vì đi một vòng API rồi mới biết: trước đây thiếu bước này, gõ dấu cách vào
+    // mã tài khoản khiến Pydantic từ chối với lỗi 422 dạng mảng mà request() chưa giải mã được,
+    // nên bấm Tạo không thấy phản hồi gì.
+    if (!/^[A-Z0-9_.-]{1,64}$/.test(code)) return report("danger", "Mã tài khoản chỉ gồm A-Z, 0-9, _, - hoặc dấu chấm, tối đa 64 ký tự.");
     const displayName = draft.display_name.trim() || code;
     try {
       const created = await createAccount({ code, display_name: displayName });
       keepCommittedRecord(created);
       setDraft({ code: "", display_name: "" });
-      setMessage(`Đã tạo tài khoản ${code}.`);
+      report("success", `Đã tạo tài khoản ${code}.`);
       await syncAfterMutation();
     } catch (reason) {
-      setMessage(errorMessage(reason, "Không thể tạo tài khoản."));
+      report("danger", errorMessage(reason, "Không thể tạo tài khoản."));
     }
   }
   async function patch(record: AccountItem, changes: Partial<AccountItem>) {
@@ -84,10 +97,10 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
         active: changes.active,
       });
       keepCommittedRecord(updated);
-      setMessage(`Đã cập nhật ${record.code}.`);
+      report("success", `Đã cập nhật ${record.code}.`);
       await syncAfterMutation();
     } catch (reason) {
-      setMessage(errorMessage(reason, "Không thể cập nhật tài khoản."));
+      report("danger", errorMessage(reason, "Không thể cập nhật tài khoản."));
     }
   }
 
@@ -95,18 +108,18 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
     const current = accountDrafts[record.code];
     if (!current) return;
     const displayName = current.display_name.trim();
-    if (!displayName) return setMessage("Tên hiển thị không được để trống.");
+    if (!displayName) return report("danger", "Tên hiển thị không được để trống.");
     const order = Number(current.display_order);
-    if (!Number.isInteger(order)) return setMessage("Thứ tự hiển thị phải là số nguyên.");
+    if (!Number.isInteger(order)) return report("danger", "Thứ tự hiển thị phải là số nguyên.");
     await patch(record, { display_name: displayName, display_order: order });
   }
   async function previewDelete(record: AccountItem) {
     try {
       const preview = await previewDeleteAccount(record.code);
       setDeletePreview(preview);
-      setMessage(`Ảnh hưởng khi xóa ${record.code}: ${countsText(preview.dependency_counts)}.`);
+      report("success", `Ảnh hưởng khi xóa ${record.code}: ${countsText(preview.dependency_counts)}.`);
     } catch (reason) {
-      setMessage(errorMessage(reason, "Không thể xem trước ảnh hưởng khi xóa tài khoản."));
+      report("danger", errorMessage(reason, "Không thể xem trước ảnh hưởng khi xóa tài khoản."));
     }
   }
   async function confirmDelete() {
@@ -122,11 +135,11 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
         });
       } else if (result.account) keepCommittedRecord(result.account);
       else setRecords((current) => current.map((record) => record.code === result.code ? { ...record, active: false } : record));
-      setMessage(result.hard_deleted ? `Đã xóa vĩnh viễn ${result.code}. Bản sao lưu: ${result.backup_path}.` : `Đã lưu trữ ${result.code}.`);
+      report("success", result.hard_deleted ? `Đã xóa vĩnh viễn ${result.code}. Bản sao lưu: ${result.backup_path}.` : `Đã lưu trữ ${result.code}.`);
       setDeletePreview(null);
       await syncAfterMutation();
     } catch (reason) {
-      setMessage(errorMessage(reason, "Không thể xóa tài khoản."));
+      report("danger", errorMessage(reason, "Không thể xóa tài khoản."));
     }
   }
 
@@ -166,10 +179,14 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
         </div>
       </div>
       <div className="account-create-panel upload-form">
-        <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="SHOP_1 hoặc username TikTok" /></div>
+        <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="Ví dụ: SHOP_1 hoặc username TikTok (vd. sarah.reign)" /></div>
         <div className="field"><label htmlFor="new-account-name">Tên hiển thị mới (không bắt buộc)</label><input id="new-account-name" maxLength={128} value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Để trống sẽ dùng mã account" /></div>
         <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
       </div>
+      {/* Ngay dưới panel tạo tài khoản, không phải cuối trang: trước đây thông báo lỗi nằm sau
+          toàn bộ danh sách account, nên với vài chục account đã tồn tại, bấm Tạo thất bại trông
+          y hệt như không có phản hồi gì — phải cuộn hết xuống mới thấy dòng chữ giải thích. */}
+      {message ? <p className="upload-result" data-tone={messageTone} role={messageTone === "danger" ? "alert" : "status"}>{message}</p> : null}
       <section className="account-summary-row" aria-labelledby="account-summary-title">
         <h3 className="sr-only" id="account-summary-title">Tổng quan tài khoản</h3>
         <span><strong>{integer.format(activeRecords.length)}</strong> đang hoạt động</span>
@@ -189,7 +206,6 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
       </div>
       {deletePreview ? <div className="delete-preview panel-muted" role="status"><strong>Xem trước {deletePreview.code}</strong><span>{deletePreview.action === "hard_delete" ? "Sẽ xóa vĩnh viễn sau khi sao lưu" : "Sẽ chuyển vào danh sách lưu trữ"} · {countsText(deletePreview.dependency_counts)}</span></div> : null}
       {syncWarning ? <div className="sync-warning" role="alert"><span>{syncWarning}</span><button type="button" onClick={() => void retryMetadataSync()}>Thử đồng bộ lại</button></div> : null}
-      {message ? <p className="upload-result" role="status">{message}</p> : null}
       {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
       <ConfirmDialog
         open={deletePreview !== null}

@@ -267,7 +267,12 @@ class SyncImportRequest(BaseModel):
 
 
 class AccountCreate(BaseModel):
-    code: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    # Cố ý KHÔNG dùng chung pattern với ACCOUNT_CODE_RE (accounts.py): pattern này kiểm giá trị
+    # người dùng gõ THÔ, trước khi _normalize_code chạy .upper(), nên phải chấp nhận cả chữ
+    # thường (vd. gõ "sarah.reign"). ACCOUNT_CODE_RE lại được _sanitize_view_filters dùng để
+    # kiểm giá trị filter thô theo kiểu ngược lại — chỉ chấp nhận chữ hoa để tự chặn "all" viết
+    # thường lọt qua so sánh case-sensitive "!= 'ALL'". Gộp hai pattern từng làm "all" lọt qua.
+    code: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
     display_name: str = Field(min_length=1, max_length=128)
     display_order: int | None = Field(default=None, ge=0, le=1_000_000)
 
