@@ -151,6 +151,11 @@ export function countsText(counts: Record<string, number> | undefined) {
   return entries.length ? entries.map(([name, count]) => `${COUNT_LABELS[name] ?? name}: ${integer.format(Number(count))}`).join(" · ") : "Không có bảng";
 }
 
+// Chỉ tin message khi lỗi có field "status" (chữ ký riêng của ApiError ở api.ts — network error
+// hoặc response.detail đã dịch tiếng Việt sẵn). Không import ApiError trực tiếp để format.ts giữ
+// nguyên zero-dependency, chạy được qua `node --test` không cần bundler/alias resolver. Error khác
+// (TypeError, lỗi render...) không phải lỗi nghiệp vụ đã dịch — message của nó là tiếng Anh/kỹ
+// thuật, phải dùng fallback thay vì hiện thẳng cho người dùng không chuyên.
 export function errorMessage(reason: unknown, fallback: string) {
-  return reason instanceof Error ? reason.message : fallback;
+  return reason instanceof Error && "status" in reason && typeof reason.status === "number" ? reason.message : fallback;
 }

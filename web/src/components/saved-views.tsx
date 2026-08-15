@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createSavedView, deleteSavedView, loadSavedViews, type SavedReportView, type SavedViewRoute, updateSavedView } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
+import { errorMessage } from "@/lib/format";
 
 const ARRAY_FILTERS = new Set(["account", "status"]);
 const NUMBER_FILTERS = new Set(["size", "top"]);
@@ -33,7 +34,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
       const preferred = response.items.find((item) => item.is_default);
       if (preferred) setSelected(String(preferred.id));
     }).catch((reason) => {
-      if (active) setError(reason instanceof Error ? reason.message : "Không thể tải chế độ xem.");
+      if (active) setError(errorMessage(reason, "Không thể tải chế độ xem."));
     });
     return () => { active = false; };
   }, [route]);
@@ -60,7 +61,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
       setName("");
       setMakeDefault(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể lưu chế độ xem.");
+      setError(errorMessage(reason, "Không thể lưu chế độ xem."));
     } finally {
       setBusy(false);
     }
@@ -74,7 +75,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
       const updated = await updateSavedView(current.id, { filters: currentFilters });
       setViews((items) => items.map((item) => item.id === updated.id ? updated : item));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể cập nhật chế độ xem.");
+      setError(errorMessage(reason, "Không thể cập nhật chế độ xem."));
     } finally {
       setBusy(false);
     }
@@ -89,7 +90,7 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
       setViews((items) => items.filter((item) => item.id !== current.id));
       setSelected("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể xóa chế độ xem.");
+      setError(errorMessage(reason, "Không thể xóa chế độ xem."));
     } finally {
       setBusy(false);
       setConfirmingRemove(false);

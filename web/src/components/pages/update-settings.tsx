@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, AndroidUpdatePrepareResponse, AndroidUpdateSummary, CapabilityState, UpdateProgress, UpdateStatus, apiUrl, checkUpdate, installUpdate, loadAndroidUpdateStatus, loadUpdateProgress, prepareAndroidUpdate } from "@/lib/api";
 import { forgetPostponedUpdate } from "@/components/update-banner";
 import { ConfirmDialog } from "@/components/ui";
-import { formatBytes, formatDateTime } from "@/lib/format";
+import { errorMessage, formatBytes, formatDateTime } from "@/lib/format";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, CircleAlert, CloudCog, Download, ExternalLink, HardDriveDownload, Info, MonitorUp, RefreshCw, RotateCw, ShieldCheck, Smartphone, WifiOff, type LucideIcon } from "lucide-react";
 import { requestAndroidNativeDownload } from "@/lib/android-native";
 import { compareSemanticVersions, deriveUpdatePresentation, type UpdateExperienceState, type UpdateIssueKind } from "@/lib/update-presentation";
@@ -130,7 +130,7 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
           current_version: status?.current_version ?? "—",
           available: false,
           installable: false,
-          error: reason instanceof Error ? reason.message : "Không thể kiểm tra bản APK.",
+          error: errorMessage(reason, "Không thể kiểm tra bản APK."),
         });
       })
       .finally(() => { if (active) setChecking(false); });
@@ -189,6 +189,9 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
       await nativeVerification;
       setPrepared(result);
     } catch (reason) {
+      // Không đổi sang errorMessage() ở đây: reason luôn là Error tự ném trong hàm này (dòng 155,
+      // 164, 170, 182), message đã là tiếng Việt cụ thể sẵn — errorMessage() sẽ ép về câu chung
+      // chung, mất chi tiết hữu ích (vd. "APK không khớp gói đã xác minh" vs "Không thể tải APK").
       setPrepareError(reason instanceof Error ? reason.message : "Không thể tải và xác minh APK.");
     } finally {
       setPreparing(false);

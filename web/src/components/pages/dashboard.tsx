@@ -26,7 +26,7 @@ import { RecentImports } from "@/components/recent-imports";
 import { AccountIdentity } from "@/components/account-identity";
 import { useApi } from "@/lib/use-api";
 import { qualityIssueCount } from "@/lib/data-quality";
-import { achievementTone, agingBucketLabel, currentMonth, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
+import { achievementTone, agingBucketLabel, currentMonth, errorMessage, formatDateTime, formatMoney, integer, percent } from "@/lib/format";
 import type { AccountDirectory } from "@/lib/account-directory";
 
 const CommissionTrendChart = dynamic(
@@ -276,7 +276,7 @@ function DashboardCustomizer({ compact, preferences, onPreferencesChange }: { co
     try {
       await onPreferencesChange({ dashboard_layout: { schema: 1, order, hidden } });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể lưu bố cục trang Tổng quan.");
+      setError(errorMessage(reason, "Không thể lưu bố cục trang Tổng quan."));
     } finally {
       setSaving(false);
     }
@@ -405,7 +405,7 @@ function buildAlerts(analytics: AnalyticsResponse, filters: UrlFilters, achievem
   const target = analytics.target;
   const unknownHref = `/orders${queryString({ month: filters.month, start: filters.start, end: filters.end, account: filters.accounts, status: "unknown" })}`;
   if (target && achievement != null && achievement < target.elapsed_days / Math.max(target.scope_days, 1)) {
-    alerts.push({ tone: "warning", title: "Nhịp mục tiêu đang chậm", copy: `Cần ${formatMoney(target.required_per_remaining_day)} mỗi ngày trong ${target.remaining_days} ngày còn lại.`, href: "/targets", action: "Mở planner" });
+    alerts.push({ tone: "warning", title: "Nhịp mục tiêu đang chậm", copy: `Cần ${formatMoney(target.required_per_remaining_day)} mỗi ngày trong ${target.remaining_days} ngày còn lại.`, href: "/targets", action: "Mở trang Mục tiêu" });
   }
   if (quality.unknown_status_rows > 0) alerts.push({ tone: "danger", title: "Có trạng thái chưa xác định", copy: `${integer.format(quality.unknown_status_rows)} dòng cần kiểm tra vì hệ thống chưa nhận diện được trạng thái đơn này.`, href: unknownHref, action: "Xem đơn" });
   if (quality.import_rejected > 0) alerts.push({ tone: "danger", title: "Import có dòng bị từ chối", copy: `${integer.format(quality.import_rejected)} dòng chưa đi vào báo cáo.`, href: "/imports", action: "Xem kết quả" });
@@ -447,7 +447,7 @@ function FirstRun({ user, setup, compact = false }: { user: CurrentUser; setup: 
   const steps = [
     { done: setup.hasAccounts, href: owner ? "/accounts" : null, title: "Tạo tài khoản TikTok", copy: setup.hasAccounts ? "Đã có phạm vi tài khoản để vận hành." : "Tạo phạm vi báo cáo cho từng tài khoản affiliate." },
     { done: setup.hasImports, href: writer && setup.hasAccounts ? "/imports" : null, title: "Nhập tệp Excel đầu tiên", copy: setup.hasImports ? "Đã có lịch sử nhập để dựng báo cáo." : "Chọn tài khoản và tệp TikTok cần nhập." },
-    { done: setup.hasTarget, href: writer && setup.hasAccounts ? "/targets" : null, title: "Đặt mục tiêu tháng", copy: setup.hasTarget ? "Đã có mục tiêu cho tháng hiện tại." : "Mở planner để hệ thống tính pace và dự báo." },
+    { done: setup.hasTarget, href: writer && setup.hasAccounts ? "/targets" : null, title: "Đặt mục tiêu tháng", copy: setup.hasTarget ? "Đã có mục tiêu cho tháng hiện tại." : "Mở trang Mục tiêu để hệ thống tính nhịp và dự báo." },
   ];
   const pending = steps.filter((step) => !step.done);
   if (compact && pending.length) {

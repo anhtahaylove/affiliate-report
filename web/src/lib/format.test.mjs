@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { achievementTone, countsText, formatDateTime, roleLabel, statusLabel } from "./format.ts";
+import { achievementTone, countsText, errorMessage, formatDateTime, roleLabel, statusLabel } from "./format.ts";
 
 test("Vietnamese presentation labels keep canonical values out of the UI", () => {
   assert.equal(statusLabel("settled"), "Đã quyết toán");
@@ -34,4 +34,15 @@ test("formatDateTime keeps a four-digit year and unambiguous Vietnamese date", (
 test("countsText Việt hóa các bảng nghiệp vụ nhưng vẫn giữ key mở rộng", () => {
   assert.equal(countsText({ accounts: 2, raw_rows: 15 }), "Tài khoản: 2 · Dòng dữ liệu gốc: 15");
   assert.equal(countsText({ future_table: 1 }), "future_table: 1");
+});
+
+test("errorMessage chỉ tin message của lỗi có status (kiểu ApiError) — Error thường luôn dùng fallback", () => {
+  class ApiErrorLike extends Error {
+    status = 422;
+  }
+  assert.equal(errorMessage(new ApiErrorLike("Mã tài khoản không hợp lệ."), "Lỗi mặc định."), "Mã tài khoản không hợp lệ.");
+  // TypeError/lỗi JS thật: message tiếng Anh/kỹ thuật, không được lọt ra ngoài — phải dùng fallback.
+  assert.equal(errorMessage(new TypeError("Cannot read properties of undefined"), "Lỗi mặc định."), "Lỗi mặc định.");
+  assert.equal(errorMessage("chuỗi bất kỳ", "Lỗi mặc định."), "Lỗi mặc định.");
+  assert.equal(errorMessage(undefined, "Lỗi mặc định."), "Lỗi mặc định.");
 });

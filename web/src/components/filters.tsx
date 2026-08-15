@@ -189,7 +189,7 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
                 Tất cả trạng thái
               </label>
               {statuses.map((status) => (
-                <label className="account-option" key={status} title={`Mã hệ thống: ${status}`}>
+                <label className="account-option" key={status}>
                   <input type="checkbox" checked={draft.statuses.includes(status)} onChange={() => toggle("statuses", status)} />
                   {statusLabel(status)}
                 </label>

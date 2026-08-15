@@ -4,6 +4,7 @@ import * as RadioGroup from "@radix-ui/react-radio-group";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import type { UiPreferences } from "@/lib/api";
+import { errorMessage } from "@/lib/format";
 
 export type Theme = UiPreferences["theme"];
 
@@ -41,7 +42,7 @@ export function ThemePreferences({ value, onChange }: { value: Theme; onChange: 
     try {
       await onChange(theme);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Không thể lưu chế độ giao diện.");
+      setError(errorMessage(reason, "Không thể lưu chế độ giao diện."));
     } finally {
       setSaving(false);
     }

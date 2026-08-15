@@ -38,7 +38,7 @@ export function Metric({ title, value, hint, tone }: { title: string; value: str
 }
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
-  return <span className="status-badge" data-status={status ?? "unknown"} title={status ? `Mã hệ thống: ${status}` : undefined}>{statusLabel(status)}</span>;
+  return <span className="status-badge" data-status={status ?? "unknown"}>{statusLabel(status)}</span>;
 }
 
 /**

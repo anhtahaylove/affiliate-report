@@ -4,7 +4,7 @@ export default function Loading() {
       <section className="auth-card panel" aria-live="polite">
         <div className="brand-badge">AFF</div>
         <h1>Đang tải…</h1>
-        <p className="hint">Đang chuẩn bị dữ liệu Operations Cockpit.</p>
+        <p className="hint">Đang chuẩn bị dữ liệu báo cáo.</p>
       </section>
     </main>
   );

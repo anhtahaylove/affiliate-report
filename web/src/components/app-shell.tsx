@@ -9,7 +9,7 @@ import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, 
 import { apiUrl, CurrentUser, exitApplication, logout, type MetaResponse } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { BottomSheet } from "@/components/primitives";
-import { roleLabel } from "@/lib/format";
+import { errorMessage, roleLabel } from "@/lib/format";
 import { routeIsActive } from "@/lib/navigation";
 
 type NavItem = { href: string; label: string; desc: string; icon: LucideIcon; roles?: Array<CurrentUser["role"]>; mobilePrimary?: boolean; sharedDeploymentOnly?: boolean };
@@ -127,7 +127,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
       await exitApplication(user.desktop_control_token);
     } catch (reason) {
       setExiting(false);
-      setExitError(reason instanceof Error ? reason.message : "Không thể thoát ứng dụng.");
+      setExitError(errorMessage(reason, "Không thể thoát ứng dụng."));
     }
   }
 
@@ -220,7 +220,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
         onCancel={() => setAskExit(false)}
         onConfirm={() => void handleExit()}
       >
-        <p>Backend sẽ dừng hẳn. Bạn có thể mở lại từ Desktop hoặc Start Menu bất cứ lúc nào.</p>
+        <p>Ứng dụng sẽ đóng hoàn toàn. Bạn có thể mở lại từ Desktop hoặc Start Menu bất cứ lúc nào.</p>
       </ConfirmDialog>
     </main>
   );
