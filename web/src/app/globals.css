@@ -2144,6 +2144,15 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .inbox-hint code { font-family: var(--font-mono); font-size: 0.84rem; overflow-wrap: anywhere; }
 .inbox-hint .subtle { color: var(--ink-soft); font-size: 0.84rem; }
 
+.android-sync-folder-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.android-sync-folder-row button { min-height: 40px; padding: 0 12px; }
+
 /* Hybrid Pairing: LAN ưu tiên, cloud relay chỉ giữ ciphertext ngắn hạn. */
 .pairing-panel { margin-top: 14px; }
 .pairing-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }

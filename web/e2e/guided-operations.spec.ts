@@ -9,6 +9,7 @@ const dashboardLayout = {
 type ShellOptions = {
   role?: "owner" | "operator" | "viewer";
   accounts?: Array<{ code: string; display_name: string; active: boolean; display_order: number }>;
+  runtimePlatform?: "windows" | "android" | "web";
 };
 
 async function mockShell(page: Page, options: ShellOptions = {}) {
@@ -22,6 +23,7 @@ async function mockShell(page: Page, options: ShellOptions = {}) {
       statuses: ["settled", "pending", "ineligible", "unknown"],
       max_upload_mb: 50,
       app_version: "2.0.4",
+      runtime_platform: options.runtimePlatform,
       capabilities: {
         database_backend: "sqlite",
         auth_mode: "local",
@@ -34,6 +36,31 @@ async function mockShell(page: Page, options: ShellOptions = {}) {
   }));
   await page.route("**/api/v1/ui/preferences", (route) => route.fulfill({ json: { theme: "system", sidebar_collapsed: false, dashboard_layout: dashboardLayout, updated_at: null } }));
   await page.route("**/api/v1/ui/saved-views**", (route) => route.fulfill({ json: { items: [], count: 0 } }));
+}
+
+/** Bản giả tối thiểu của bridge Java thật (MainActivity.AndroidDownloadBridge) — chỉ đủ để lái
+ * component AndroidSyncFolder qua đúng vòng CustomEvent thật, không đọc lại biến nội bộ nào. */
+async function installAndroidSyncFolderBridge(page: Page) {
+  await page.addInitScript(() => {
+    let picked = false;
+    Object.assign(window, {
+      AffiliateReportAndroid: {
+        download() {},
+        pickSyncFolder() {
+          picked = true;
+          window.dispatchEvent(new CustomEvent("affiliate-report-sync-folder", { detail: { picked: true, label: "Download" } }));
+        },
+        requestSyncFolderState() {
+          window.dispatchEvent(new CustomEvent("affiliate-report-sync-folder", { detail: { picked } }));
+        },
+        syncNow(account: string) {
+          window.dispatchEvent(new CustomEvent("affiliate-report-sync-result", {
+            detail: { imported: 2, duplicate: 1, rejected: 0, message: `synced:${account}` },
+          }));
+        },
+      },
+    });
+  });
 }
 
 function emptyAnalytics() {
@@ -106,6 +133,32 @@ test("imports zero-account state is safe and successful import keeps results plu
   await expect(page.getByText("2 dòng mới", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "Xem Dashboard" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Đặt mục tiêu tháng" })).toBeVisible();
+});
+
+test("Android: chọn thư mục đồng bộ, tự đồng bộ lúc chọn xong, và bấm đồng bộ tay lần nữa", async ({ page }) => {
+  const account = { code: "SHOP_A", display_name: "Gian hàng chính", active: true, display_order: 1 };
+  await mockShell(page, { accounts: [account], runtimePlatform: "android" });
+  await page.route("**/api/v1/imports**", (route) => route.fulfill({ json: { items: [], count: 0, limit: 20 } }));
+  await installAndroidSyncFolderBridge(page);
+
+  await page.goto("/imports/");
+  // Android: gợi ý thư mục inbox app-private cũ phải biến mất, thay bằng thư mục đồng bộ SAF.
+  await expect(page.getByText("thả tệp vào thư mục", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Chưa chọn thư mục")).toBeVisible();
+  const syncButton = page.getByRole("button", { name: "Đồng bộ ngay" });
+  await expect(syncButton).toBeDisabled();
+
+  // Chọn thư mục xong tự đồng bộ luôn ("quét khi mở app"), không cần bấm gì thêm.
+  await page.getByRole("button", { name: "Chọn thư mục" }).click();
+  await expect(page.getByText("Download", { exact: true })).toBeVisible();
+  await expect(page.getByText("2 đã nhập")).toBeVisible();
+  await expect(page.getByText("1 trùng")).toBeVisible();
+  await expect(page.getByText("synced:SHOP_A")).toBeVisible();
+
+  // Bấm tay lần nữa vẫn gọi đúng account đang chọn.
+  await expect(syncButton).toBeEnabled();
+  await syncButton.click();
+  await expect(page.getByText("synced:SHOP_A")).toBeVisible();
 });
 
 test("rename keeps committed result when shell metadata refresh fails and retry recovers", async ({ page }) => {

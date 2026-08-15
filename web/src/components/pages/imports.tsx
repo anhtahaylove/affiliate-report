@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CurrentUser, ImportHistoryRow, RejectedRow, UndoImportPreview, loadImportHistory, previewUndoImport, undoImport, uploadExport, visibleRejectedRows } from "@/lib/api";
 import { RecentImports } from "@/components/recent-imports";
 import { PairingPanel } from "@/components/pairing-panel";
+import { AndroidSyncFolder } from "@/components/android-sync-folder";
 import { ConfirmDialog, canWrite, isOwner } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { errorMessage, integer } from "@/lib/format";
@@ -40,7 +41,7 @@ function fileSizeText(size: number) {
   return `${integer.format(Math.round((size / 1024 / 1024) * 10) / 10)} MB`;
 }
 
-export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir }: { user: CurrentUser; accounts: string[]; directory: AccountDirectory; maxUploadMb: number; inboxDir?: string | null }) {
+export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir, runtimePlatform }: { user: CurrentUser; accounts: string[]; directory: AccountDirectory; maxUploadMb: number; inboxDir?: string | null; runtimePlatform?: "windows" | "android" | "web" }) {
   const [account, setAccount] = useState(accounts[0] ?? "");
   const [files, setFiles] = useState<FileList | null>(null);
   const [history, setHistory] = useState<ImportHistoryRow[]>([]);
@@ -150,7 +151,9 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir }
             <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp. {EXPORT_FILENAME_HINT}</p>
           </div>
         </div>
-        {inboxDir ? (
+        {runtimePlatform === "android" ? (
+          <AndroidSyncFolder account={selectedAccount} onSynced={() => { invalidateApiCache(); void refreshHistory(); }} />
+        ) : inboxDir ? (
           <div className="inbox-hint" role="note">
             <p><strong>Hoặc thả tệp vào thư mục, ứng dụng tự nhập</strong></p>
             <p>Chép tệp vào <code>{inboxDir}</code>, trong thư mục con mang tên account. Ứng dụng quét mỗi 15 giây; nhập xong dời tệp sang <code>.done</code>, tệp lỗi sang <code>.failed</code> kèm ghi chú. {EXPORT_FILENAME_HINT}</p>

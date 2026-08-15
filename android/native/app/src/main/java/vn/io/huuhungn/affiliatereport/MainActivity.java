@@ -1,10 +1,14 @@
 package vn.io.huuhungn.affiliatereport;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
 import android.provider.Settings;
+import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.URLUtil;
@@ -17,6 +21,7 @@ import androidx.core.content.FileProvider;
 
 import com.getcapacitor.BridgeActivity;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -24,21 +29,33 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class MainActivity extends BridgeActivity {
+    private static final String TAG = "AffiliateReport";
     private static final int API_PORT = 8765;
     private static final String APP_URL = "http://127.0.0.1:8765/";
     private static final String LOCAL_TOKEN_COOKIE = "android_local_token";
     private static final String APK_MIME_TYPE = "application/vnd.android.package-archive";
+    private static final String XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private static final String STATE_DOWNLOAD_URL = "affiliate_report_download_url";
     private static final String STATE_INSTALL_FILE = "affiliate_report_install_file";
     private static final String STATE_INSTALL_VERSION = "affiliate_report_install_version";
     private static final String STATE_INSTALL_SIZE = "affiliate_report_install_size";
     private static final String STATE_INSTALL_SHA256 = "affiliate_report_install_sha256";
+    // Thư mục đồng bộ liên tục (SAF) — xem AndroidSyncFolder (web) + parser.FILENAME_PATTERN (Python).
+    private static final String SYNC_FOLDER_PREFS = "affiliate_report_sync_folder";
+    private static final String PREF_SYNC_FOLDER_URI = "tree_uri";
+    private static final String SYNC_DONE_SUBFOLDER = ".done";
+    private static final String SYNC_FAILED_SUBFOLDER = ".failed";
+    private static final long SYNC_STABLE_CHECK_DELAY_MILLIS = 2_000;
+    private static final String SYNC_MULTIPART_BOUNDARY = "AffiliateReportSyncBoundary7f3a9c";
     private final ExecutorService fileExecutor = Executors.newSingleThreadExecutor();
     private String pendingDownloadUrl;
     private File pendingInstallFile;
@@ -82,6 +99,27 @@ public final class MainActivity extends BridgeActivity {
                             "Cần cho phép cài ứng dụng từ nguồn này để hoàn tất cập nhật.",
                             Toast.LENGTH_LONG
                     ).show();
+                }
+            }
+    );
+
+    private final ActivityResultLauncher<Intent> pickSyncFolderLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> {
+                Uri treeUri = result.getData() == null ? null : result.getData().getData();
+                if (result.getResultCode() != RESULT_OK || treeUri == null) {
+                    dispatchSyncFolderEvent(currentSyncFolderLabel(), null);
+                    return;
+                }
+                try {
+                    getContentResolver().takePersistableUriPermission(
+                            treeUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    );
+                    getSyncFolderPreferences().edit().putString(PREF_SYNC_FOLDER_URI, treeUri.toString()).apply();
+                    dispatchSyncFolderEvent(queryDisplayName(treeUri), null);
+                } catch (Exception error) {
+                    dispatchSyncFolderEvent(currentSyncFolderLabel(), "Không thể lưu quyền truy cập thư mục.");
                 }
             }
     );
@@ -136,6 +174,21 @@ public final class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public void download(String source, String filename, String mimeType) {
             runOnUiThread(() -> handleNativeDownload(source, filename, mimeType));
+        }
+
+        @JavascriptInterface
+        public void pickSyncFolder() {
+            runOnUiThread(MainActivity.this::launchSyncFolderPicker);
+        }
+
+        @JavascriptInterface
+        public void requestSyncFolderState() {
+            runOnUiThread(() -> dispatchSyncFolderEvent(currentSyncFolderLabel(), null));
+        }
+
+        @JavascriptInterface
+        public void syncNow(String account) {
+            fileExecutor.execute(() -> runSync(account));
         }
     }
 
@@ -472,5 +525,313 @@ public final class MainActivity extends BridgeActivity {
         } finally {
             if (connection != null) connection.disconnect();
         }
+    }
+
+    // --- Thư mục đồng bộ liên tục (Android SAF) --------------------------------------------
+    // Người dùng chọn một thư mục (thường là Download) một lần qua ACTION_OPEN_DOCUMENT_TREE;
+    // từ đó mỗi lần mở app hoặc bấm "Đồng bộ ngay", ứng dụng tự quét thư mục đó, POST thẳng từng
+    // tệp khớp affiliate_orders*.xlsx tới /api/v1/imports qua loopback (đi đúng pipeline nhập có
+    // sẵn — chống trùng SHA-256, kiểm 47 cột, mọi validate khác giữ nguyên), rồi dời tệp đã xử lý
+    // sang .done/.failed ngay trong thư mục đó. Dùng thẳng DocumentsContract/ContentResolver thay
+    // vì thư viện androidx.documentfile để không phải thêm dependency Gradle mới.
+
+    private void launchSyncFolderPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        // Gợi ý mở sẵn tại Download — chỉ là gợi ý tốt-nhất-có-thể cho provider lưu trữ ngoài
+        // chuẩn AOSP; SAF không có khái niệm mặc định thật, provider khác (thẻ nhớ rời, provider
+        // app khác) bỏ qua gợi ý này một cách an toàn, người dùng vẫn tự chọn thư mục như thường.
+        intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
+                DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download"));
+        try {
+            pickSyncFolderLauncher.launch(intent);
+        } catch (Exception error) {
+            dispatchSyncFolderEvent(currentSyncFolderLabel(), "Không thể mở trình chọn thư mục.");
+        }
+    }
+
+    private SharedPreferences getSyncFolderPreferences() {
+        return getSharedPreferences(SYNC_FOLDER_PREFS, MODE_PRIVATE);
+    }
+
+    private Uri currentSyncFolderUri() {
+        String stored = getSyncFolderPreferences().getString(PREF_SYNC_FOLDER_URI, null);
+        return stored == null ? null : Uri.parse(stored);
+    }
+
+    private String currentSyncFolderLabel() {
+        Uri treeUri = currentSyncFolderUri();
+        return treeUri == null ? null : queryDisplayName(treeUri);
+    }
+
+    /** Đọc tên thư mục gốc để hiện cho người dùng — dùng đúng cột SAF chuẩn (không giả định định
+     * dạng docId "primary:..." riêng của AOSP external storage provider) nên chạy được với mọi
+     * provider. Trả về null nếu không đọc được (quyền bị thu hồi, thẻ nhớ bị rút…) — phía React
+     * coi như CHƯA chọn thư mục, không phân biệt hai ca này để giữ đơn giản. */
+    private String queryDisplayName(Uri treeUri) {
+        try {
+            Uri rootDocUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri));
+            try (Cursor cursor = getContentResolver().query(
+                    rootDocUri, new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME}, null, null, null)) {
+                if (cursor != null && cursor.moveToFirst()) {
+                    String name = cursor.getString(0);
+                    if (name != null && !name.trim().isEmpty()) return name;
+                }
+            }
+        } catch (Exception ignored) {
+            // rơi xuống trả null bên dưới
+        }
+        return null;
+    }
+
+    private void dispatchSyncFolderEvent(String label, String error) {
+        org.json.JSONObject detail = new org.json.JSONObject();
+        try {
+            detail.put("picked", label != null);
+            if (label != null) detail.put("label", label);
+            if (error != null) detail.put("error", error);
+        } catch (org.json.JSONException impossible) {
+            return;
+        }
+        getBridge().getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent(" + org.json.JSONObject.quote("affiliate-report-sync-folder")
+                        + ", {detail:" + detail + "}))",
+                null
+        );
+    }
+
+    private void dispatchSyncResultEvent(int imported, int duplicate, int rejected, String message) {
+        org.json.JSONObject detail = new org.json.JSONObject();
+        try {
+            detail.put("imported", imported);
+            detail.put("duplicate", duplicate);
+            detail.put("rejected", rejected);
+            if (message != null) detail.put("message", message);
+        } catch (org.json.JSONException impossible) {
+            return;
+        }
+        getBridge().getWebView().evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent(" + org.json.JSONObject.quote("affiliate-report-sync-result")
+                        + ", {detail:" + detail + "}))",
+                null
+        );
+    }
+
+    // Khớp affiliate_report/parser.py:FILENAME_PATTERN — đổi một bên mà quên bên kia thì Java lọc
+    // khác lúc server kiểm lại: tệp bị bỏ qua ở đây dù lẽ ra hợp lệ, hoặc ngược lại bị server từ
+    // chối dù Java tưởng hợp lệ.
+    private static boolean isValidSyncFilename(String name) {
+        if (name == null) return false;
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.startsWith("affiliate_orders") && lower.endsWith(".xlsx");
+    }
+
+    private boolean isSyncFileStable(Uri documentUri) {
+        long[] first = querySizeAndModified(documentUri);
+        if (first == null) return false;
+        try {
+            Thread.sleep(SYNC_STABLE_CHECK_DELAY_MILLIS);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        long[] second = querySizeAndModified(documentUri);
+        return second != null && first[0] == second[0] && first[1] == second[1];
+    }
+
+    private long[] querySizeAndModified(Uri documentUri) {
+        try (Cursor cursor = getContentResolver().query(documentUri, new String[]{
+                DocumentsContract.Document.COLUMN_SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        }, null, null, null)) {
+            if (cursor == null || !cursor.moveToFirst()) return null;
+            return new long[]{cursor.getLong(0), cursor.getLong(1)};
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    /** Quét đúng cấp gốc của thư mục đã chọn (không đệ quy vào .done/.failed hay thư mục con
+     * khác), nhập từng tệp affiliate_orders*.xlsx ổn định rồi dời sang .done/.failed. Chạy trên
+     * fileExecutor (nền, tuần tự) — gọi từ syncNow() qua bridge. */
+    private void runSync(String account) {
+        Uri treeUri = currentSyncFolderUri();
+        if (treeUri == null) {
+            runOnUiThread(() -> dispatchSyncResultEvent(0, 0, 0, "Chưa chọn thư mục đồng bộ."));
+            return;
+        }
+        if (account == null || account.trim().isEmpty()) {
+            runOnUiThread(() -> dispatchSyncResultEvent(0, 0, 0, "Chưa chọn tài khoản để đồng bộ."));
+            return;
+        }
+        int imported = 0;
+        int duplicate = 0;
+        int rejected = 0;
+        List<String> errors = new ArrayList<>();
+        try {
+            String rootDocId = DocumentsContract.getTreeDocumentId(treeUri);
+            List<Uri> candidates = new ArrayList<>();
+            List<String> candidateNames = new ArrayList<>();
+            try (Cursor cursor = getContentResolver().query(
+                    DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, rootDocId),
+                    new String[]{
+                            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                            DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    }, null, null, null)) {
+                if (cursor != null) {
+                    while (cursor.moveToNext()) {
+                        String mime = cursor.getString(2);
+                        String name = cursor.getString(1);
+                        if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime) || !isValidSyncFilename(name)) continue;
+                        candidates.add(DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(0)));
+                        candidateNames.add(name);
+                    }
+                }
+            }
+            for (int index = 0; index < candidates.size(); index++) {
+                Uri fileUri = candidates.get(index);
+                String name = candidateNames.get(index);
+                if (!isSyncFileStable(fileUri)) continue; // vẫn đang tải/đồng bộ, để lượt sau
+                try {
+                    org.json.JSONObject uploadResult = postSyncImport(account, name, fileUri);
+                    if (uploadResult.optBoolean("duplicate", false)) duplicate++; else imported++;
+                    moveSyncFile(treeUri, rootDocId, fileUri, name, SYNC_DONE_SUBFOLDER);
+                } catch (Exception fileError) {
+                    rejected++;
+                    errors.add(name + ": " + fileError.getMessage());
+                    moveSyncFile(treeUri, rootDocId, fileUri, name, SYNC_FAILED_SUBFOLDER);
+                }
+            }
+            int finalImported = imported;
+            int finalDuplicate = duplicate;
+            int finalRejected = rejected;
+            String message = !errors.isEmpty()
+                    ? String.join(" · ", errors.subList(0, Math.min(3, errors.size())))
+                    : candidates.isEmpty() ? "Không có tệp mới trong thư mục." : null;
+            runOnUiThread(() -> dispatchSyncResultEvent(finalImported, finalDuplicate, finalRejected, message));
+        } catch (Exception error) {
+            runOnUiThread(() -> dispatchSyncResultEvent(0, 0, 0, "Không thể đọc thư mục đồng bộ: " + error.getMessage()));
+        }
+    }
+
+    private org.json.JSONObject postSyncImport(String account, String filename, Uri source) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(APP_URL + "api/v1/imports").openConnection();
+        connection.setConnectTimeout(10_000);
+        connection.setReadTimeout(120_000);
+        connection.setInstanceFollowRedirects(false);
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        connection.setChunkedStreamingMode(64 * 1024);
+        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + SYNC_MULTIPART_BOUNDARY);
+        AffiliateReportApplication application = (AffiliateReportApplication) getApplication();
+        connection.setRequestProperty("X-Android-Local-Token", application.getLocalToken());
+        String cookies = CookieManager.getInstance().getCookie(APP_URL);
+        if (cookies != null && !cookies.trim().isEmpty()) connection.setRequestProperty("Cookie", cookies);
+        try {
+            try (OutputStream body = connection.getOutputStream()) {
+                writeMultipartField(body, "account", account);
+                body.write(("--" + SYNC_MULTIPART_BOUNDARY + "\r\n").getBytes(StandardCharsets.UTF_8));
+                body.write(("Content-Disposition: form-data; name=\"file\"; filename=\""
+                        + filename.replace("\"", "") + "\"\r\n").getBytes(StandardCharsets.UTF_8));
+                body.write(("Content-Type: " + XLSX_MIME_TYPE + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                try (InputStream input = getContentResolver().openInputStream(source)) {
+                    if (input == null) throw new IllegalStateException("Không thể mở tệp " + filename);
+                    copyStream(input, body);
+                }
+                body.write(("\r\n--" + SYNC_MULTIPART_BOUNDARY + "--\r\n").getBytes(StandardCharsets.UTF_8));
+            }
+            int status = connection.getResponseCode();
+            InputStream responseStream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
+            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+            if (responseStream != null) {
+                try (InputStream stream = responseStream) {
+                    copyStream(stream, buffer);
+                }
+            }
+            String responseBody = buffer.toString("UTF-8");
+            if (status < 200 || status >= 300) throw new IllegalStateException(extractDetail(responseBody, status));
+            return new org.json.JSONObject(responseBody);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private static void writeMultipartField(OutputStream body, String name, String value) throws Exception {
+        body.write(("--" + SYNC_MULTIPART_BOUNDARY + "\r\n").getBytes(StandardCharsets.UTF_8));
+        body.write(("Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        body.write((value + "\r\n").getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Diễn giải {"detail": "..."} lẫn {"detail": [{"msg": "...", ...}, ...]} — FastAPI trả chuỗi
+     * khi code app tự raise lỗi, trả mảng khi Pydantic tự chặn request trước khi vào code app (vd.
+     * sai định dạng account/filename). Cùng gốc với web/src/lib/api.ts:detailMessage(). */
+    private static String extractDetail(String responseBody, int status) {
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(responseBody);
+            Object detail = json.opt("detail");
+            if (detail instanceof String) return (String) detail;
+            if (detail instanceof org.json.JSONArray) {
+                org.json.JSONArray items = (org.json.JSONArray) detail;
+                StringBuilder combined = new StringBuilder();
+                for (int index = 0; index < items.length(); index++) {
+                    Object item = items.opt(index);
+                    String msg = item instanceof org.json.JSONObject ? ((org.json.JSONObject) item).optString("msg", null) : null;
+                    if (msg == null) continue;
+                    if (combined.length() > 0) combined.append("; ");
+                    combined.append(msg);
+                }
+                if (combined.length() > 0) return combined.toString();
+            }
+        } catch (Exception ignored) {
+            // rơi xuống fallback bên dưới
+        }
+        return "HTTP " + status;
+    }
+
+    /** Copy+delete thủ công thay vì DocumentsContract.moveDocument: không phải provider SAF nào
+     * cũng hỗ trợ move, copy+delete luôn hoạt động ở mọi provider. Lỗi dời tệp chỉ log — tệp đã
+     * nhập/từ chối thành công rồi (kết quả sync đã tính), dời thất bại không phải lỗi nhập liệu. */
+    private void moveSyncFile(Uri treeUri, String rootDocId, Uri sourceUri, String filename, String subfolder) {
+        try {
+            Uri targetDirUri = ensureSyncSubfolder(treeUri, rootDocId, subfolder);
+            Uri newFileUri = DocumentsContract.createDocument(getContentResolver(), targetDirUri, XLSX_MIME_TYPE, filename);
+            if (newFileUri == null) throw new IllegalStateException("Không thể tạo tệp trong " + subfolder);
+            try (InputStream input = getContentResolver().openInputStream(sourceUri);
+                 OutputStream output = getContentResolver().openOutputStream(newFileUri)) {
+                if (input == null || output == null) throw new IllegalStateException("Không thể sao chép tệp");
+                copyStream(input, output);
+            }
+            DocumentsContract.deleteDocument(getContentResolver(), sourceUri);
+        } catch (Exception error) {
+            Log.e(TAG, "Không thể dời " + filename + " sang " + subfolder, error);
+        }
+    }
+
+    private Uri ensureSyncSubfolder(Uri treeUri, String parentDocId, String name) throws Exception {
+        try (Cursor cursor = getContentResolver().query(
+                DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId),
+                new String[]{
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE,
+                }, null, null, null)) {
+            if (cursor != null) {
+                while (cursor.moveToNext()) {
+                    if (DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(2)) && name.equals(cursor.getString(1))) {
+                        return DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(0));
+                    }
+                }
+            }
+        }
+        Uri created = DocumentsContract.createDocument(
+                getContentResolver(),
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, parentDocId),
+                DocumentsContract.Document.MIME_TYPE_DIR,
+                name
+        );
+        if (created == null) throw new IllegalStateException("Không thể tạo thư mục " + name);
+        return created;
     }
 }
