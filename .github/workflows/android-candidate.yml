@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 concurrency:
-  group: android-candidate-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-candidate-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -260,3 +260,19 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: bash scripts/ci/android_signed_upgrade_smoke.sh
+
+  release-emulator-gate:
+    name: Android release gate
+    if: github.event_name == 'push'
+    needs: [emulator-smoke, signed-update-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record exact-SHA Android emulator evidence
+        run: |
+          {
+            echo "## Android release gate"
+            echo "- Source SHA: \`${{ github.sha }}\`"
+            echo "- Fresh/runtime smoke: API 24 and API 36 passed"
+            echo "- Signed same-key upgrade smoke: passed"
+          } >> "$GITHUB_STEP_SUMMARY"

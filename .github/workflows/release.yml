@@ -52,15 +52,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.sha }}
         run: |
-          run_count="$(gh api \
+          run_id="$(gh api \
             -H "Accept: application/vnd.github+json" \
             "/repos/$GITHUB_REPOSITORY/actions/workflows/android-candidate.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed&per_page=100" \
-            --jq '[.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success")] | length')"
-          if [ "$run_count" -lt 1 ]; then
+            --jq '[.workflow_runs[] | select(.head_branch == "main" and .conclusion == "success")] | sort_by(.created_at) | .[-1].id // empty')"
+          if [ -z "$run_id" ]; then
             echo "::error::Tag commit $RELEASE_SHA has no successful signed Android candidate on main. Wait for that workflow, then rerun this release."
             exit 1
           fi
-          echo "Exact commit $RELEASE_SHA has a successful signed Android candidate." >> "$GITHUB_STEP_SUMMARY"
+          gate_count="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=latest&per_page=100" \
+            --jq '[.jobs[] | select(.name == "Android release gate" and .conclusion == "success")] | length')"
+          if [ "$gate_count" -ne 1 ]; then
+            echo "::error::Android candidate run $run_id did not complete the API 24/36 emulator release gate."
+            exit 1
+          fi
+          echo "Exact commit $RELEASE_SHA passed the signed Android candidate and API 24/36 emulator gate (run $run_id)." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:

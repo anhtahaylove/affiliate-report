@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def require_valid_android_resources() -> None:
+    resource_root = ROOT / "android/native/app/src/main/res"
+    for resource in sorted(resource_root.rglob("*.xml")):
+        try:
+            ET.parse(resource)
+        except ET.ParseError as exc:
+            relative = resource.relative_to(ROOT)
+            raise SystemExit(f"{relative}: invalid Android resource XML: {exc}") from exc
 
 
 def require(path: str, *needles: str) -> None:
@@ -53,6 +64,7 @@ require(
     'addJavascriptInterface(',
     '"AffiliateReportAndroid"',
 )
+require_valid_android_resources()
 native_bootstrap = (ROOT / "android/native/app/src/main/assets/public/index.html").read_text(encoding="utf-8")
 for forbidden in ("fetch(`${appUrl}health`", "location.replace(appUrl)"):
     if forbidden in native_bootstrap:

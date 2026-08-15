@@ -440,6 +440,8 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
 
     assert "push:\n    branches: [main]" in android
     assert "pull_request:\n    branches: [main]" in android
+    assert "github.event_name == 'pull_request' && github.ref || github.sha" in android
+    assert "cancel-in-progress: ${{ github.event_name == 'pull_request' }}" in android
     assert "ANDROID_KEYSTORE_B64" in android
     assert "GITHUB_ENV" not in android
     assert "Remove-Item -LiteralPath $keystore -Force" in android
@@ -460,6 +462,10 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "actions/upload-artifact@v7" in android
     assert "signed-update-smoke:" in android
     assert "needs: signed-candidate" in android
+    assert "release-emulator-gate:" in android
+    assert "name: Android release gate" in android
+    assert "needs: [emulator-smoke, signed-update-smoke]" in android
+    assert "Fresh/runtime smoke: API 24 and API 36 passed" in android
     assert f"AffiliateReport-v{APP_VERSION}-x86_64-release.apk" in android
     assert f"AffiliateReport-v{NEXT}-x86_64-release.apk" in android
     assert 'adb install -r "$target"' in upgrade_smoke
@@ -470,6 +476,9 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
 
     assert "Require successful signed Android candidate for this exact main commit" in release
     assert "android-candidate.yml/runs?head_sha=$RELEASE_SHA&event=push&status=completed" in release
+    assert '/actions/runs/$run_id/jobs?filter=latest&per_page=100' in release
+    assert '.name == "Android release gate" and .conclusion == "success"' in release
+    assert "did not complete the API 24/36 emulator release gate" in release
     assert '$artifactName = "affiliate-report-android-$env:RELEASE_SHA"' in release
     assert "gh run download $run[0].id --name $artifactName" in release
     assert "AffiliateReport-v$version-arm64.apk" in release
@@ -478,6 +487,63 @@ def test_android_candidate_is_signed_once_and_promoted_by_exact_sha():
     assert "-m scripts.ci.verify_release_bundle" in release
     assert '$_.isLatest -and !$_.isDraft -and !$_.isPrerelease' in release
     assert "Sort-Object publishedAt -Descending | Select-Object -First 1" not in release
+
+
+def test_local_android_emulator_scripts_cover_supported_api_levels_and_cleanup():
+    setup = Path("scripts/dev/setup_android_emulators.ps1").read_text(encoding="utf-8-sig")
+    smoke = Path("scripts/dev/smoke_android_emulator.ps1").read_text(encoding="utf-8-sig")
+
+    for contract in (
+        '"build-tools;36.0.0"',
+        '"system-images;android-24;google_apis;x86_64"',
+        '"system-images;android-36;google_apis;x86_64"',
+        'Name = "AffiliateReport_API24"',
+        'Name = "AffiliateReport_API36"',
+        '"pixel_2"',
+        '"installed and usable"',
+        "[string]$SdkRoot",
+        "[switch]$PersistUserEnvironment",
+    ):
+        assert contract in setup
+
+    for contract in (
+        "[ValidateSet(24, 36)]",
+        '"-wipe-data"',
+        'Invoke-RuntimeSmoke -Phase "seed"',
+        'Invoke-RuntimeSmoke -Phase "persist"',
+        'Invoke-RuntimeSmoke -Phase "restore"',
+        'Invoke-Adb -Arguments @("-s", $serial, "emu", "kill")',
+        'schema = "affiliate-report.android-local-smoke.v1"',
+        'AffiliateReport-v$appVersion-x86_64-debug.apk',
+        "apk_sha256 = $apkSha256",
+        "--expected-version $appVersion",
+        '"tcp:0", "tcp:8765"',
+        '"Local\\AffiliateReport.AndroidEmulatorSmoke"',
+        "Stop-Process -Id $emulatorProcess.Id -Force",
+        '"-SkipBuild requires -ApkPath so the reused APK is explicit."',
+        '& $setupScript -SdkRoot $sdkRoot',
+        'function Get-ConnectedSerialState',
+        '$devices = Invoke-Adb -Arguments @("devices")',
+        '$escapedSerial = [regex]::Escape($serial)',
+        'if ($existingState)',
+        '$serialOwned = $true',
+        'if ($serialOwned -and -not $KeepEmulator)',
+        'if ($runningAvdName -cne $avdName)',
+    ):
+        assert contract in smoke
+
+    assert 'if ($existingState.Trim() -eq "device")' not in smoke
+    avd_pattern = re.search(r"\$avdResponsePattern = '([^']+)'", smoke)
+    assert avd_pattern is not None
+    parsed_avd = re.fullmatch(avd_pattern.group(1), "AffiliateReport_API36\r\nOK\r\n")
+    assert parsed_avd is not None
+    assert parsed_avd.group(1) == "AffiliateReport_API36"
+    windows_adb_avd = re.fullmatch(
+        avd_pattern.group(1), "AffiliateReport_API36\r\n\r\nOK\r\n"
+    )
+    assert windows_adb_avd is not None
+    assert windows_adb_avd.group(1) == "AffiliateReport_API36"
+    assert re.fullmatch(avd_pattern.group(1), "AffiliateReport_API36\r\nKO\r\n") is None
 
 
 def _png_size(path: Path) -> tuple[int, int]:

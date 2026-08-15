@@ -23,7 +23,20 @@ Require-Command node
 Require-Command npm
 Require-Command java
 
-$javaVersion = (& java -version 2>&1 | Select-Object -First 1) -join ""
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+    # java -version writes its normal output to stderr. Windows PowerShell 5.1
+    # otherwise promotes that output to a terminating NativeCommandError.
+    $ErrorActionPreference = "Continue"
+    $javaOutput = @(& java -version 2>&1)
+    $javaExitCode = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+$javaVersion = ($javaOutput | Select-Object -First 1).ToString()
+if ($javaExitCode -ne 0) {
+    throw "Unable to inspect the installed JDK: $javaVersion"
+}
 if ($javaVersion -notmatch 'version "(21|2[2-9]|[3-9][0-9])') {
     throw "JDK 21 or newer is required by Capacitor 8.5/AGP 8.13. Found: $javaVersion"
 }
