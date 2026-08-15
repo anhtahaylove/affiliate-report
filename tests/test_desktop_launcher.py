@@ -123,14 +123,14 @@ def test_di_tru_chep_du_lieu_khi_thu_muc_cai_doi_ten(tmp_path):
     thu_muc_cu = goc / desktop_launcher.LEGACY_DATA_DIR_NAME / "data"
     thu_muc_cu.mkdir(parents=True)
     (thu_muc_cu / desktop_launcher.LEGACY_DATABASE_NAME).write_bytes(b"lich su nhap")
-    (thu_muc_cu / "inbox").mkdir()
+    (thu_muc_cu / "logs").mkdir()
     data_dir = goc / "AffiliateReport" / "data"
     data_dir.mkdir(parents=True)
 
     desktop_launcher._di_tru_du_lieu(data_dir)
 
     assert (data_dir / desktop_launcher.DATABASE_NAME).read_bytes() == b"lich su nhap"
-    assert (data_dir / "inbox").is_dir()
+    assert (data_dir / "logs").is_dir()
     assert (thu_muc_cu / desktop_launcher.LEGACY_DATABASE_NAME).exists(), "không được xoá thư mục cũ"
 
 

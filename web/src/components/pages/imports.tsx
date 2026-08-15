@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CurrentUser, ImportHistoryRow, RejectedRow, UndoImportPreview, loadImportHistory, previewUndoImport, undoImport, uploadExport, visibleRejectedRows } from "@/lib/api";
 import { RecentImports } from "@/components/recent-imports";
 import { PairingPanel } from "@/components/pairing-panel";
-import { AndroidSyncFolder } from "@/components/android-sync-folder";
 import { ConfirmDialog, canWrite, isOwner } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { errorMessage, integer } from "@/lib/format";
@@ -41,7 +40,7 @@ function fileSizeText(size: number) {
   return `${integer.format(Math.round((size / 1024 / 1024) * 10) / 10)} MB`;
 }
 
-export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir, runtimePlatform }: { user: CurrentUser; accounts: string[]; directory: AccountDirectory; maxUploadMb: number; inboxDir?: string | null; runtimePlatform?: "windows" | "android" | "web" }) {
+export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: CurrentUser; accounts: string[]; directory: AccountDirectory; maxUploadMb: number }) {
   const [account, setAccount] = useState(accounts[0] ?? "");
   const [files, setFiles] = useState<FileList | null>(null);
   const [history, setHistory] = useState<ImportHistoryRow[]>([]);
@@ -151,15 +150,6 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb, inboxDir, 
             <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp. {EXPORT_FILENAME_HINT}</p>
           </div>
         </div>
-        {runtimePlatform === "android" ? (
-          <AndroidSyncFolder account={selectedAccount} onSynced={() => { invalidateApiCache(); void refreshHistory(); }} />
-        ) : inboxDir ? (
-          <div className="inbox-hint" role="note">
-            <p><strong>Hoặc thả tệp vào thư mục, ứng dụng tự nhập</strong></p>
-            <p>Chép tệp vào <code>{inboxDir}</code>, trong thư mục con mang tên account. Ứng dụng quét mỗi 15 giây; nhập xong dời tệp sang <code>.done</code>, tệp lỗi sang <code>.failed</code> kèm ghi chú. {EXPORT_FILENAME_HINT}</p>
-            <p className="subtle">Cắm thư mục này vào Google Drive, OneDrive hoặc Syncthing là điện thoại lưu tệp xong máy tính tự nhập, khỏi phải chuyển tệp sang.</p>
-          </div>
-        ) : null}
         {canWrite(user) ? <PairingPanel account={selectedAccount} onNhanTep={refreshHistory} /> : null}
         {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có account khả dụng</p><h3>{isOwner(user) ? "Tạo account trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp account"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một account để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi account được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo account đầu tiên</Link> : null}</div> : <>
         <ol className="workflow-steps" aria-label="Quy trình nhập dữ liệu">

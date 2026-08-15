@@ -252,8 +252,6 @@ export type MetaResponse = {
   statuses: string[];
   max_upload_mb: number;
   app_version?: string;
-  /** Chỉ có ở bản chạy trên máy: thư mục thả tệp để tự nhập. */
-  inbox_dir?: string | null;
   /** Nền tảng đang phục vụ UI. Bỏ trống ở backend cũ và được xem như web/desktop. */
   runtime_platform?: "windows" | "android" | "web";
   capabilities: RuntimeCapabilities;

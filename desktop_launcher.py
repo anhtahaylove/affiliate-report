@@ -193,41 +193,6 @@ def _start_tray(icon_path: Path, url: str, shutdown: Callable[[], None]):
     return tray, thread
 
 
-# Quét thư mục nhập mỗi chừng này. Không dùng thư viện theo dõi hệ thống tệp: dịch vụ đồng bộ
-# ghi tệp theo nhiều đợt nên sự kiện "tệp mới" bắn nhiều lần cho một tệp, và quét định kỳ vài
-# giây thì đơn giản hơn hẳn mà người dùng không thấy khác biệt.
-INBOX_SCAN_SECONDS = 15
-
-
-def _start_inbox_watcher(app: object, data_dir: Path) -> None:
-    """Tự nhập tệp TikTok thả vào <data>/inbox/<ACCOUNT>/.
-
-    Có để người dùng xuất tệp trên điện thoại rồi lưu vào một thư mục được đồng bộ (Drive,
-    OneDrive, Syncthing) là máy tính tự nhập, khỏi phải chuyển tệp sang rồi mở trình duyệt.
-    """
-    from affiliate_report.accounts import active_account_codes
-    from affiliate_report.inbox import ensure_inbox, scan_inbox
-
-    def loop() -> None:
-        engine = app.state.engine  # type: ignore[attr-defined]
-        try:
-            root = ensure_inbox(data_dir, list(active_account_codes(engine)))
-            print(f"Inbox watcher: tha tep TikTok vao {root} / <MA ACCOUNT>")
-        except Exception as exc:  # noqa: BLE001
-            print(f"Inbox watcher khong khoi dong duoc: {exc}")
-            return
-        while True:
-            time.sleep(INBOX_SCAN_SECONDS)
-            try:
-                for result in scan_inbox(engine, data_dir):
-                    if result.status != "skipped":
-                        print(f"Inbox {result.account}/{result.filename}: {result.status} - {result.detail}")
-            except Exception as exc:  # noqa: BLE001 - vong nay khong duoc chet, chi ghi log roi di tiep
-                print(f"Inbox watcher loi: {exc}")
-
-    threading.Thread(target=loop, name="inbox-watcher", daemon=True).start()
-
-
 # Hai hằng số LEGACY_* phải giữ NGUYÊN VĂN tên cũ — chúng là thứ duy nhất còn biết dữ liệu của
 # người dùng đang nằm ở đâu trước khi đổi tên. Đổi chúng theo là di trú thành vô nghĩa và người
 # dùng mở app lên thấy trống rỗng. Một lần thay chuỗi hàng loạt đã suýt làm đúng điều đó.
@@ -307,8 +272,6 @@ def main() -> None:
         import uvicorn
 
         from affiliate_report.api import app
-
-        _start_inbox_watcher(app, data_dir)
 
         server = uvicorn.Server(
             uvicorn.Config(

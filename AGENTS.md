@@ -99,22 +99,25 @@ nhận cả chữ thường vd. `sarah.reign`). `api._sanitize_view_filters`'s `
 bắt được nhờ `test_saved_views_are_csrf_protected_scoped_and_sanitized` khi chạy full suite chứ
 không phải lúc code review.
 
-Tên tệp export TikTok (`affiliate_orders*.xlsx`) cũng có ba bản tay, không chia sẻ được code vì
-khác ngôn ngữ: `parser.FILENAME_PATTERN` (Python, thẩm quyền cuối — server luôn kiểm lại),
-`imports.tsx`'s `EXPORT_FILENAME_RE` (JS, pre-check phía trình duyệt), `MainActivity.java`'s
-`isValidSyncFilename` (Java, lọc trước khi upload từ thư mục đồng bộ Android). Lệch giữa ba bản
-chỉ gây bỏ sót/thử thừa, không phải lỗ hổng — nhưng vẫn nên sửa cả ba khi đổi quy tắc.
+Tên tệp export TikTok (`affiliate_orders*.xlsx`) cũng có hai bản tay, không chia sẻ được code vì
+khác ngôn ngữ: `parser.FILENAME_PATTERN` (Python, thẩm quyền cuối — server luôn kiểm lại) và
+`imports.tsx`'s `EXPORT_FILENAME_RE` (JS, pre-check phía trình duyệt). Lệch giữa hai bản chỉ gây
+bỏ sót/thử thừa, không phải lỗ hổng — nhưng vẫn nên sửa cả hai khi đổi quy tắc.
 
-## Android: Storage Access Framework (thư mục đồng bộ)
+## Android: đã thử và bỏ — thư mục đồng bộ liên tục qua SAF
+
+Từng xây một tính năng để người dùng chọn một thư mục (Download) qua `ACTION_OPEN_DOCUMENT_TREE`
+một lần, rồi app tự quét/nhập file mỗi khi mở app. **Đã bỏ hoàn toàn** — người dùng phản hồi việc
+phải chọn tài khoản để đồng bộ rắc rối hơn cái lợi, quay lại chọn tệp thủ công cho nhanh gọn. Ghi
+lại lý do kỹ thuật ở đây phòng khi có ai định làm lại hướng này:
 
 **Cạm bẫy đã trả giá:** từ Android 11, hệ điều hành **khoá cứng** nút "Sử dụng thư mục này" khi
 người dùng chọn thẳng thư mục `Download` gốc qua `ACTION_OPEN_DOCUMENT_TREE` — cùng loại giới hạn
-với root bộ nhớ ngoài và `Android/data`/`Android/obb`. Đây là hạn chế của OS, **không sửa được từ
-phía app**, và `EXTRA_INITIAL_URI` trỏ thẳng vào đó không né được (chỉ đỡ vài bước điều hướng, tới
-đúng chỗ vẫn bị khoá). Người dùng bắt buộc phải đi tiếp vào một thư mục **con** bên trong Download
-(có sẵn hoặc tạo mới ngay trong trình chọn) mới chọn được. `MainActivity.launchSyncFolderPicker()`
-+ `android-sync-folder.tsx` đã dặn trước điều này trong UI — đừng gợi ý "chọn Download" trống
-không nữa, luôn kèm "thư mục con bên trong Download".
+với root bộ nhớ ngoài và `Android/data`/`Android/obb`. Đây là hạn chế của OS, không sửa được từ
+phía app; `EXTRA_INITIAL_URI` trỏ thẳng vào đó cũng không né được (chỉ đỡ vài bước điều hướng, tới
+đúng chỗ vẫn bị khoá). Bắt buộc phải đi tiếp vào một thư mục **con** bên trong Download mới chọn
+được — điều này (cộng với việc phải tự chọn đúng account trước khi đồng bộ) là lý do chính khiến
+tính năng bị đánh giá là rắc rối hơn lợi ích mang lại.
 
 Nguồn: [Android Developers — Storage updates in Android 11](https://developer.android.com/about/versions/11/privacy/storage),
 [CommonsWare — SAF Restrictions](https://commonsware.com/R/pages/chap-scoped-006).

@@ -2129,30 +2129,6 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .first-run.is-compact p { margin: 1px 0 0; color: var(--ink-soft); font-size: 0.84rem; }
 .first-run.is-compact .step-index { flex: 0 0 auto; }
 
-/* Chỉ đường tới thư mục nhập tự động: tạo thư mục im lặng trong %LOCALAPPDATA% thì không ai
-   tìm ra, nên nói thẳng đường dẫn ngay chỗ người dùng đang định tải tệp lên. */
-.inbox-hint {
-  margin: 14px 0 0;
-  padding: 12px 14px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius);
-  background: var(--surface-soft);
-}
-
-.inbox-hint p { margin: 0 0 6px; font-size: 0.88rem; line-height: 1.55; }
-.inbox-hint p:last-child { margin-bottom: 0; }
-.inbox-hint code { font-family: var(--font-mono); font-size: 0.84rem; overflow-wrap: anywhere; }
-.inbox-hint .subtle { color: var(--ink-soft); font-size: 0.84rem; }
-
-.android-sync-folder-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-.android-sync-folder-row button { min-height: 40px; padding: 0 12px; }
-
 /* Hybrid Pairing: LAN ưu tiên, cloud relay chỉ giữ ciphertext ngắn hạn. */
 .pairing-panel { margin-top: 14px; }
 .pairing-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
