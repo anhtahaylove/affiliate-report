@@ -24,8 +24,6 @@ export type TargetRow = {
   account: string;
   month: string;
   daily_target_commission: number;
-  updated_at?: string | null;
-  updated_by?: string | null;
 };
 
 export type MonthlyKpiRow = {

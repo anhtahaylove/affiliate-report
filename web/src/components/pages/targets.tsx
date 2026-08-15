@@ -48,7 +48,7 @@ export function TargetsPage({ user, filters, accounts, directory }: { user: Curr
   }, [refresh]);
   async function save(account: string) {
     const draft = (drafts[account] ?? "").trim();
-    if (!/^\d+$/.test(draft)) return setMessage("KPI/ngày phải là số nguyên không âm.");
+    if (!/^\d+$/.test(draft)) return setMessage("Vui lòng nhập một số nguyên từ 0 trở lên (không dấu chấm/phẩy).");
     setSaving(account);
     try {
       await saveTarget(account, filters.month, Number(draft));
@@ -83,14 +83,14 @@ export function TargetsPage({ user, filters, accounts, directory }: { user: Curr
     <section className="section panel wide targets-workflow-page">
       <div className="section-heading">
         <div>
-          <p className="section-label">KPI mỗi ngày</p>
+          <p className="section-label">Mục tiêu hoa hồng mỗi ngày (KPI)</p>
           <h2>Lập mục tiêu tháng {monthLabel(filters.month)}</h2>
           <p className="subtle">Tiến độ tính trên phạm vi đang lọc: {filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}.</p>
         </div>
         {canWrite(user) ? <button type="button" onClick={() => void copyPrevious()} disabled={copying}>{copying ? "Đang chép…" : `Chép từ ${monthLabel(previousMonth)}`}</button> : <span className="read-only">Chỉ xem</span>}
       </div>
       <div className="target-context panel-muted">
-        <strong>Ngữ cảnh tháng trước</strong>
+        <strong>Lưu ý</strong>
         <span>Nếu tháng {monthLabel(previousMonth)} có dữ liệu, nút chép sẽ tạo KPI còn thiếu và giữ nguyên KPI đã nhập cho tháng hiện tại.</span>
       </div>
       <div className="target-planner-grid">
@@ -112,7 +112,7 @@ export function TargetsPage({ user, filters, accounts, directory }: { user: Curr
                 <div><dt>Hoa hồng thực tế</dt><dd>{formatMoney(row?.actual_commission)}</dd></div>
                 <div><dt>KPI/ngày hiện tại</dt><dd>{formatMoney(target?.daily_target_commission)}</dd></div>
                 <div><dt>KPI tháng</dt><dd>{formatMoney(row?.monthly_target)}</dd></div>
-                <div><dt>Chênh lệch</dt><dd>{formatMoney(row?.gap)}</dd></div>
+                <div><dt>Chênh lệch</dt><dd className="tone-text" data-tone={row?.gap == null ? undefined : row.gap < 0 ? "critical" : "good"}>{row?.gap == null ? "—" : row.gap < 0 ? `Còn thiếu ${formatMoney(Math.abs(row.gap))}` : `Vượt mục tiêu ${formatMoney(row.gap)}`}</dd></div>
               </dl>
               <div className="target-edit-row">
                 <div className="field">
@@ -121,7 +121,6 @@ export function TargetsPage({ user, filters, accounts, directory }: { user: Curr
                 </div>
                 <button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button>
               </div>
-              <p className="hint">Cập nhật gần nhất: {target?.updated_at ? target.updated_at : "chưa có"}{target?.updated_by ? ` bởi ${target.updated_by}` : ""}</p>
             </article>
           );
         })}
