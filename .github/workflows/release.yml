@@ -96,6 +96,10 @@ jobs:
   windows-installer:
     needs: verify
     runs-on: windows-latest
+    # Job này chạm UPDATE_SIGNING_KEY_B64 và publish feed công khai — mọi máy người dùng tin
+    # theo. Gắn environment có required reviewer để job DỪNG chờ duyệt thủ công ngay trước
+    # bước đó, thay vì chạy thẳng một mạch từ lúc tag được push.
+    environment: release
     permissions:
       actions: write
       contents: write

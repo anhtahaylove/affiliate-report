@@ -135,7 +135,15 @@ def test_v124_installer_and_release_workflow_support_verified_auto_update():
     assert 'tags:\n      - "v*.*.*"' in workflow
     assert "permissions:\n  actions: read\n  contents: read" in workflow
     assert "windows-installer:\n    needs: verify" in workflow
-    assert "windows-installer:\n    needs: verify\n    runs-on: windows-latest\n    permissions:\n      actions: write\n      contents: write" in workflow
+    assert "windows-installer:\n    needs: verify\n    runs-on: windows-latest\n" in workflow
+    # Job này chạm UPDATE_SIGNING_KEY_B64 và publish feed công khai mà mọi máy người dùng
+    # tin theo, nên phải DỪNG chờ duyệt thủ công trước khi chạm secret — không chạy thẳng
+    # một mạch từ lúc tag được push. Environment "release" đã tạo trên GitHub với
+    # required_reviewers=anhtahaylove; dòng dưới đây là thứ THỰC SỰ bật cổng đó cho job.
+    # Thiếu dòng này thì GitHub tạo một environment rỗng lúc chạy — không reviewer, không
+    # chặn gì — mà nhìn log lại tưởng nhầm là đã có cơ chế duyệt.
+    assert "\n    environment: release\n" in workflow
+    assert "\n    permissions:\n      actions: write\n      contents: write" in workflow
     assert "POSTGRES_TEST_URL" in workflow
     assert '"artifacts\\installer\\SHA256SUMS.txt"' in workflow
     assert "UPDATE_SIGNING_KEY_B64" in workflow
