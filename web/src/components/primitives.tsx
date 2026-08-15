@@ -1,15 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { Slot } from "@radix-ui/react-slot";
 import { X } from "lucide-react";
-import { ButtonHTMLAttributes, ReactNode, type RefObject } from "react";
-import { cn } from "@/lib/cn";
-
-export function Button({ className, variant = "default", asChild = false, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "default" | "primary" | "ghost" | "danger"; asChild?: boolean }) {
-  const Comp = asChild ? Slot : "button";
-  return <Comp className={cn("ui-button", `ui-button-${variant}`, className)} {...props} />;
-}
+import { ReactNode, type RefObject } from "react";
 
 export function BottomSheet({ open, onOpenChange, title, description, restoreFocusRef, children }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; restoreFocusRef?: RefObject<HTMLElement | null>; children: ReactNode }) {
   return (

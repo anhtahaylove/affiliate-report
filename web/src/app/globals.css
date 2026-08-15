@@ -430,12 +430,6 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .exit-error { color: var(--danger); }
 
-.drawer-button {
-  display: none;
-}
-
-.sidebar-backdrop { display: none; }
-
 .command-bar {
   display: flex;
   margin-bottom: 18px;
@@ -564,56 +558,9 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   line-height: 1.5;
 }
 
-.data-quality-notice {
-  display: grid;
-  gap: 4px;
-  border-color: var(--warning-line);
-  background: var(--warning-soft);
-  color: var(--warning-text);
-}
-
-.dashboard-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-  padding: 14px 16px;
-}
-
-.dashboard-toolbar div { display: grid; gap: 3px; }
-.dashboard-toolbar span,
-.dashboard-toolbar small { color: var(--ink-soft); }
-.dashboard-toolbar span { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
-.dashboard-toolbar .button-link { flex: 0 0 auto; margin-top: 0; }
-
-.hero-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.progress-track {
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-soft);
-}
-
-.progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--teal);
-}
-
-/* Traffic-light tone shared by progress bars and inline achievement figures — reuses the
-   existing status colors so "đã đạt mục tiêu" reads consistently across Dashboard, Targets
-   and So sánh hiệu suất instead of always being teal regardless of how far behind it is. */
-.progress-track[data-tone="warning"] span { background: var(--warning); }
-.progress-track[data-tone="critical"] span { background: var(--danger); }
-
+/* Traffic-light tone shared by inline achievement figures — reuses the existing status colors
+   so "đã đạt mục tiêu" reads consistently across Dashboard, Targets and So sánh hiệu suất
+   instead of always being teal regardless of how far behind it is. */
 .tone-text { font-variant-numeric: tabular-nums; }
 .tone-text[data-tone="good"] { color: var(--teal); }
 .tone-text[data-tone="warning"] { color: var(--warning); }
@@ -670,8 +617,6 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 .metric strong[data-tone="warning"] { color: var(--warning); }
 .metric strong[data-tone="critical"] { color: var(--danger); }
 
-.progress-metric .progress-track { margin: 10px 0 8px; }
-
  /* Tổng quan chỉ còn một panel hẹp giữa hai panel rộng, nên cột thứ hai luôn là một ô trống. */
 .content-grid.stacked { grid-template-columns: minmax(0, 1fr); }
 
@@ -717,21 +662,6 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   display: grid;
   gap: 12px;
 }
-
-.target-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(150px, 190px) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.target-row strong,
-.target-row span { display: block; }
-.target-row span { margin-top: 4px; color: var(--ink-soft); font-size: 0.84rem; }
 
 .user-card {
   display: grid;
@@ -908,8 +838,7 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
   gap: 12px;
 }
 
-.backup-list,
-.update-panel {
+.backup-list {
   display: grid;
   gap: 10px;
 }
@@ -1100,18 +1029,6 @@ button:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .order-history summary { cursor: pointer; font-weight: 600; color: var(--teal); }
 
-.analytics-svg {
-  width: 100%;
-  height: 220px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-soft);
-}
-
-.analytics-svg path { fill: var(--teal); }
-.analytics-axis { stroke: var(--line-strong); stroke-width: 0.35; }
-
 .reset-form .field span {
   color: var(--ink-soft);
   font-size: 0.84rem;
@@ -1247,30 +1164,9 @@ tbody tr:last-child td { border-bottom: 0; }
     transition: transform 180ms ease-out, visibility 0s linear 180ms;
     box-shadow: 0 0 0 999px var(--scrim-clear);
   }
-  .cockpit-shell.nav-open .sidebar {
-    visibility: visible;
-    transform: translateX(0);
-    transition-delay: 0s;
-    box-shadow: 0 0 0 999px var(--scrim);
-  }
-  .cockpit-shell.nav-open .sidebar-backdrop {
-    position: fixed;
-    z-index: 19;
-    inset: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
   .sidebar nav { grid-template-columns: 1fr; }
   .sidebar nav a { text-align: left; }
   .cockpit-header { align-items: flex-start; }
-  .drawer-button { display: inline-flex; align-items: center; }
-  .hero-grid { grid-template-columns: 1fr 1fr; }
   .command-bar { display: grid; }
   .filter-toggle {
     display: flex;
@@ -1294,14 +1190,9 @@ tbody tr:last-child td { border-bottom: 0; }
 
 @media (max-width: 620px) {
   .cockpit-main { padding: 18px 12px 32px; }
-  .hero-grid { grid-template-columns: 1fr; }
-  .target-row { grid-template-columns: 1fr; }
-  .target-row button { width: 100%; }
   .user-menu { align-items: flex-start; justify-content: flex-start; width: 100%; }
   .user-email { max-width: 100%; }
   .section-heading { flex-wrap: wrap; }
-  .dashboard-toolbar { align-items: stretch; flex-direction: column; }
-  .dashboard-toolbar .button-link { justify-content: center; width: 100%; }
   .filter-actions { grid-template-columns: 1fr; display: grid; }
   .filter-actions button { width: 100%; }
   .record-title { align-items: flex-start; flex-direction: column; }
@@ -1440,14 +1331,6 @@ th[aria-sort] .sort-button span { color: var(--teal); }
 .first-run-steps a:hover strong { color: var(--teal); }
 .first-run-steps p { margin: 4px 0 0; color: var(--ink-soft); line-height: 1.55; }
 
-.analytics-grid { stroke: var(--line); stroke-width: 1; }
-.analytics-tick { fill: var(--ink-soft); font-size: 12px; }
-.analytics-svg .bar path { fill: var(--teal); opacity: 0.72; }
-.analytics-svg .bar.last path { opacity: 1; }
-.analytics-svg .bar-hit { fill: transparent; }
-.analytics-svg .bar:hover path { opacity: 1; }
-.analytics-svg .bar:hover + .bar-hit { fill: var(--teal-soft); }
-
 .theme-toggle {
   min-height: 38px;
   padding: 0 12px;
@@ -1458,7 +1341,7 @@ th[aria-sort] .sort-button span { color: var(--teal); }
 /* ---- v1.4.0: mật độ thông tin và thứ bậc thị giác ---- */
 
 /* Đây là app báo cáo tài chính: số phải thẳng cột mới so sánh được bằng mắt. */
-td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
+td, th, .metric strong, .import-item span, .backup-item small {
   font-variant-numeric: tabular-nums;
 }
 
@@ -1590,22 +1473,6 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 .backup-item small { color: var(--ink-soft); font-size: 0.82rem; }
 .backup-item.invalid { border-color: var(--danger-line); background: var(--danger-soft); }
 
-.page-actions { display: flex; justify-content: flex-end; margin-bottom: 14px; }
-.page-actions .button-link { margin-top: 0; }
-
-/* Không có cảnh báo nào thì đây chỉ là dòng thông tin, giữ nó im lặng. */
-.data-quality-notice.is-clean {
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--ink-soft);
-}
-
-
-/* ---- Production shell foundation ---- */
-.ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font-weight: 800; }
-.ui-button-primary { border-color: var(--teal); background: var(--teal); color: var(--on-accent); }
-.ui-button-ghost { border-color: transparent; background: transparent; color: var(--ink-soft); }
-.ui-button-danger { border-color: var(--danger-line); background: var(--danger-soft); color: var(--danger); }
 
 .sheet-overlay { position: fixed; inset: 0; z-index: 50; background: var(--scrim); animation: sheet-fade 160ms ease-out; }
 .bottom-sheet { position: fixed; z-index: 51; right: 0; bottom: 0; left: 0; max-height: min(82svh, 640px); overflow: auto; padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); border: 1px solid var(--line); border-bottom: 0; border-radius: 24px 24px 0 0; background: var(--surface); color: var(--ink); box-shadow: 0 -18px 44px rgba(31, 26, 20, 0.2); animation: sheet-up 180ms ease-out; }
@@ -1640,7 +1507,6 @@ td, th, .metric strong, .analytics-tick, .import-item span, .backup-item small {
 @media (max-width: 860px) {
   .cockpit-shell { display: block; }
   .sidebar { display: none; }
-  .sidebar-backdrop, .drawer-button { display: none !important; }
   .cockpit-main {
     padding-top: calc(24px + env(safe-area-inset-top));
     padding-right: max(18px, env(safe-area-inset-right));
