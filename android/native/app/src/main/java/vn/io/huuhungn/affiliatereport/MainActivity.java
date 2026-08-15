@@ -528,8 +528,9 @@ public final class MainActivity extends BridgeActivity {
     }
 
     // --- Thư mục đồng bộ liên tục (Android SAF) --------------------------------------------
-    // Người dùng chọn một thư mục (thường là Download) một lần qua ACTION_OPEN_DOCUMENT_TREE;
-    // từ đó mỗi lần mở app hoặc bấm "Đồng bộ ngay", ứng dụng tự quét thư mục đó, POST thẳng từng
+    // Người dùng chọn một thư mục con bên trong Download (Android 11+ khoá chọn thẳng chính
+    // Download — xem AGENTS.md) một lần qua ACTION_OPEN_DOCUMENT_TREE; từ đó mỗi lần mở app hoặc
+    // bấm "Đồng bộ ngay", ứng dụng tự quét thư mục đó, POST thẳng từng
     // tệp khớp affiliate_orders*.xlsx tới /api/v1/imports qua loopback (đi đúng pipeline nhập có
     // sẵn — chống trùng SHA-256, kiểm 47 cột, mọi validate khác giữ nguyên), rồi dời tệp đã xử lý
     // sang .done/.failed ngay trong thư mục đó. Dùng thẳng DocumentsContract/ContentResolver thay
@@ -540,9 +541,13 @@ public final class MainActivity extends BridgeActivity {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
                         | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                         | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        // Gợi ý mở sẵn tại Download — chỉ là gợi ý tốt-nhất-có-thể cho provider lưu trữ ngoài
-        // chuẩn AOSP; SAF không có khái niệm mặc định thật, provider khác (thẻ nhớ rời, provider
-        // app khác) bỏ qua gợi ý này một cách an toàn, người dùng vẫn tự chọn thư mục như thường.
+        // Gợi ý mở sẵn TẠI Download để đỡ vài bước điều hướng — nhưng từ Android 11, chính
+        // Download (và root bộ nhớ ngoài, Android/data, Android/obb) bị OS khoá nút "Sử dụng thư
+        // mục này" vì lý do quyền riêng tư (xem AGENTS.md), không phải lỗi ở app. Người dùng vẫn
+        // phải đi tiếp vào một thư mục CON bên trong Download (có sẵn hoặc tạo mới ngay trong
+        // trình chọn) — UI phía React đã dặn trước, tránh để người dùng tưởng app lỗi. Với
+        // provider lưu trữ ngoài chuẩn AOSP (thẻ nhớ rời, provider app khác), gợi ý này bị bỏ qua
+        // một cách an toàn, người dùng tự điều hướng như thường.
         intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
                 DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download"));
         try {

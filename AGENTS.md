@@ -105,6 +105,20 @@ khác ngôn ngữ: `parser.FILENAME_PATTERN` (Python, thẩm quyền cuối — 
 `isValidSyncFilename` (Java, lọc trước khi upload từ thư mục đồng bộ Android). Lệch giữa ba bản
 chỉ gây bỏ sót/thử thừa, không phải lỗ hổng — nhưng vẫn nên sửa cả ba khi đổi quy tắc.
 
+## Android: Storage Access Framework (thư mục đồng bộ)
+
+**Cạm bẫy đã trả giá:** từ Android 11, hệ điều hành **khoá cứng** nút "Sử dụng thư mục này" khi
+người dùng chọn thẳng thư mục `Download` gốc qua `ACTION_OPEN_DOCUMENT_TREE` — cùng loại giới hạn
+với root bộ nhớ ngoài và `Android/data`/`Android/obb`. Đây là hạn chế của OS, **không sửa được từ
+phía app**, và `EXTRA_INITIAL_URI` trỏ thẳng vào đó không né được (chỉ đỡ vài bước điều hướng, tới
+đúng chỗ vẫn bị khoá). Người dùng bắt buộc phải đi tiếp vào một thư mục **con** bên trong Download
+(có sẵn hoặc tạo mới ngay trong trình chọn) mới chọn được. `MainActivity.launchSyncFolderPicker()`
++ `android-sync-folder.tsx` đã dặn trước điều này trong UI — đừng gợi ý "chọn Download" trống
+không nữa, luôn kèm "thư mục con bên trong Download".
+
+Nguồn: [Android Developers — Storage updates in Android 11](https://developer.android.com/about/versions/11/privacy/storage),
+[CommonsWare — SAF Restrictions](https://commonsware.com/R/pages/chap-scoped-006).
+
 ## Gate cục bộ trước khi đề nghị push
 
 ```bash

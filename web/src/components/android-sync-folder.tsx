@@ -93,7 +93,8 @@ export function AndroidSyncFolder({ account, onSynced }: { account: string; onSy
   return (
     <div className="inbox-hint android-sync-folder" role="note">
       <p><strong>Hoặc đồng bộ liên tục từ một thư mục trên máy</strong></p>
-      <p>Chọn một thư mục (vd. Download) — mỗi lần mở app hoặc bấm &quot;Đồng bộ ngay&quot;, hệ thống tự tìm tệp tên bắt đầu <code>affiliate_orders</code> trong đó, nhập vào tài khoản đang chọn rồi dời sang <code>.done</code>/<code>.failed</code>.</p>
+      <p>Android không cho chọn thẳng thư mục Download (giới hạn quyền riêng tư từ Android 11) — hãy chọn hoặc tạo mới một thư mục con bên trong Download, vd. <code>Download/TikTok</code>. Mỗi lần mở app hoặc bấm &quot;Đồng bộ ngay&quot;, hệ thống tự tìm tệp tên bắt đầu <code>affiliate_orders</code> trong thư mục đó, nhập vào tài khoản đang chọn rồi dời sang <code>.done</code>/<code>.failed</code>.</p>
+      <p className="subtle">Vào Chrome → Cài đặt → Tải xuống → bật &quot;Hỏi vị trí lưu mỗi lần&quot; để chọn đúng thư mục con đó khi tải file TikTok, khỏi phải tự chuyển tệp vào sau.</p>
       <div className="android-sync-folder-row">
         <span className="status-badge" data-status={folder?.picked ? "active" : undefined}>
           {folder === null ? "Đang kiểm tra…" : folder.picked ? (folder.label ?? "Đã chọn thư mục") : "Chưa chọn thư mục"}
