@@ -21,6 +21,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 try:  # Pydantic v1 trên Android không có AliasChoices/model_dump.
@@ -532,7 +533,10 @@ def _xlsx_response(df: pd.DataFrame, filename: str, sheet_name: str) -> Streamin
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Encoding": "identity",
+        },
     )
 
 
@@ -579,6 +583,10 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Accept", "Content-Type", "X-CSRF-Token", "X-Desktop-Control-Token", "X-Android-Local-Token"],
     )
+    # Static export bundles are served by this same local API process. Compressing text assets
+    # materially reduces first paint over LAN/Android loopback while Starlette preserves file
+    # response/pathsend downloads such as verified APK and one-time .affsync packages.
+    app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 
     def require_android_local_access(request: Request) -> None:
         if android_local_token is None:
@@ -1360,6 +1368,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             media_type="application/vnd.affiliate-report.sync",
             headers={
                 "Content-Disposition": f'attachment; filename="{manifest["filename"]}"',
+                "Content-Encoding": "identity",
                 "X-Affsync-Package-Id": manifest["package_id"],
                 "X-Content-Type-Options": "nosniff",
             },
@@ -1439,6 +1448,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             filename=entry["filename"],
             content_disposition_type="attachment",
             headers={
+                "Content-Encoding": "identity",
                 "X-Content-Type-Options": "nosniff",
             },
             background=BackgroundTask(package_path.unlink, missing_ok=True),
@@ -1605,6 +1615,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             media_type="application/vnd.android.package-archive",
             filename=apk_path.name,
             headers={
+                "Content-Encoding": "identity",
                 "X-Affiliate-Report-Version": str(entry["version"]),
                 "X-Affiliate-Report-Size": str(entry["size"]),
                 "X-Affiliate-Report-SHA256": str(entry["sha256"]),

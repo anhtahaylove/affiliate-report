@@ -703,6 +703,9 @@ def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
     static_dir = tmp_path / "web"
     static_dir.mkdir()
     (static_dir / "index.html").write_text("<h1>Ops Cockpit</h1>", encoding="utf-8")
+    javascript = "const commerce = 'affiliate-report';\n" * 200
+    (static_dir / "commerce.js").write_text(javascript, encoding="utf-8")
+    expected_javascript = (static_dir / "commerce.js").read_bytes()
     (static_dir / "sw.js").write_text(
         'const CACHE = "tiktok-affiliate-report-shell-__APP_VERSION__";',
         encoding="utf-8",
@@ -721,6 +724,12 @@ def test_optional_static_web_mount_keeps_api_routes(tmp_path, monkeypatch):
     assert "__APP_VERSION__" not in service_worker.text
     assert f"tiktok-affiliate-report-shell-{APP_VERSION}" in service_worker.text
     assert service_worker.headers["cache-control"] == "no-cache, no-store, must-revalidate"
+    compressed = client.get("/commerce.js", headers={"Accept-Encoding": "gzip"})
+    assert compressed.status_code == 200
+    assert compressed.headers["content-encoding"] == "gzip"
+    assert "Accept-Encoding" in compressed.headers["vary"]
+    # HTTPX decompresses the body for callers; the transport contract still advertises gzip.
+    assert compressed.content == expected_javascript
 
 
 def test_static_export_mount_resolves_flattened_rsc_payloads_without_open_rewrites(tmp_path, monkeypatch):

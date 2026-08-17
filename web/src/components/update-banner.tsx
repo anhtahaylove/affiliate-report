@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CapabilityState, UpdateStatus, checkUpdate } from "@/lib/api";
 import { Download, X } from "lucide-react";
+import styles from "./update-banner.module.css";
 
 const DISMISS_KEY = "tiktok-affiliate-update-postponed";
 
@@ -67,7 +68,7 @@ export function UpdateBanner({ capability, onUpdatePage }: { capability: Capabil
   }
 
   return (
-    <section className="update-banner" role="status">
+    <section className={styles.updateBanner} role="status" aria-label="Thông báo cập nhật ứng dụng">
       <Download size={18} aria-hidden="true" />
       <p>
         <strong>Có bản {status.latest_version}</strong>
@@ -80,7 +81,7 @@ export function UpdateBanner({ capability, onUpdatePage }: { capability: Capabil
       <Link className="button-link" href={status.installable ? "/settings/update#install" : "/settings/update"}>
         {status.installable ? "Cập nhật ngay" : "Xem chi tiết"}
       </Link>
-      <button type="button" className="update-banner-dismiss" onClick={postpone} aria-label={`Để sau, không nhắc lại bản ${status.latest_version}`}>
+      <button type="button" className={`${styles.updateBannerDismiss}`} onClick={postpone} aria-label={`Để sau, không nhắc lại bản ${status.latest_version}`}>
         <X size={16} aria-hidden="true" />
         Để sau
       </button>

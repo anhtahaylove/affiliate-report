@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { AccountIdentity } from "@/components/account-identity";
 import type { AccountDirectory } from "@/lib/account-directory";
+import styles from "./settings-commerce.module.css";
 
 export function UsersSettingsPage({ currentUser, accounts, directory, identityPolicy }: { currentUser: CurrentUser; accounts: string[]; directory: AccountDirectory; identityPolicy: IdentityPolicy }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -55,41 +56,41 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
     setPendingRoleChange(null);
   }
   return (
-    <section className="section panel wide users-settings-page">
-      <div className="section-heading">
+    <section className={`${styles.surface} section ${styles.section} panel wide ${styles.wide} users-settings-page ${styles.usersSettingsPage}`}>
+      <div className={`section-heading ${styles.sectionHeading}`}>
         <div>
-          <p className="section-label">Phân quyền truy cập</p>
+          <p className={`section-label ${styles.sectionLabel}`}>Phân quyền truy cập</p>
           <h2>Người dùng, vai trò và phạm vi tài khoản</h2>
           <p>Chủ sở hữu không thể tự hạ quyền hoặc tự ngừng kích hoạt tài khoản của mình.</p>
         </div>
       </div>
-      <section className="settings-summary-row" aria-labelledby="permissions-summary-title">
-        <h3 className="sr-only" id="permissions-summary-title">Tổng quan phân quyền</h3>
+      <section className={`settings-summary-row ${styles.settingsSummaryRow}`} aria-labelledby="permissions-summary-title">
+        <h3 className={`sr-only`} id="permissions-summary-title">Tổng quan phân quyền</h3>
         <span><strong>{integer.format(activeUsers.length)}</strong> đang hoạt động</span>
         <span><strong>{integer.format(archivedUsers.length)}</strong> đã lưu trữ</span>
         <span><strong>{integer.format(accounts.length)}</strong> tài khoản có thể gán</span>
       </section>
       {identityPolicy.oidc_allowlist_enforced ? (
-        <aside className="identity-policy" aria-labelledby="identity-policy-title">
+        <aside className={`identity-policy ${styles.identityPolicy}`} aria-labelledby="identity-policy-title">
           <KeyRound size={20} aria-hidden="true" />
           <div>
             <h3 id="identity-policy-title">Chỉ email được cấp phép mới đăng nhập được</h3>
             <p>Hệ thống chỉ cho những email đã được người quản trị cấp phép đăng nhập. Quy định này áp dụng cho cả lượt đăng nhập mới lẫn người đang dùng ứng dụng.</p>
-            <p className="hint"><ShieldCheck size={15} aria-hidden="true" /> Bật &quot;Đang hoạt động&quot; cho một người dùng chưa chắc đủ để họ đăng nhập được — email của họ còn phải nằm trong danh sách được cấp phép. Nếu người quản trị vừa cập nhật danh sách này, những người không còn được phép sẽ bị đăng xuất trong lượt thao tác kế tiếp.</p>
+            <p className={`hint ${styles.hint}`}><ShieldCheck size={15} aria-hidden="true" /> Bật &quot;Đang hoạt động&quot; cho một người dùng chưa chắc đủ để họ đăng nhập được — email của họ còn phải nằm trong danh sách được cấp phép. Nếu người quản trị vừa cập nhật danh sách này, những người không còn được phép sẽ bị đăng xuất trong lượt thao tác kế tiếp.</p>
           </div>
         </aside>
       ) : null}
-      <div className="target-list user-management-list">
+      <div className={`target-list ${styles.targetList} user-management-list ${styles.userManagementList}`}>
         {users.map((user) => {
           const lockedSelf = user.email === currentUser.email;
           return (
-            <article className="user-card" key={user.id} data-state={user.active ? "active" : "archived"}>
-              <div className="record-title">
+            <article className={`user-card ${styles.userCard}`} key={user.id} data-state={user.active ? "active" : "archived"}>
+              <div className={`record-title ${styles.recordTitle}`}>
                 <div><strong>{user.display_name || user.email}</strong><span>{user.email}</span></div>
-                <span className="status-badge" data-status={user.active ? "active" : "archived"}>{user.active ? "Đang hoạt động" : "Đã lưu trữ"}</span>
+                <span className={`status-badge`} data-status={user.active ? "active" : "archived"}>{user.active ? "Đang hoạt động" : "Đã lưu trữ"}</span>
               </div>
-              <div className="user-permission-grid">
-                <div className="field">
+              <div className={`user-permission-grid ${styles.userPermissionGrid}`}>
+                <div className={`field ${styles.field}`}>
                   <label htmlFor={`role-${user.id}`}>Vai trò</label>
                   <select id={`role-${user.id}`} value={user.role} onChange={(event) => requestRoleChange(user, event.target.value as AdminUser["role"])} disabled={saving === user.id || lockedSelf}>
                     <option value="owner">{roleLabel("owner")}</option>
@@ -97,23 +98,23 @@ export function UsersSettingsPage({ currentUser, accounts, directory, identityPo
                     <option value="viewer">{roleLabel("viewer")}</option>
                   </select>
                 </div>
-                <div className="row-actions">
+                <div className={`row-actions ${styles.rowActions}`}>
                   <button type="button" onClick={() => void patch(user, { active: !user.active })} disabled={saving === user.id || lockedSelf}>{user.active ? "Lưu trữ" : "Kích hoạt lại"}</button>
                 </div>
               </div>
               {user.role !== "owner" ? (
-                <fieldset className="filter-stack">
-                  <legend className="field-label">Tài khoản được truy cập ({integer.format(user.accounts.length)}/{integer.format(accounts.length)})</legend>
-                  <div className="account-options">{accounts.map((account) => <label className="account-option" key={account}><input type="checkbox" checked={user.accounts.includes(account)} onChange={() => toggleAccount(user, account)} disabled={saving === user.id} /><AccountIdentity directory={directory} code={account} /></label>)}</div>
+                <fieldset className={`filter-stack`}>
+                  <legend className={`field-label`}>Tài khoản được truy cập ({integer.format(user.accounts.length)}/{integer.format(accounts.length)})</legend>
+                  <div className={`account-options`}>{accounts.map((account) => <label className={`account-option`} key={account}><input type="checkbox" checked={user.accounts.includes(account)} onChange={() => toggleAccount(user, account)} disabled={saving === user.id} /><AccountIdentity directory={directory} code={account} /></label>)}</div>
                 </fieldset>
-              ) : <p className="hint">Chủ sở hữu có quyền truy cập tất cả tài khoản.</p>}
-              {lockedSelf ? <p className="hint">Đang đăng nhập bằng người dùng này nên các thao tác tự hạ quyền/tự khóa đã bị chặn.</p> : null}
+              ) : <p className={`hint ${styles.hint}`}>Chủ sở hữu có quyền truy cập tất cả tài khoản.</p>}
+              {lockedSelf ? <p className={`hint ${styles.hint}`}>Đang đăng nhập bằng người dùng này nên các thao tác tự hạ quyền/tự khóa đã bị chặn.</p> : null}
             </article>
           );
         })}
-        {!users.length ? <p className="empty">Chưa có người dùng nào.</p> : null}
+        {!users.length ? <p className={`empty`}>Chưa có người dùng nào.</p> : null}
       </div>
-      {message ? <p className="upload-result" role="status">{message}</p> : null}
+      {message ? <p className={`upload-result`} role="status">{message}</p> : null}
       <ConfirmDialog
         open={pendingRoleChange !== null}
         title={`Đổi vai trò của ${pendingRoleChange?.user.email ?? ""} thành "${roleLabel(pendingRoleChange?.role)}"?`}

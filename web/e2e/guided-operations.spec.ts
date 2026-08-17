@@ -36,46 +36,28 @@ async function mockShell(page: Page, options: ShellOptions = {}) {
   await page.route("**/api/v1/ui/saved-views**", (route) => route.fulfill({ json: { items: [], count: 0 } }));
 }
 
-function emptyAnalytics() {
-  return {
-    filters: { accounts: [], start: null, end: null, statuses: [], group_by: "day", top: 10 },
-    summary: { orders: 0, order_lines: 0, gross_gmv: 0, actual_gmv: 0, initial_commission: 0, actual_commission: 0, final_received: 0, units_sold: 0, units_refunded: 0, effective_commission_rate: null, refund_rate: null, ineligible_rate: null, final_received_variance: 0, latest_order_date: null },
-    previous_period: null,
-    target: null,
-    trend: [], status_breakdown: [], account_breakdown: [], products: [], shops: [], content: [],
-    settlement: { median_lag_days: null, settled_lines: 0, pending_lines: 0, pending_aging: [] },
-    data_quality: { unknown_status_rows: 0, non_vnd_rows: 0, missing_order_date_rows: 0, missing_settlement_date_rows: 0, settled_missing_settlement_rows: 0, negative_settlement_lag_rows: 0, import_batches: 0, import_inserted: 0, import_updated: 0, import_unchanged: 0, import_rejected: 0, latest_import_at: null },
-  };
-}
-
-async function mockEmptyDashboard(page: Page, onTargetMonth?: (month: string | null) => void) {
-  await page.route("**/api/v1/overview**", (route) => route.fulfill({ json: { items: [], count: 0 } }));
-  await page.route("**/api/v1/daily**", (route) => route.fulfill({ json: { items: [], count: 0 } }));
-  await page.route("**/api/v1/monthly-kpi**", (route) => route.fulfill({ json: { items: [], count: 0 } }));
-  await page.route("**/api/v1/analytics**", (route) => route.fulfill({ json: emptyAnalytics() }));
-  await page.route("**/api/v1/targets**", (route) => {
-    onTargetMonth?.(new URL(route.request().url()).searchParams.get("month"));
-    return route.fulfill({ json: { items: [], count: 0 } });
-  });
-  await page.route("**/api/v1/imports**", (route) => route.fulfill({ json: { items: [], count: 0, limit: 20 } }));
-}
-
 test("owner and operator receive role-aware first-run guidance", async ({ page }) => {
-  let onboardingTargetMonth: string | null = null;
+  const dashboardPaths = new Set(["/api/v1/overview", "/api/v1/daily", "/api/v1/monthly-kpi", "/api/v1/analytics", "/api/v1/imports", "/api/v1/targets"]);
+  const dashboardRequests: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (dashboardPaths.has(path)) dashboardRequests.push(path);
+  });
+
   await mockShell(page);
-  await mockEmptyDashboard(page, (month) => { onboardingTargetMonth = month; });
   await page.goto("/?month=2025-01&start=2025-01-01&end=2025-01-31");
   await expect(page.getByRole("heading", { name: "Hoàn tất thiết lập vận hành" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Tạo tài khoản TikTok" })).toBeVisible();
-  const now = new Date();
-  await expect.poll(() => onboardingTargetMonth).toBe(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+  await page.waitForLoadState("networkidle");
+  expect(dashboardRequests).toEqual([]);
 
   await page.unrouteAll({ behavior: "wait" });
   await mockShell(page, { role: "operator" });
-  await mockEmptyDashboard(page);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Liên hệ chủ sở hữu để được cấp tài khoản" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Tạo account TikTok" })).toHaveCount(0);
+  await page.waitForLoadState("networkidle");
+  expect(dashboardRequests).toEqual([]);
 });
 
 test("imports zero-account state is safe and successful import keeps results plus next actions", async ({ page }) => {
@@ -101,8 +83,17 @@ test("imports zero-account state is safe and successful import keeps results plu
   await page.reload();
   await expect(page.getByLabel("Tài khoản TikTok")).toHaveValue("SHOP_A");
   await expect(page.getByLabel("Tài khoản TikTok").locator("option")).toHaveText("Gian hàng chính — SHOP_A");
+  const importStepper = page.getByRole("list", { name: "Các bước nhập dữ liệu" });
+  for (const label of ["Tài khoản", "Nguồn tệp", "Kiểm tra", "Nhập", "Kết quả"]) {
+    await expect(importStepper.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("heading", { name: "Chọn nguồn tệp" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Cùng Wi-Fi/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Khác mạng/ })).toBeVisible();
   await page.getByLabel("File Excel đã xuất từ TikTok").setInputFiles({ name: "affiliate_orders.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from("fixture") });
+  await expect(page.getByRole("heading", { name: "Kiểm tra hàng đợi" })).toBeVisible();
   await page.getByRole("button", { name: "Nhập dữ liệu" }).click();
+  await expect(page.getByRole("heading", { name: "Kết quả nhập" })).toBeVisible();
   await expect(page.getByText("2 dòng mới", { exact: false })).toBeVisible();
   await expect(page.getByRole("link", { name: "Xem Dashboard" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Đặt mục tiêu tháng" })).toBeVisible();
@@ -198,6 +189,9 @@ test("account mutations refresh metadata once only after a successful commit", a
 
   await page.goto("/accounts/");
   await expect(page.getByRole("heading", { name: "Quản lý tài khoản đang dùng và đã lưu trữ" })).toBeVisible();
+  await expect(page.getByText("Bảo vệ dữ liệu giữa các tài khoản")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tài khoản đang vận hành" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tài khoản đã lưu trữ" })).toBeVisible();
   await expect.poll(() => metaCalls).toBe(1);
 
   await page.getByLabel("Mã tài khoản mới").fill("NEW_ACC");
@@ -248,4 +242,82 @@ test("account mutations refresh metadata once only after a successful commit", a
   await page.getByRole("button", { name: "Xóa vĩnh viễn" }).click();
   await expect(page.locator(".account-card").filter({ hasText: "NEW_ACC" })).toHaveCount(0);
   await expect.poll(() => metaCalls).toBe(5);
+});
+
+test("orders và targets đổi composition theo desktop/mobile thay vì co nhỏ cùng một layout", async ({ page }) => {
+  const account = { code: "SHOP_A", display_name: "Gian hàng chính", active: true, display_order: 1 };
+  await mockShell(page, { accounts: [account] });
+  await page.route("**/api/v1/orders**", (route) => route.fulfill({
+    json: {
+      items: [{
+        business_key: "SHOP_A|ORDER_1|SKU_1",
+        account: "SHOP_A",
+        order_id: "ORDER_1",
+        sku_id: "SKU_1",
+        product_id: "PRODUCT_1",
+        product_name: "Sản phẩm kiểm thử adaptive",
+        shop_id: "SHOP_ID_1",
+        shop_name: "Gian hàng chính",
+        content_type: "video",
+        content_id: "VIDEO_1",
+        order_type: "affiliate",
+        commission_type: "standard",
+        currency: "VND",
+        status: "settled",
+        order_date: "2026-08-12T08:00:00Z",
+        settlement_date: "2026-08-14T08:00:00Z",
+        gmv: 500000,
+        actual_gmv: 500000,
+        units_sold: 2,
+        units_refunded: 0,
+        estimated_commission: 50000,
+        actual_commission: 50000,
+        final_received: 50000,
+        version: 1,
+        created_at: "2026-08-12T08:00:00Z",
+      }],
+      count: 1,
+      total: 1,
+      limit: 100,
+      offset: 0,
+    },
+  }));
+  await page.route("**/api/v1/targets**", (route) => route.fulfill({
+    json: { items: [{ account: "SHOP_A", month: "2026-08", daily_target_commission: 100000 }], count: 1 },
+  }));
+  await page.route("**/api/v1/monthly-kpi**", (route) => route.fulfill({
+    json: {
+      items: [{
+        month: "2026-08",
+        account: "SHOP_A",
+        daily_target: 100000,
+        days_in_scope: 31,
+        monthly_target: 3100000,
+        actual_commission: 1550000,
+        gap: -1550000,
+        target_achievement: 0.5,
+        combined_commission: 1550000,
+        combined_gap: -1550000,
+        combined_target_achievement: 0.5,
+        ineligible_commission: 0,
+        ineligible_rate: 0,
+        order_lines: 1,
+      }],
+      count: 1,
+    },
+  }));
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/orders/?month=2026-08&start=2026-08-01&end=2026-08-31");
+  await expect(page.locator(".orders-table")).toBeVisible();
+  await expect(page.locator(".orders-card-list")).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".orders-table")).toBeHidden();
+  await expect(page.locator(".orders-card-list")).toBeVisible();
+  await expect(page.locator("article.order-card")).toContainText("Sản phẩm kiểm thử adaptive");
+
+  await page.goto("/targets/?month=2026-08&start=2026-08-01&end=2026-08-31");
+  await expect(page.getByRole("group", { name: "Chọn tài khoản để chỉnh mục tiêu" })).toBeVisible();
+  await expect(page.locator(".target-card:visible")).toHaveCount(1);
 });

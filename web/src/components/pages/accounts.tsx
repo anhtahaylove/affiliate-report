@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Archive, ArchiveRestore, ChevronDown, Pencil, Plus, Save, ShieldAlert, Trash2 } from "lucide-react";
 import { AccountDeletePreview, AccountItem, createAccount, deleteAccount, loadAccounts, previewDeleteAccount, updateAccount } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { countsText, errorMessage, formatDateTime, integer } from "@/lib/format";
+import styles from "./accounts.module.css";
 
 export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => Promise<void> }) {
   const [records, setRecords] = useState<AccountItem[]>([]);
@@ -146,66 +148,83 @@ export function AccountsPage({ onAccountsChanged }: { onAccountsChanged: () => P
   function accountCard(record: AccountItem) {
     const rowDraft = accountDrafts[record.code] ?? { display_name: record.display_name, display_order: String(record.display_order) };
     return (
-      <article className="account-card" key={record.code} data-state={record.active ? "active" : "archived"}>
-        <div className="record-title">
-          <div><strong>{record.display_name}</strong><span>Mã: {record.code} · {record.active ? "Sẵn sàng lọc, nhập tệp và gán người dùng" : "Không hiện trong danh sách lọc, nhập tệp hoặc gán người dùng"}</span></div>
+      <article className={`${styles.accountCard} account-card`} key={record.code} data-state={record.active ? "active" : "archived"}>
+        <div className={styles.cardHeading}>
+          <div><strong>{record.display_name}</strong><span className={styles.accountCode}>Mã: {record.code}</span></div>
           <span className="status-badge" data-status={record.active ? "active" : "archived"}>{record.active ? "Đang hoạt động" : "Đã lưu trữ"}</span>
         </div>
-        <dl className="account-meta">
+        <p className={styles.healthLine} data-state={record.active ? "ready" : "paused"}>
+          <span aria-hidden="true" />
+          {record.active ? "Sẵn sàng nhận file, lọc báo cáo và gán người dùng" : "Đã ngừng nhận file mới nhưng toàn bộ lịch sử vẫn được giữ"}
+        </p>
+        <dl className={`${styles.accountMeta} account-meta`}>
           <div><dt>Thứ tự</dt><dd>{integer.format(record.display_order)}</dd></div>
-          <div><dt>Tạo lúc</dt><dd>{formatDateTime(record.created_at)}</dd></div>
-          <div><dt>Cập nhật</dt><dd>{formatDateTime(record.updated_at)}</dd></div>
+          <div><dt>Tạo</dt><dd>{formatDateTime(record.created_at)}</dd></div>
+          <div><dt>Cập nhật gần nhất</dt><dd>{formatDateTime(record.updated_at)}</dd></div>
         </dl>
-        <div className="account-edit-grid">
-          <div className="field"><label htmlFor={`account-name-${record.code}`}>Tên hiển thị</label><input id={`account-name-${record.code}`} maxLength={128} value={rowDraft.display_name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_name: event.target.value } }))} /></div>
-          <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_order: event.target.value } }))} /></div>
-        </div>
-        <div className="row-actions">
-          <button type="button" onClick={() => void saveAccount(record)}>Lưu thay đổi</button>
-          <button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button>
-          <button type="button" className="danger-button" onClick={() => void previewDelete(record)}>Xem trước khi xóa</button>
+        <details className={styles.editDisclosure} open>
+          <summary><span><Pencil size={15} aria-hidden="true" /> Chỉnh sửa tài khoản</span><ChevronDown size={16} aria-hidden="true" /></summary>
+          <div className={`${styles.editGrid} account-edit-grid`}>
+            <div className="field"><label htmlFor={`account-name-${record.code}`}>Tên hiển thị</label><input id={`account-name-${record.code}`} maxLength={128} value={rowDraft.display_name} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_name: event.target.value } }))} /></div>
+            <div className="field"><label htmlFor={`account-order-${record.code}`}>Thứ tự hiển thị</label><input id={`account-order-${record.code}`} type="number" step="1" value={rowDraft.display_order} onChange={(event) => setAccountDrafts((current) => ({ ...current, [record.code]: { ...rowDraft, display_order: event.target.value } }))} /></div>
+          </div>
+          <button className={styles.saveButton} type="button" onClick={() => void saveAccount(record)}><Save size={15} aria-hidden="true" /> Lưu thay đổi</button>
+        </details>
+        <div className={styles.cardActions}>
+          <button type="button" onClick={() => void patch(record, { active: !record.active })}>{record.active ? <Archive size={15} aria-hidden="true" /> : <ArchiveRestore size={15} aria-hidden="true" />}{record.active ? "Lưu trữ" : "Kích hoạt lại"}</button>
+          <button type="button" className={styles.deleteButton} onClick={() => void previewDelete(record)}><Trash2 size={15} aria-hidden="true" /> Xem trước khi xóa</button>
         </div>
       </article>
     );
   }
 
   return (
-    <section className="section panel accounts-workflow-page">
-      <div className="section-heading">
+    <section className={`${styles.page} accounts-workflow-page`}>
+      <div className={styles.heading}>
         <div>
           <p className="section-label">Danh sách tài khoản</p>
           <h2>Quản lý tài khoản đang dùng và đã lưu trữ</h2>
           <p>{hardDeleteSupported ? "Có thể xóa vĩnh viễn sau khi tạo bản sao lưu." : "Dữ liệu dùng chung chỉ cho phép lưu trữ tài khoản; lịch sử vẫn được giữ lại."}</p>
         </div>
       </div>
-      <div className="account-create-panel upload-form">
-        <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="Ví dụ: SHOP_1 hoặc tên đăng nhập TikTok (vd. sarah.reign)" /></div>
-        <div className="field"><label htmlFor="new-account-name">Tên hiển thị mới (không bắt buộc)</label><input id="new-account-name" maxLength={128} value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Để trống sẽ dùng mã tài khoản" /></div>
-        <button type="button" onClick={() => void create()}>Tạo tài khoản</button>
+
+      <div className={styles.overlapGuard}>
+        <ShieldAlert size={19} aria-hidden="true" />
+        <div><strong>Bảo vệ dữ liệu giữa các tài khoản</strong><span>Khi nhập file, hệ thống tự so order + SKU với account khác và cảnh báo overlap bất thường. Hãy dùng tên hiển thị dễ phân biệt để giảm chọn nhầm.</span></div>
       </div>
+
+      <details className={styles.createDisclosure} open>
+        <summary><span><Plus size={17} aria-hidden="true" /> Thêm tài khoản mới</span><ChevronDown size={17} aria-hidden="true" /></summary>
+        <div className={`${styles.createPanel} account-create-panel upload-form`}>
+          <div className="field"><label htmlFor="new-account-code">Mã tài khoản mới</label><input id="new-account-code" value={draft.code} onChange={(event) => setDraft((current) => ({ ...current, code: event.target.value }))} placeholder="Ví dụ: SHOP_1 hoặc sarah.reign" /></div>
+          <div className="field"><label htmlFor="new-account-name">Tên hiển thị mới (không bắt buộc)</label><input id="new-account-name" maxLength={128} value={draft.display_name} onChange={(event) => setDraft((current) => ({ ...current, display_name: event.target.value }))} placeholder="Để trống sẽ dùng mã tài khoản" /></div>
+          <button type="button" onClick={() => void create()}><Plus size={16} aria-hidden="true" /> Tạo tài khoản</button>
+        </div>
+      </details>
       {/* Ngay dưới panel tạo tài khoản, không phải cuối trang: trước đây thông báo lỗi nằm sau
           toàn bộ danh sách account, nên với vài chục account đã tồn tại, bấm Tạo thất bại trông
           y hệt như không có phản hồi gì — phải cuộn hết xuống mới thấy dòng chữ giải thích. */}
-      {message ? <p className="upload-result" data-tone={messageTone} role={messageTone === "danger" ? "alert" : "status"}>{message}</p> : null}
-      <section className="account-summary-row" aria-labelledby="account-summary-title">
+      {message ? <p className={`${styles.message} upload-result`} data-tone={messageTone} role={messageTone === "danger" ? "alert" : "status"}>{message}</p> : null}
+      <section className={`${styles.summaryRow} account-summary-row`} aria-labelledby="account-summary-title">
         <h3 className="sr-only" id="account-summary-title">Tổng quan tài khoản</h3>
-        <span><strong>{integer.format(activeRecords.length)}</strong> đang hoạt động</span>
+        <span><strong>{integer.format(records.length)}</strong> tổng tài khoản</span>
+        <span data-tone="success"><strong>{integer.format(activeRecords.length)}</strong> đang hoạt động</span>
         <span><strong>{integer.format(archivedRecords.length)}</strong> đã lưu trữ</span>
       </section>
-      <div className="account-sections">
-        <section className="account-section" aria-labelledby="active-accounts-title">
-          <div className="section-heading compact"><div><p className="section-label">Đang dùng</p><h3 id="active-accounts-title">Tài khoản đang vận hành</h3></div></div>
-          {activeRecords.map(accountCard)}
+      <div className={`${styles.accountSections} account-sections`}>
+        <section className={styles.accountSection} aria-labelledby="active-accounts-title">
+          <div className={styles.sectionTitle}><div><p className="section-label">Đang dùng</p><h3 id="active-accounts-title">Tài khoản đang vận hành</h3></div><span>{integer.format(activeRecords.length)}</span></div>
+          <div className={styles.cardGrid}>{activeRecords.map(accountCard)}</div>
           {!activeRecords.length ? <p className="empty">Chưa có tài khoản đang hoạt động.</p> : null}
         </section>
-        <section className="account-section" aria-labelledby="archived-accounts-title">
-          <div className="section-heading compact"><div><p className="section-label">Lưu trữ</p><h3 id="archived-accounts-title">Tài khoản đã lưu trữ</h3></div></div>
-          {archivedRecords.map(accountCard)}
+        <section className={styles.accountSection} aria-labelledby="archived-accounts-title">
+          <div className={styles.sectionTitle}><div><p className="section-label">Lưu trữ</p><h3 id="archived-accounts-title">Tài khoản đã lưu trữ</h3></div><span>{integer.format(archivedRecords.length)}</span></div>
+          <div className={styles.cardGrid}>{archivedRecords.map(accountCard)}</div>
           {!archivedRecords.length ? <p className="empty">Chưa có tài khoản lưu trữ.</p> : null}
         </section>
       </div>
-      {deletePreview ? <div className="delete-preview panel-muted" role="status"><strong>Xem trước {deletePreview.code}</strong><span>{deletePreview.action === "hard_delete" ? "Sẽ xóa vĩnh viễn sau khi sao lưu" : "Sẽ chuyển vào danh sách lưu trữ"} · {countsText(deletePreview.dependency_counts)}</span></div> : null}
-      {syncWarning ? <div className="sync-warning" role="alert"><span>{syncWarning}</span><button type="button" onClick={() => void retryMetadataSync()}>Thử đồng bộ lại</button></div> : null}
+      {deletePreview ? <div className={`${styles.deletePreview} delete-preview`} role="status"><strong>Xem trước {deletePreview.code}</strong><span>{deletePreview.action === "hard_delete" ? "Sẽ xóa vĩnh viễn sau khi sao lưu" : "Sẽ chuyển vào danh sách lưu trữ"} · {countsText(deletePreview.dependency_counts)}</span></div> : null}
+      {syncWarning ? <div className={`${styles.syncWarning} sync-warning`} role="alert"><span>{syncWarning}</span><button type="button" onClick={() => void retryMetadataSync()}>Thử đồng bộ lại</button></div> : null}
       {!records.length ? <p className="empty">Chưa có tài khoản. Hãy tạo tài khoản đầu tiên để bắt đầu nhập dữ liệu.</p> : null}
       <ConfirmDialog
         open={deletePreview !== null}

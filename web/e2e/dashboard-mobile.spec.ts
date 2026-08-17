@@ -25,7 +25,7 @@ test("dashboard mobile ưu tiên nhịp hôm nay và thu gọn phân tích thứ
   await expect(page.locator("[data-widget-id='target_progress']")).toBeVisible();
   await expect(page.locator("[data-widget-id='action_alerts']")).toBeVisible();
 
-  const disclosures = page.locator("details.mobile-dashboard-disclosure");
+  const disclosures = page.getByTestId("dashboard-disclosure");
   await expect(disclosures).toHaveCount(6);
   await expect(disclosures.first()).not.toHaveAttribute("open", "");
 
@@ -74,16 +74,16 @@ test("dashboard mobile ưu tiên nhịp hôm nay và thu gọn phân tích thứ
   expect(compactSummaryBox!.height).toBeGreaterThanOrEqual(44);
   expect(overflow).toBeLessThanOrEqual(1);
 
-  const customizer = page.locator("details.dashboard-customizer");
+  const customizer = page.getByTestId("dashboard-customizer");
   await customizer.locator("summary").click();
-  const trendControls = customizer.locator(".dashboard-widget-row", { hasText: "Xu hướng hoa hồng" });
+  const trendControls = customizer.locator('[data-widget-control="trend"]');
   await trendControls.getByRole("button", { name: "Ẩn", exact: true }).click();
   await expect(page.locator("details[data-widget-id='trend']")).toBeHidden();
   await trendControls.getByRole("button", { name: "Hiện", exact: true }).click();
   await expect(page.locator("details[data-widget-id='trend']")).toBeVisible();
 
   const axe = await new AxeBuilder({ page })
-    .include(".momentum-dashboard")
+    .include('[data-testid="commerce-dashboard"]')
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
   const blocking = axe.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious");
@@ -94,7 +94,7 @@ test("dashboard desktop tiếp tục hiển thị đầy đủ nội dung thứ 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`/${SCOPE}`);
 
-  const disclosures = page.locator("details.mobile-dashboard-disclosure");
+  const disclosures = page.getByTestId("dashboard-disclosure");
   await expect(disclosures).toHaveCount(6);
   await expect(disclosures.first()).toHaveAttribute("open", "");
   await expect(disclosures.first().locator("summary")).toBeHidden();

@@ -20,6 +20,7 @@ import { ConfirmDialog } from "@/components/ui";
 import { backendLabel, countsText, errorMessage, formatBytes, formatDateTime, integer } from "@/lib/format";
 import { invalidateApiCache } from "@/lib/use-api";
 import { requestAndroidNativeDownload } from "@/lib/android-native";
+import styles from "./settings-commerce.module.css";
 
 const IMPORT_CONFIRMATION = "DONG BO";
 const MIN_PASSPHRASE_LENGTH = 10;
@@ -114,20 +115,20 @@ function saveNativeDownload(downloadUrl: string, filename: string, expectedSize:
 
 function SyncHistory({ items }: { items: SyncHistoryItem[] }) {
   return (
-    <section className="section panel wide sync-history" aria-labelledby="sync-history-title">
-      <div className="section-heading">
+    <section className={`section ${styles.section} panel wide ${styles.wide} sync-history ${styles.syncHistory}`} aria-labelledby="sync-history-title">
+      <div className={`section-heading ${styles.sectionHeading}`}>
         <div>
-          <p className="section-label">Nhật ký thiết bị</p>
+          <p className={`section-label ${styles.sectionLabel}`}>Nhật ký thiết bị</p>
           <h2 id="sync-history-title">Các gói đồng bộ gần đây</h2>
           <p>Mỗi gói đồng bộ chỉ được nhập một lần; nhập lại cùng một gói sẽ không tạo dữ liệu trùng.</p>
         </div>
         <History size={22} aria-hidden="true" />
       </div>
       {items.length ? (
-        <ol className="sync-history-list">
+        <ol className={`sync-history-list ${styles.syncHistoryList}`}>
           {items.map((item) => (
             <li key={`${item.direction}-${item.id}`}>
-              <span className="sync-direction-icon" data-direction={item.direction} aria-hidden="true">
+              <span className={`sync-direction-icon ${styles.syncDirectionIcon}`} data-direction={item.direction} aria-hidden="true">
                 {item.direction === "export" ? <ArrowUpFromLine size={17} /> : <ArrowDownToLine size={17} />}
               </span>
               <div>
@@ -143,7 +144,7 @@ function SyncHistory({ items }: { items: SyncHistoryItem[] }) {
             </li>
           ))}
         </ol>
-      ) : <p className="empty">Chưa có lần đồng bộ nào. Hãy xuất gói đầu tiên trước khi chuyển sang thiết bị khác.</p>}
+      ) : <p className={`empty`}>Chưa có lần đồng bộ nào. Hãy xuất gói đầu tiên trước khi chuyển sang thiết bị khác.</p>}
     </section>
   );
 }
@@ -195,13 +196,13 @@ export function SyncSettingsPage({ capability, backend, runtimePlatform }: {
 
   if (!enabled) {
     return (
-      <section className="section panel wide capability-gate" role="status">
-        <div className="capability-gate-icon"><ServerCog size={22} aria-hidden="true" /></div>
-        <div className="capability-gate-copy">
-          <p className="section-label">Đồng bộ cục bộ</p>
+      <section className={`${styles.surface} section ${styles.section} panel wide ${styles.wide} capability-gate ${styles.capabilityGate}`} role="status">
+        <div className={`capability-gate-icon ${styles.capabilityGateIcon}`}><ServerCog size={22} aria-hidden="true" /></div>
+        <div className={`capability-gate-copy ${styles.capabilityGateCopy}`}>
+          <p className={`section-label ${styles.sectionLabel}`}>Đồng bộ cục bộ</p>
           <h2>Đồng bộ nhiều thiết bị chỉ dùng được khi dữ liệu lưu trực tiếp trên máy</h2>
           <p>{capability?.reason ?? "Cơ sở dữ liệu hiện tại không hỗ trợ xuất và hợp nhất gói .affsync."}</p>
-          <p className="hint">Ứng dụng không tự động tải dữ liệu lên bất kỳ máy chủ đám mây nào.</p>
+          <p className={`hint ${styles.hint}`}>Ứng dụng không tự động tải dữ liệu lên bất kỳ máy chủ đám mây nào.</p>
         </div>
       </section>
     );
@@ -290,17 +291,17 @@ export function SyncSettingsPage({ capability, backend, runtimePlatform }: {
   }
 
   return (
-    <div className="content-grid sync-settings-page">
-      <section className="section panel wide sync-overview" aria-labelledby="sync-overview-title" aria-busy={loading}>
-        <div className="section-heading">
+    <div className={`${styles.workspace} content-grid sync-settings-page ${styles.syncSettingsPage}`}>
+      <section className={`section ${styles.section} panel wide ${styles.wide} sync-overview ${styles.syncOverview}`} aria-labelledby="sync-overview-title" aria-busy={loading}>
+        <div className={`section-heading ${styles.sectionHeading}`}>
           <div>
-            <p className="section-label">Nhiều thiết bị · không qua cloud</p>
+            <p className={`section-label ${styles.sectionLabel}`}>Nhiều thiết bị · không qua cloud</p>
             <h2 id="sync-overview-title">Chuyển dữ liệu an toàn giữa các thiết bị</h2>
             <p>Đây là đồng bộ thủ công, không phải đồng bộ qua máy chủ đám mây. Tệp được mã hóa trước khi rời thiết bị và chỉ được hợp nhất sau bước xem trước.</p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={loading || busy !== null}><RefreshCw size={17} aria-hidden="true" />Làm mới</button>
         </div>
-        <dl className="sync-device-facts">
+        <dl className={`sync-device-facts ${styles.syncDeviceFacts}`}>
           <div><dt><Smartphone size={16} aria-hidden="true" />Thiết bị này</dt><dd>{status?.device.name ?? (loading ? "Đang nhận diện…" : "Chưa xác định")}</dd></div>
           <div><dt><DatabaseZap size={16} aria-hidden="true" />Nơi lưu dữ liệu</dt><dd>{backendLabel(backend)}</dd></div>
           <div><dt><ShieldCheck size={16} aria-hidden="true" />Giới hạn gói</dt><dd>{formatBytes(status?.max_package_bytes ?? 100 * 1024 * 1024)}</dd></div>
@@ -308,45 +309,45 @@ export function SyncSettingsPage({ capability, backend, runtimePlatform }: {
         </dl>
       </section>
 
-      <section className="section panel sync-workflow" aria-labelledby="sync-export-title">
-        <div className="section-heading">
-          <div><p className="section-label">Bước A · Thiết bị nguồn</p><h2 id="sync-export-title">Xuất gói mã hóa</h2><p>Tạo một snapshot nghiệp vụ để mang sang máy tính hoặc điện thoại khác.</p></div>
+      <section className={`section ${styles.section} panel sync-workflow ${styles.syncWorkflow}`} aria-labelledby="sync-export-title">
+        <div className={`section-heading ${styles.sectionHeading}`}>
+          <div><p className={`section-label ${styles.sectionLabel}`}>Bước A · Thiết bị nguồn</p><h2 id="sync-export-title">Xuất gói mã hóa</h2><p>Tạo một snapshot nghiệp vụ để mang sang máy tính hoặc điện thoại khác.</p></div>
           <ArrowUpFromLine size={22} aria-hidden="true" />
         </div>
-        <div className="sync-step-list" aria-label="Quy trình xuất">
+        <div className={`sync-step-list ${styles.syncStepList}`} aria-label="Quy trình xuất">
           <span data-state="active">1. Tạo mật khẩu</span><span>2. Xuất gói</span><span>3. Chuyển tệp</span>
         </div>
-        <div className="field">
+        <div className={`field ${styles.field}`}>
           <label htmlFor="sync-export-passphrase">Mật khẩu mã hóa</label>
-          <div className="sync-secret-control">
+          <div className={`sync-secret-control ${styles.syncSecretControl}`}>
             <input id="sync-export-passphrase" type="text" autoComplete="off" minLength={MIN_PASSPHRASE_LENGTH} value={exportPassphrase} onChange={(event) => setExportPassphrase(event.target.value)} placeholder="Ít nhất 10 ký tự" />
             <button type="button" onClick={() => setExportPassphrase(generatePassphrase())}><KeyRound size={17} aria-hidden="true" />Tạo mật khẩu</button>
             <button type="button" onClick={() => void copyPassphrase(exportPassphrase)} disabled={!exportPassphrase}><Copy size={17} aria-hidden="true" />Sao chép</button>
           </div>
           <span>Ứng dụng không lưu mật khẩu. Nếu quên, file đã xuất không thể khôi phục.</span>
         </div>
-        <button className="primary sync-primary-action" type="button" disabled={busy !== null || exportPassphrase.length < MIN_PASSPHRASE_LENGTH} onClick={() => void exportPackage()}>
+        <button className={`primary sync-primary-action ${styles.syncPrimaryAction}`} type="button" disabled={busy !== null || exportPassphrase.length < MIN_PASSPHRASE_LENGTH} onClick={() => void exportPackage()}>
           <ArrowUpFromLine size={18} aria-hidden="true" />{busy === "export" ? "Đang tạo gói…" : "Xuất file .affsync"}
         </button>
       </section>
 
-      <section className="section panel sync-workflow" aria-labelledby="sync-import-title">
-        <div className="section-heading">
-          <div><p className="section-label">Bước B · Thiết bị nhận</p><h2 id="sync-import-title">Kiểm tra rồi hợp nhất</h2><p>Không ghi đè dữ liệu hiện tại ngay lập tức. Hệ thống luôn cho xem trước, tự sao lưu và kiểm tra kỹ trước khi áp dụng.</p></div>
+      <section className={`section ${styles.section} panel sync-workflow ${styles.syncWorkflow}`} aria-labelledby="sync-import-title">
+        <div className={`section-heading ${styles.sectionHeading}`}>
+          <div><p className={`section-label ${styles.sectionLabel}`}>Bước B · Thiết bị nhận</p><h2 id="sync-import-title">Kiểm tra rồi hợp nhất</h2><p>Không ghi đè dữ liệu hiện tại ngay lập tức. Hệ thống luôn cho xem trước, tự sao lưu và kiểm tra kỹ trước khi áp dụng.</p></div>
           <ArrowDownToLine size={22} aria-hidden="true" />
         </div>
-        <div className="sync-step-list" aria-label="Quy trình nhập">
+        <div className={`sync-step-list ${styles.syncStepList}`} aria-label="Quy trình nhập">
           <span data-state={!preview ? "active" : "done"}>1. Chọn gói</span><span data-state={preview ? "active" : undefined}>2. Xem trước</span><span>3. Xác nhận</span>
         </div>
-        <div className="field">
+        <div className={`field ${styles.field}`}>
           <label htmlFor="sync-import-file">Tệp đồng bộ</label>
-          <div className="file-picker sync-file-picker">
-            <input ref={fileInputRef} className="sr-only" id="sync-import-file" type="file" accept=".affsync,application/vnd.affiliate-report.sync,application/octet-stream" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(null); setResolutions({}); }} disabled={busy !== null} />
-            <label className="file-picker-button" htmlFor="sync-import-file">Chọn tệp .affsync</label>
+          <div className={`file-picker sync-file-picker ${styles.syncFilePicker}`}>
+            <input ref={fileInputRef} className={`sr-only`} id="sync-import-file" type="file" accept=".affsync,application/vnd.affiliate-report.sync,application/octet-stream" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setPreview(null); setResolutions({}); }} disabled={busy !== null} />
+            <label className={`file-picker-button`} htmlFor="sync-import-file">Chọn tệp .affsync</label>
             <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "Chưa chọn tệp"}</span>
           </div>
         </div>
-        <div className="field">
+        <div className={`field ${styles.field}`}>
           <label htmlFor="sync-import-passphrase">Mật khẩu mở gói</label>
           <input id="sync-import-passphrase" type="password" autoComplete="off" value={importPassphrase} onChange={(event) => setImportPassphrase(event.target.value)} />
         </div>
@@ -355,20 +356,20 @@ export function SyncSettingsPage({ capability, backend, runtimePlatform }: {
         </button>
 
         {preview ? (
-          <section className="sync-preview" aria-labelledby="sync-preview-title">
-            <div className="record-title"><h3 id="sync-preview-title">Ảnh hưởng của gói</h3><span>{preview.source_device.name}</span></div>
-            <dl className="sync-preview-facts">
+          <section className={`sync-preview ${styles.syncPreview}`} aria-labelledby="sync-preview-title">
+            <div className={`record-title ${styles.recordTitle}`}><h3 id="sync-preview-title">Ảnh hưởng của gói</h3><span>{preview.source_device.name}</span></div>
+            <dl className={`sync-preview-facts ${styles.syncPreviewFacts}`}>
               <div><dt>Đã xuất</dt><dd>{formatDateTime(preview.exported_at)}</dd></div>
               <div><dt>Dữ liệu</dt><dd>{countsText(preview.counts)}</dd></div>
               <div><dt>Xem trước hết hạn</dt><dd>{formatDateTime(preview.expires_at)}</dd></div>
             </dl>
-            {preview.warnings?.map((warning) => <p className="sync-warning-text" key={warning}>{warning}</p>)}
+            {preview.warnings?.map((warning) => <p className={`sync-warning-text ${styles.syncWarningText}`} key={warning}>{warning}</p>)}
             {preview.conflicts.length ? (
-              <fieldset className="sync-conflicts">
+              <fieldset className={`sync-conflicts ${styles.syncConflicts}`}>
                 <legend>Xử lý {integer.format(preview.conflicts.length)} xung đột</legend>
                 <p>Để tránh chọn nhầm, hãy quyết định rõ từng mục. Khuyến nghị giữ dữ liệu trên thiết bị này nếu chưa chắc chắn.</p>
                 {preview.conflicts.map((conflict) => (
-                  <div className="sync-conflict" key={conflict.id}>
+                  <div className={`sync-conflict ${styles.syncConflict}`} key={conflict.id}>
                     <div><strong>{conflict.label}</strong><small>{conflict.entity}</small></div>
                     <dl><div><dt>Thiết bị này</dt><dd>{valueSummary(conflict.local_value)}</dd></div><div><dt>Gói nhập</dt><dd>{valueSummary(conflict.incoming_value)}</dd></div></dl>
                     <label htmlFor={`sync-resolution-${conflict.id}`}>Cách xử lý</label>
@@ -380,15 +381,15 @@ export function SyncSettingsPage({ capability, backend, runtimePlatform }: {
                   </div>
                 ))}
               </fieldset>
-            ) : <p className="sync-ready"><CheckCircle2 size={18} aria-hidden="true" />Không có xung đột cần xử lý.</p>}
-            <button className="primary sync-primary-action" type="button" onClick={() => setConfirming(true)} disabled={busy !== null || preview.already_imported || unresolvedConflicts.length > 0}>
+            ) : <p className={`sync-ready ${styles.syncReady}`}><CheckCircle2 size={18} aria-hidden="true" />Không có xung đột cần xử lý.</p>}
+            <button className={`primary sync-primary-action ${styles.syncPrimaryAction}`} type="button" onClick={() => setConfirming(true)} disabled={busy !== null || preview.already_imported || unresolvedConflicts.length > 0}>
               {unresolvedConflicts.length ? `Còn ${integer.format(unresolvedConflicts.length)} xung đột` : preview.already_imported ? "Gói đã được nhập" : "Tiếp tục đồng bộ"}
             </button>
           </section>
         ) : null}
       </section>
 
-      {message ? <div className="sync-message wide" role="status" aria-live="polite">{message}</div> : null}
+      {message ? <div className={`sync-message ${styles.syncMessage} wide ${styles.wide}`} role="status" aria-live="polite">{message}</div> : null}
       <SyncHistory items={history} />
 
       <ConfirmDialog
@@ -401,7 +402,7 @@ export function SyncSettingsPage({ capability, backend, runtimePlatform }: {
         onConfirm={() => void applyImport()}
       >
         <p>Hệ thống sẽ tạo bản sao lưu an toàn, thử ráp dữ liệu vào một bản nháp trước, rồi chỉ thay thế dữ liệu chính sau khi kiểm tra thành công.</p>
-        <p className="hint">Nếu kiểm tra thất bại, dữ liệu hiện tại được giữ nguyên.</p>
+        <p className={`hint ${styles.hint}`}>Nếu kiểm tra thất bại, dữ liệu hiện tại được giữ nguyên.</p>
       </ConfirmDialog>
     </div>
   );

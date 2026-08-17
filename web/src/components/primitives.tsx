@@ -8,8 +8,9 @@ export function BottomSheet({ open, onOpenChange, title, description, restoreFoc
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="sheet-overlay" />
+        <Dialog.Overlay data-slot="sheet-overlay" className="sheet-overlay" />
         <Dialog.Content
+          data-slot="sheet"
           className="bottom-sheet"
           aria-describedby={description ? undefined : undefined}
           onCloseAutoFocus={(event) => {

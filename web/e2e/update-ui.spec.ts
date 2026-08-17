@@ -262,27 +262,27 @@ test("có bản mới thì mọi trang đều nhắc, và hoãn thì im cho tớ
   await offerUpdate(page);
 
   await page.goto("/");
-  const banner = page.locator(".update-banner");
+  const banner = page.getByRole("status", { name: "Thông báo cập nhật ứng dụng" });
   await expect(banner).toContainText("Có bản 2.0.8");
 
   // Nhắc ở mọi trang chứ không riêng Tổng quan — đó là cả lý do banner tồn tại.
   await page.goto("/orders/");
-  await expect(page.locator(".update-banner")).toContainText("Có bản 2.0.8");
+  await expect(page.getByRole("status", { name: "Thông báo cập nhật ứng dụng" })).toContainText("Có bản 2.0.8");
 
   // Trang Cập nhật đã nói đủ rồi, nhắc lại là thừa.
   await page.goto("/settings/update/");
-  await expect(page.locator(".update-banner")).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Thông báo cập nhật ứng dụng" })).toHaveCount(0);
 
   await page.goto("/");
   await page.getByRole("button", { name: /Để sau/ }).click();
-  await expect(page.locator(".update-banner")).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Thông báo cập nhật ứng dụng" })).toHaveCount(0);
   await page.goto("/orders/");
-  await expect(page.locator(".update-banner")).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Thông báo cập nhật ứng dụng" })).toHaveCount(0);
 
   // Hoãn được ghi theo đúng phiên bản, nên bản kế tiếp vẫn phải nhắc lại.
   await page.evaluate(() => window.localStorage.setItem("tiktok-affiliate-update-postponed", "2.0.7"));
   await page.goto("/");
-  await expect(page.locator(".update-banner")).toContainText("Có bản 2.0.8");
+  await expect(page.getByRole("status", { name: "Thông báo cập nhật ứng dụng" })).toContainText("Có bản 2.0.8");
 });
 
 test("Cập nhật ngay mở thẳng hộp xác nhận và dọn hash khỏi địa chỉ", async ({ page }) => {
