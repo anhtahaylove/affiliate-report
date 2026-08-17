@@ -1,0 +1,42 @@
+@theme inline {
+  --color-background: var(--color-page); --color-surface: var(--surface-primary); --color-surface-soft: var(--surface-secondary);
+  --color-foreground: var(--text-primary); --color-muted-foreground: var(--text-secondary); --color-border: var(--border-subtle); --color-accent: var(--interactive-primary);
+  --color-success: var(--status-success-text); --color-warning: var(--status-warning-text); --color-danger: var(--status-danger-text);
+  --font-sans: var(--font-app);
+}
+
+.updateBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  background: var(--teal-soft);
+  color: var(--ink);
+}
+
+.updateBanner > svg { flex: 0 0 auto; color: var(--teal); }
+.updateBanner p { display: grid; gap: 2px; margin: 0; margin-right: auto; min-width: 0; }
+.updateBanner strong { font-size: 0.95rem; }
+.updateBanner span { color: var(--ink-soft); font-size: 0.86rem; }
+
+.updateBannerDismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.updateBannerDismiss:hover { border-color: var(--line); color: var(--ink); }
+
+@media (max-width: 720px) {
+  .updateBanner { flex-wrap: wrap; }
+  .updateBanner p { flex: 1 1 100%; margin-right: 0; }
+}

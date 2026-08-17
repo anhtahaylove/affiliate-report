@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { createSavedView, deleteSavedView, loadSavedViews, type SavedReportView, type SavedViewRoute, updateSavedView } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { errorMessage } from "@/lib/format";
+import styles from "./saved-views.module.css";
 
 const ARRAY_FILTERS = new Set(["account", "status"]);
 const NUMBER_FILTERS = new Set(["size", "top"]);
@@ -98,9 +99,9 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
   }
 
   return (
-    <section className="saved-views-bar panel" aria-label="Chế độ xem đã lưu" aria-busy={busy}>
+    <section className={`${styles.savedViewsBar} panel`} aria-label="Chế độ xem đã lưu" aria-busy={busy}>
       <button
-        className="saved-views-mobile-toggle"
+        className={`${styles.savedViewsMobileToggle}`}
         type="button"
         aria-expanded={mobileOpen}
         aria-controls={`saved-views-content-${route}`}
@@ -109,9 +110,9 @@ export function SavedViews({ route }: { route: SavedViewRoute }) {
         <span><Bookmark size={17} aria-hidden="true" /><strong>Chế độ xem</strong><small>{current?.name ?? "Phạm vi hiện tại"}</small></span>
         <ChevronDown size={18} aria-hidden="true" />
       </button>
-      <div className={`saved-views-content${mobileOpen ? " is-open" : ""}`} id={`saved-views-content-${route}`}>
-        <div className="saved-view-picker"><Bookmark size={17} aria-hidden="true" /><label htmlFor={`saved-view-${route}`}>Chế độ xem</label><select id={`saved-view-${route}`} value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Chọn chế độ xem…</option>{views.map((view) => <option key={view.id} value={view.id}>{view.is_default ? "★ " : ""}{view.name}</option>)}</select><button type="button" onClick={() => apply(current)} disabled={!current || busy}>Áp dụng</button></div>
-        <div className="saved-view-create"><input aria-label="Tên chế độ xem mới" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} placeholder="Lưu phạm vi hiện tại…" /><label><input type="checkbox" checked={makeDefault} onChange={(event) => setMakeDefault(event.target.checked)} />Mặc định</label><button className="primary" type="button" onClick={() => void saveNew()} disabled={!name.trim() || busy}><Save size={16} aria-hidden="true" />Lưu mới</button>{current ? <><button type="button" onClick={() => void overwrite()} disabled={busy}>Ghi đè</button><button className="danger-action" type="button" onClick={() => setConfirmingRemove(true)} disabled={busy} aria-label="Xóa chế độ xem"><Trash2 size={16} aria-hidden="true" /></button></> : null}</div>
+      <div className={`${styles.savedViewsContent} ${mobileOpen ? styles.isOpen : ""}`} id={`saved-views-content-${route}`}>
+        <div className={`${styles.savedViewPicker}`}><Bookmark size={17} aria-hidden="true" /><label htmlFor={`saved-view-${route}`}>Chế độ xem</label><select id={`saved-view-${route}`} value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Chọn chế độ xem…</option>{views.map((view) => <option key={view.id} value={view.id}>{view.is_default ? "★ " : ""}{view.name}</option>)}</select><button type="button" onClick={() => apply(current)} disabled={!current || busy}>Áp dụng</button></div>
+        <div className={`${styles.savedViewCreate}`}><input aria-label="Tên chế độ xem mới" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} placeholder="Lưu phạm vi hiện tại…" /><label><input type="checkbox" checked={makeDefault} onChange={(event) => setMakeDefault(event.target.checked)} />Mặc định</label><button className="primary" type="button" onClick={() => void saveNew()} disabled={!name.trim() || busy}><Save size={16} aria-hidden="true" />Lưu mới</button>{current ? <><button type="button" onClick={() => void overwrite()} disabled={busy}>Ghi đè</button><button className="danger-action" type="button" onClick={() => setConfirmingRemove(true)} disabled={busy} aria-label="Xóa chế độ xem"><Trash2 size={16} aria-hidden="true" /></button></> : null}</div>
       </div>
       {error ? <p className="filter-error" role="alert">{error}</p> : null}
       <ConfirmDialog

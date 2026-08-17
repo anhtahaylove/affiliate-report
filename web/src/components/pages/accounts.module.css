@@ -1,0 +1,92 @@
+.page { min-width: 0; overflow: clip; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.heading { padding: 20px 22px 16px; border-bottom: 1px solid var(--line); }
+.heading h2 { margin: 3px 0 5px; font-size: 1.18rem; letter-spacing: -0.02em; }
+.heading p { margin: 0; color: var(--ink-soft); }
+
+.overlapGuard { display: flex; align-items: flex-start; gap: 10px; margin: 12px 18px; padding: 11px 12px; border: 1px solid var(--warning-line); border-radius: 10px; background: var(--warning-soft); color: var(--warning-text); }
+.overlapGuard svg { flex: 0 0 auto; }
+.overlapGuard div { display: grid; gap: 2px; }
+.overlapGuard strong { font-size: 0.82rem; }
+.overlapGuard span { font-size: 0.77rem; line-height: 1.45; }
+
+.createDisclosure { margin: 0 18px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.createDisclosure > summary,
+.editDisclosure > summary { display: flex; min-height: 46px; align-items: center; justify-content: space-between; gap: 10px; padding: 0 13px; cursor: pointer; font-weight: 800; list-style: none; }
+.createDisclosure > summary::-webkit-details-marker,
+.editDisclosure > summary::-webkit-details-marker { display: none; }
+.createDisclosure > summary span,
+.editDisclosure > summary span { display: inline-flex; align-items: center; gap: 7px; }
+.createDisclosure > summary > svg,
+.editDisclosure > summary > svg { transition: transform 160ms ease-out; }
+.createDisclosure[open] > summary > svg,
+.editDisclosure[open] > summary > svg { transform: rotate(180deg); }
+.createDisclosure[open] > summary { border-bottom: 1px solid var(--line); }
+.createPanel { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr) auto; align-items: end; gap: 12px; padding: 14px; }
+.createPanel button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.message { margin: 0 18px 12px; }
+
+.summaryRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 18px 18px; }
+.summaryRow > span { display: inline-flex; align-items: baseline; gap: 5px; padding: 7px 10px; border-radius: 999px; background: var(--surface-soft); color: var(--ink-soft); font-size: 0.76rem; }
+.summaryRow strong { color: var(--ink); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.summaryRow span[data-tone="success"] { background: var(--success-soft); color: var(--ink); }
+.summaryRow span[data-tone="success"] strong { color: var(--ink); }
+
+.accountSections { display: grid; gap: 20px; padding: 0 18px 18px; }
+.accountSection { min-width: 0; }
+.sectionTitle { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 9px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.sectionTitle p { margin: 0 0 2px; }
+.sectionTitle h3 { margin: 0; font-size: 0.96rem; }
+.sectionTitle > span { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 999px; background: var(--surface-soft); color: var(--ink-soft); font-size: 0.75rem; font-weight: 800; }
+.cardGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 10px; }
+
+.accountCard { display: grid; align-content: start; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.accountCard[data-state="archived"] { background: var(--surface-soft); }
+.cardHeading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.cardHeading > div { display: grid; min-width: 0; gap: 3px; }
+.cardHeading strong { overflow-wrap: anywhere; }
+.accountCode { color: var(--ink-soft); font: 0.72rem var(--font-mono); }
+.healthLine { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--ink-soft); font-size: 0.76rem; line-height: 1.4; }
+.healthLine > span { width: 8px; height: 8px; flex: 0 0 auto; margin-top: 3px; border-radius: 999px; background: var(--line-strong); }
+.healthLine[data-state="ready"] > span { background: var(--chart-lime); }
+.accountMeta { display: grid; grid-template-columns: 0.55fr 1fr 1.2fr; gap: 6px; margin: 0; }
+.accountMeta > div { min-width: 0; padding: 7px 8px; border-radius: 8px; background: var(--surface-soft); }
+.accountCard[data-state="archived"] .accountMeta > div { background: var(--surface); }
+.accountMeta dt { color: var(--ink-soft); font-size: 0.64rem; font-weight: 750; }
+.accountMeta dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 0.75rem; font-weight: 750; }
+
+.editDisclosure { border-top: 1px solid var(--line); }
+.editDisclosure > summary { min-height: 40px; padding: 0; color: var(--ink-soft); font-size: 0.78rem; }
+.editGrid { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 8px; padding-top: 9px; }
+.editGrid input { width: 100%; min-height: 40px; }
+.saveButton { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px; }
+.cardActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding-top: 10px; border-top: 1px solid var(--line); }
+.cardActions button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; padding: 0.45rem 0.6rem; font-size: 0.76rem; }
+.deleteButton { border-color: var(--danger-line); color: var(--danger); }
+.deletePreview,
+.syncWarning { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 18px 18px; padding: 11px 12px; border: 1px solid var(--warning-line); border-radius: 10px; background: var(--warning-soft); color: var(--warning-text); }
+.deletePreview { display: grid; justify-content: stretch; }
+.deletePreview span, .syncWarning span { font-size: 0.8rem; line-height: 1.45; }
+
+@media (max-width: 860px) {
+  .createPanel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .createPanel button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 620px) {
+  .heading { padding: 16px; }
+  .overlapGuard, .createDisclosure, .message, .summaryRow, .deletePreview, .syncWarning { margin-right: 10px; margin-left: 10px; }
+  .accountSections { padding: 0 10px 14px; }
+  .createPanel { grid-template-columns: 1fr; }
+  .createPanel button { grid-column: 1; }
+  .cardGrid { grid-template-columns: 1fr; }
+  .accountCard { padding: 12px; }
+  .accountMeta { grid-template-columns: 1fr; }
+  .editGrid { grid-template-columns: 1fr; }
+  .cardActions { grid-template-columns: 1fr; }
+  .syncWarning { align-items: stretch; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .createDisclosure > summary > svg,
+  .editDisclosure > summary > svg { transition: none; }
+}

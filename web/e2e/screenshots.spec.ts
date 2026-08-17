@@ -30,7 +30,7 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
     expect(saved.ok()).toBeTruthy();
 
     await page.goto(`/${SCOPE}`);
-    await expect(page.locator("article.pulse-metric").first()).toBeVisible();
+    await expect(page.getByTestId("dashboard-metric").first()).toBeVisible();
     await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
     await page.screenshot({ path: `e2e/shots/dashboard-${theme}.png`, fullPage: true });
 
@@ -56,7 +56,7 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/${SCOPE}`);
-  await expect(page.locator("article.pulse-metric").first()).toBeVisible();
+  await expect(page.getByTestId("dashboard-metric").first()).toBeVisible();
   // Ở 390px các khối phân tích phụ nằm trong disclosure thu gọn (v2.0.4), nên biểu đồ chưa được
   // dựng. Đòi .recharts-wrapper ở đây là đòi thứ mà chính thiết kế mobile cố tình giấu đi — ảnh
   // phải chụp đúng trạng thái mặc định người dùng thấy, không phải trạng thái đã mở sẵn.
@@ -67,7 +67,7 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
   await page.screenshot({ path: "e2e/shots/orders-mobile-390.png", fullPage: true });
 
   const auditRoutes = [
-    ["analytics", `/analytics/${SCOPE}`, ".recharts-wrapper"],
+    ["analytics", `/analytics/${SCOPE}`, "[role=tablist]"],
     ["imports", "/imports/", ".imports-workflow-page"],
     ["targets", `/targets/${SCOPE}`, ".target-card"],
     ["accounts", "/accounts/", ".account-card"],
@@ -85,6 +85,24 @@ test("@shots chụp các màn hình chính ở cả hai chế độ màu", async
     for (const [name, route, readySelector] of auditRoutes) {
       await page.goto(route);
       await expect(page.locator(readySelector).first()).toBeVisible();
+      if (name === "analytics") {
+        if (viewport.name === "mobile") {
+          const tabList = page.getByRole("tablist");
+          await tabList.scrollIntoViewIfNeeded();
+          const [tabBox, headerBox] = await Promise.all([
+            tabList.boundingBox(),
+            page.locator("header").first().boundingBox(),
+          ]);
+          expect(tabBox).not.toBeNull();
+          expect(headerBox).not.toBeNull();
+          expect(tabBox!.y).toBeGreaterThanOrEqual(headerBox!.y + headerBox!.height - 1);
+          await expect(page.getByText("Mở biểu đồ và bảng dữ liệu theo thời gian", { exact: true })).toBeVisible();
+          await expect(page.locator(".recharts-wrapper")).toHaveCount(0);
+          await page.evaluate(() => window.scrollTo(0, 0));
+        } else {
+          await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
+        }
+      }
       await page.screenshot({ path: `e2e/shots/audit-${name}-${viewport.name}.png`, fullPage: true });
     }
   }

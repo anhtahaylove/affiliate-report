@@ -8,6 +8,7 @@ import { errorMessage, formatBytes, formatDateTime } from "@/lib/format";
 import { ArrowRight, Check, CheckCircle2, ChevronDown, CircleAlert, CloudCog, Download, ExternalLink, HardDriveDownload, Info, MonitorUp, RefreshCw, RotateCw, ShieldCheck, Smartphone, WifiOff, type LucideIcon } from "lucide-react";
 import { requestAndroidNativeDownload } from "@/lib/android-native";
 import { compareSemanticVersions, deriveUpdatePresentation, type UpdateExperienceState, type UpdateIssueKind } from "@/lib/update-presentation";
+import styles from "./settings-commerce.module.css";
 
 const UPDATE_RECONNECT_TIMEOUT_MS = 90_000;
 const ANDROID_APK_HANDOFF_TIMEOUT_MS = 180_000;
@@ -199,12 +200,12 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
   }
 
   return (
-    <section className="section panel wide update-settings-page android-update-page">
-      <div className="update-overview">
-        <div className="update-state" data-tone={failed || unsupported ? "warning" : hasNewerRelease ? "info" : "success"} role="status">
-          <span className="update-state-icon"><Smartphone size={24} aria-hidden="true" /></span>
+    <section className={`${styles.surface} section ${styles.section} panel wide ${styles.wide} update-settings-page ${styles.updateSettingsPage} android-update-page`}>
+      <div className={`update-overview ${styles.updateOverview}`}>
+        <div className={`update-state ${styles.updateState}`} data-tone={failed || unsupported ? "warning" : hasNewerRelease ? "info" : "success"} role="status">
+          <span className={`update-state-icon ${styles.updateStateIcon}`}><Smartphone size={24} aria-hidden="true" /></span>
           <div>
-            <p className="section-label">Ứng dụng Android</p>
+            <p className={`section-label ${styles.sectionLabel}`}>Ứng dụng Android</p>
             <h2>{checking ? "Đang kiểm tra bản cập nhật" : unsupported ? "Cập nhật chưa được hỗ trợ" : failed ? "Chưa kiểm tra được bản cập nhật" : hasNewerRelease ? `Có bản cập nhật ${latest} sẵn sàng` : "Bạn đang dùng bản mới nhất"}</h2>
             <p>{checking ? "Ứng dụng đang kiểm tra nguồn cập nhật có chữ ký trong nền." : unsupported ? capability?.reason : liveStatus?.error ?? liveStatus?.message ?? (available
               ? "Ứng dụng luôn kiểm tra kỹ để chắc chắn file cài đặt còn nguyên vẹn trước khi đưa vào trình cài đặt của Android."
@@ -212,19 +213,19 @@ export function AndroidUpdateSettings({ capability, status }: { capability?: Cap
           </div>
         </div>
       </div>
-      <section className="update-version-grid" aria-labelledby="android-version-title">
-        <h3 className="sr-only" id="android-version-title">Thông tin phiên bản Android</h3>
+      <section className={`update-version-grid ${styles.updateVersionGrid}`} aria-labelledby="android-version-title">
+        <h3 className={`sr-only`} id="android-version-title">Thông tin phiên bản Android</h3>
         <div><span>Đang dùng</span><strong>{current ?? "—"}</strong></div>
         <div><span>Bản khả dụng</span><strong>{latest ?? "Không có bản mới hơn"}</strong></div>
         <div><span>Cài đặt</span><strong>Android xác nhận</strong></div>
       </section>
-      <div className="update-safeguards"><ShieldCheck size={18} aria-hidden="true" /><p><strong>Không tự ý cài phần mềm trên máy tính</strong><span>Ứng dụng chỉ tải bản cập nhật dành cho Android; bước cài đặt cuối luôn cần bạn xác nhận trên điện thoại.</span></p></div>
-      {preparing ? <div className="android-update-progress" role="status" aria-live="polite"><progress aria-label="Đang tải và kiểm tra bản cập nhật" /><span>Đang tải và kiểm tra file cài đặt…</span></div> : null}
-      {prepared ? <div className="android-update-result" role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>APK {prepared.version} đã được xác minh và chuyển sang trình cài đặt Android. Hãy xác nhận cài đặt trong màn hình hệ thống.</span></div> : null}
-      {prepareError ? <div className="android-update-error" role="alert">{prepareError}</div> : null}
-      <div className="row-actions update-actions">
-        {hasNewerRelease && liveStatus?.installable !== false ? <button className="primary" type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài đặt"}</button> : null}
-        {liveStatus?.release_url ? <a className="button-link secondary-link" href={liveStatus.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
+      <div className={`update-safeguards ${styles.updateSafeguards}`}><ShieldCheck size={18} aria-hidden="true" /><p><strong>Không tự ý cài phần mềm trên máy tính</strong><span>Ứng dụng chỉ tải bản cập nhật dành cho Android; bước cài đặt cuối luôn cần bạn xác nhận trên điện thoại.</span></p></div>
+      {preparing ? <div className={`android-update-progress ${styles.androidUpdateProgress}`} role="status" aria-live="polite"><progress aria-label="Đang tải và kiểm tra bản cập nhật" /><span>Đang tải và kiểm tra file cài đặt…</span></div> : null}
+      {prepared ? <div className={`android-update-result ${styles.androidUpdateResult}`} role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>APK {prepared.version} đã được xác minh và chuyển sang trình cài đặt Android. Hãy xác nhận cài đặt trong màn hình hệ thống.</span></div> : null}
+      {prepareError ? <div className={`android-update-error ${styles.androidUpdateError}`} role="alert">{prepareError}</div> : null}
+      <div className={`row-actions ${styles.rowActions} update-actions`}>
+        {hasNewerRelease && liveStatus?.installable !== false ? <button className={`primary`} type="button" disabled={preparing} onClick={() => void handoffAndroidUpdate()}><Download size={16} aria-hidden="true" />{preparing ? "Đang tải và xác minh…" : "Tải và cài đặt"}</button> : null}
+        {liveStatus?.release_url ? <a className={`button-link ${styles.buttonLink} secondary-link`} href={liveStatus.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
       </div>
     </section>
   );
@@ -426,95 +427,95 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
 
   if (!checkCapability.available) {
     return (
-      <section className="section panel wide capability-gate" role="status">
-        <div className="capability-gate-icon"><CloudCog size={22} aria-hidden="true" /></div>
-        <div className="capability-gate-copy">
-          <p className="section-label">Triển khai dùng chung</p>
+      <section className={`${styles.surface} section ${styles.section} panel wide ${styles.wide} capability-gate ${styles.capabilityGate}`} role="status">
+        <div className={`capability-gate-icon ${styles.capabilityGateIcon}`}><CloudCog size={22} aria-hidden="true" /></div>
+        <div className={`capability-gate-copy ${styles.capabilityGateCopy}`}>
+          <p className={`section-label ${styles.sectionLabel}`}>Triển khai dùng chung</p>
           <h2>Phiên bản được cập nhật tại máy chủ</h2>
           <p>{checkCapability.reason}</p>
-          <dl className="capability-facts">
+          <dl className={`capability-facts ${styles.capabilityFacts}`}>
             <div><dt><MonitorUp size={16} aria-hidden="true" />Kênh cập nhật</dt><dd>Được máy chủ tự động cập nhật</dd></div>
             <div><dt><ShieldCheck size={16} aria-hidden="true" />Ứng dụng</dt><dd>Không tự cài phần mềm trên máy này</dd></div>
           </dl>
-          <p className="hint">Khi người quản trị cập nhật phiên bản mới, bạn chỉ cần tải lại trang là dùng được ngay. Dữ liệu của cửa hàng không bị ảnh hưởng.</p>
+          <p className={`hint ${styles.hint}`}>Khi người quản trị cập nhật phiên bản mới, bạn chỉ cần tải lại trang là dùng được ngay. Dữ liệu của cửa hàng không bị ảnh hưởng.</p>
         </div>
       </section>
     );
   }
 
   return (
-    <section className="section panel wide update-settings-page windows-update-page" aria-busy={busy || installing || reconnecting}>
-      <div className="update-layout">
-        <div className="update-primary-panel">
-          <div className="update-overview">
-            <div className="update-state" data-tone={stateCopy.tone} role="status" aria-live="polite">
-              <span className="update-state-icon"><StateIcon size={24} aria-hidden="true" /></span>
-              <div className="update-state-copy">
-                <p className="section-label">{stateCopy.label}</p>
+    <section className={`${styles.surface} section ${styles.section} panel wide ${styles.wide} update-settings-page ${styles.updateSettingsPage} windows-update-page`} aria-busy={busy || installing || reconnecting}>
+      <div className={`update-layout ${styles.updateLayout}`}>
+        <div className={`update-primary-panel ${styles.updatePrimaryPanel}`}>
+          <div className={`update-overview ${styles.updateOverview}`}>
+            <div className={`update-state ${styles.updateState}`} data-tone={stateCopy.tone} role="status" aria-live="polite">
+              <span className={`update-state-icon ${styles.updateStateIcon}`}><StateIcon size={24} aria-hidden="true" /></span>
+              <div className={`update-state-copy ${styles.updateStateCopy}`}>
+                <p className={`section-label ${styles.sectionLabel}`}>{stateCopy.label}</p>
                 <h2>{stateCopy.title}</h2>
                 <p>{stateCopy.copy}</p>
-                {presentation.availableVersion && presentation.currentVersion ? <p className="update-version-route" aria-label={`Nâng từ phiên bản ${presentation.currentVersion} lên ${presentation.availableVersion}`}><strong>v{presentation.currentVersion}</strong><ArrowRight size={16} aria-hidden="true" /><strong>v{presentation.availableVersion}</strong></p> : null}
+                {presentation.availableVersion && presentation.currentVersion ? <p className={`update-version-route ${styles.updateVersionRoute}`} aria-label={`Nâng từ phiên bản ${presentation.currentVersion} lên ${presentation.availableVersion}`}><strong>v{presentation.currentVersion}</strong><ArrowRight size={16} aria-hidden="true" /><strong>v{presentation.availableVersion}</strong></p> : null}
               </div>
             </div>
-            <div className="update-state-actions">
-              {canInstall ? <button className="primary" type="button" onClick={() => setAskInstall(true)}><Download size={17} aria-hidden="true" />Tải và cài bản {presentation.availableVersion}</button> : null}
-              {presentation.state === "manual" && status?.release_url ? <a className="button-link" href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Mở trang tải</a> : null}
-              {!presentation.showWorkflow && !showRetry ? <button className="update-check-button" type="button" onClick={() => void check()} disabled={busy || installing}>
+            <div className={`update-state-actions ${styles.updateStateActions}`}>
+              {canInstall ? <button className={`primary`} type="button" onClick={() => setAskInstall(true)}><Download size={17} aria-hidden="true" />Tải và cài bản {presentation.availableVersion}</button> : null}
+              {presentation.state === "manual" && status?.release_url ? <a className={`button-link ${styles.buttonLink}`} href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Mở trang tải</a> : null}
+              {!presentation.showWorkflow && !showRetry ? <button className={`update-check-button`} type="button" onClick={() => void check()} disabled={busy || installing}>
                 <RefreshCw size={17} aria-hidden="true" />{busy ? "Đang kiểm tra…" : "Kiểm tra lại"}
               </button> : null}
-              {showRetry ? <button className="primary" type="button" onClick={() => void check()} disabled={busy}><RefreshCw size={17} aria-hidden="true" />Thử lại</button> : null}
+              {showRetry ? <button className={`primary`} type="button" onClick={() => void check()} disabled={busy}><RefreshCw size={17} aria-hidden="true" />Thử lại</button> : null}
             </div>
           </div>
 
-          <section className="update-version-grid" aria-labelledby="update-version-title">
-            <h3 className="sr-only" id="update-version-title">Thông tin phiên bản</h3>
+          <section className={`update-version-grid ${styles.updateVersionGrid}`} aria-labelledby="update-version-title">
+            <h3 className={`sr-only`} id="update-version-title">Thông tin phiên bản</h3>
             <div><span>Đang dùng</span><strong>{presentation.currentVersion ?? "—"}</strong></div>
             <div><span>Bản khả dụng</span><strong>{presentation.availabilityText}</strong></div>
             <div><span>Đã kiểm tra</span><strong>{checkedText}</strong></div>
           </section>
 
-          {presentation.feedBehindCurrent ? <p className="update-feed-note" role="status"><Info size={17} aria-hidden="true" /><span>Ứng dụng hiện tại mới hơn phiên bản nguồn đang công bố; tiến trình cũ đã được ẩn để tránh gây nhầm lẫn.</span></p> : null}
+          {presentation.feedBehindCurrent ? <p className={`update-feed-note ${styles.updateFeedNote}`} role="status"><Info size={17} aria-hidden="true" /><span>Ứng dụng hiện tại mới hơn phiên bản nguồn đang công bố; tiến trình cũ đã được ẩn để tránh gây nhầm lẫn.</span></p> : null}
 
-          {presentation.showWorkflow ? <section className="update-workflow" aria-labelledby="update-workflow-title">
-            <div className="update-workflow-heading">
-              <div><p className="section-label">Tiến trình cập nhật</p><h3 id="update-workflow-title">{phaseLabel(phase)}{targetVersion ? ` bản ${targetVersion}` : ""}</h3></div>
+          {presentation.showWorkflow ? <section className={`update-workflow ${styles.updateWorkflow}`} aria-labelledby="update-workflow-title">
+            <div className={`update-workflow-heading ${styles.updateWorkflowHeading}`}>
+              <div><p className={`section-label ${styles.sectionLabel}`}>Tiến trình cập nhật</p><h3 id="update-workflow-title">{phaseLabel(phase)}{targetVersion ? ` bản ${targetVersion}` : ""}</h3></div>
               {progress?.percent != null && phase === "downloading" ? <strong>{Math.round(progress.percent)}%</strong> : null}
             </div>
-            <ol className="update-stages" aria-label="Các bước cập nhật">
+            <ol className={`update-stages ${styles.updateStages}`} aria-label="Các bước cập nhật">
               {updateStages.map((stage) => {
                 const StageIcon = stage.icon;
                 const stageState = updateStageState(stage, phase);
-                return <li key={stage.key} data-state={stageState}><span className="update-stage-icon" aria-hidden="true">{stageState === "done" ? <Check size={16} /> : <StageIcon size={17} />}</span><span>{stage.label}</span></li>;
+                return <li key={stage.key} data-state={stageState}><span className={`update-stage-icon ${styles.updateStageIcon}`} aria-hidden="true">{stageState === "done" ? <Check size={16} /> : <StageIcon size={17} />}</span><span>{stage.label}</span></li>;
               })}
             </ol>
-            {presentation.showDownloadProgress ? <div className="download-progress" aria-live="polite">
+            {presentation.showDownloadProgress ? <div className={`download-progress ${styles.downloadProgress}`} aria-live="polite">
               <div><label htmlFor="update-download-progress">Đang tải gói cài</label><span>{progress?.bytes_total ? `${formatBytes(progress.bytes_downloaded)} / ${formatBytes(progress.bytes_total)}` : phaseLabel(phase)}{progress?.percent != null ? ` · ${Math.round(progress.percent)}%` : ""}</span></div>
               <progress id="update-download-progress" max={100} value={downloadValue} aria-valuetext={progress?.percent != null ? `${Math.round(progress.percent)} phần trăm` : undefined}>{downloadValue != null ? `${Math.round(downloadValue)}%` : undefined}</progress>
             </div> : null}
           </section> : null}
 
-          {message ? <div className="update-message" data-tone={messageTone} role="alert" aria-live={presentation.state === "failed" ? "assertive" : "polite"}><p>{message}</p>{nextAction ? <p><strong>Việc cần làm:</strong> {nextAction}</p> : null}</div> : null}
+          {message ? <div className={`update-message ${styles.updateMessage}`} data-tone={messageTone} role="alert" aria-live={presentation.state === "failed" ? "assertive" : "polite"}><p>{message}</p>{nextAction ? <p><strong>Việc cần làm:</strong> {nextAction}</p> : null}</div> : null}
         </div>
 
-        <aside className="update-support-panel" aria-label="Thông tin bản phát hành và bảo mật">
-          <section className="update-release-row" aria-labelledby="update-release-title">
+        <aside className={`update-support-panel ${styles.updateSupportPanel}`} aria-label="Thông tin bản phát hành và bảo mật">
+          <section className={`update-release-row ${styles.updateReleaseRow}`} aria-labelledby="update-release-title">
             <div>
-              <p className="section-label">Bản phát hành</p>
+              <p className={`section-label ${styles.sectionLabel}`}>Bản phát hành</p>
               <h3 id="update-release-title">{status?.release_name || (presentation.feedVersion ? `Affiliate Report ${presentation.feedVersion}` : "Chưa có thông tin")}</h3>
               <p>{status?.published_at ? `Phát hành ${formatDateTime(status.published_at)}` : "Thông tin sẽ xuất hiện sau khi kiểm tra cập nhật."}</p>
-              {status?.installer_size ? <p className="update-package-size"><HardDriveDownload size={16} aria-hidden="true" /><span>Gói cài Windows · {formatBytes(status.installer_size)}</span></p> : null}
+              {status?.installer_size ? <p className={`update-package-size ${styles.updatePackageSize}`}><HardDriveDownload size={16} aria-hidden="true" /><span>Gói cài Windows · {formatBytes(status.installer_size)}</span></p> : null}
             </div>
-            {status?.release_url ? <a className="button-link secondary-link" href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
+            {status?.release_url ? <a className={`button-link ${styles.buttonLink} secondary-link`} href={status.release_url} target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />Xem bản phát hành</a> : null}
           </section>
 
-          {status?.notes ? <details className="update-notes"><summary><span>Ghi chú phiên bản</span><ChevronDown size={17} aria-hidden="true" /></summary><p>{status.notes}</p></details> : null}
+          {status?.notes ? <details className={`update-notes ${styles.updateNotes}`}><summary><span>Ghi chú phiên bản</span><ChevronDown size={17} aria-hidden="true" /></summary><p>{status.notes}</p></details> : null}
 
-          <details className="update-technical">
+          <details className={`update-technical ${styles.updateTechnical}`}>
             <summary><span><ShieldCheck size={18} aria-hidden="true" />Chi tiết kỹ thuật</span><ChevronDown size={17} aria-hidden="true" /></summary>
-            <div className="update-technical-body">
+            <div className={`update-technical-body ${styles.updateTechnicalBody}`}>
               <p>Manifest được xác minh bằng Ed25519; dung lượng và SHA-256 của gói cài được kiểm tra lại trước khi chạy.</p>
               <dl>
-                <div><dt>Nguồn phát hành</dt><dd className="source-repo">{status?.source_repo ?? "Nguồn công khai đã ký"}</dd></div>
+                <div><dt>Nguồn phát hành</dt><dd className={`source-repo ${styles.sourceRepo}`}>{status?.source_repo ?? "Nguồn công khai đã ký"}</dd></div>
                 <div><dt>Phiên bản trên nguồn</dt><dd>{presentation.feedVersion ?? "—"}</dd></div>
                 {status?.installer_name ? <div><dt>Gói cài</dt><dd>{status.installer_name}</dd></div> : null}
                 {status?.installer_size ? <div><dt>Dung lượng</dt><dd>{formatBytes(status.installer_size)}</dd></div> : null}
@@ -523,8 +524,8 @@ export function UpdateSettingsPage({ checkCapability, installCapability }: { che
             </div>
           </details>
 
-          {!installCapability.available ? <p className="hint">{installCapability.reason}</p> : null}
-          {installCapability.available && status && !status.automatic_install_supported ? <p className="hint">Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
+          {!installCapability.available ? <p className={`hint ${styles.hint}`}>{installCapability.reason}</p> : null}
+          {installCapability.available && status && !status.automatic_install_supported ? <p className={`hint ${styles.hint}`}>Cài tự động chỉ khả dụng trong bản Windows đã cài đặt.</p> : null}
         </aside>
       </div>
       <ConfirmDialog

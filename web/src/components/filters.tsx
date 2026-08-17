@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useId, useMemo, useState } from "react";
 import { SlidersHorizontal, X } from "lucide-react";
 import { firstDayOfMonth, lastDayOfMonth, currentMonth, lastDays, previousMonth, statusLabel, wholeMonth } from "@/lib/format";
 import { buildFilterHref } from "@/lib/filter-query";
@@ -56,6 +56,7 @@ export function FilterBar({ accounts, directory, statuses, showSearch = false, a
 function FilterForm({ accounts, directory, statuses, showSearch = false, actions, initialFilters }: { accounts: string[]; directory: AccountDirectory; statuses: string[]; showSearch?: boolean; actions?: ReactNode; initialFilters: UrlFilters }) {
   const router = useRouter();
   const pathname = usePathname();
+  const filterBodyId = useId();
   const [draft, setDraft] = useState(initialFilters);
   const [error, setError] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -63,6 +64,7 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
   const monthEnd = draft.month ? lastDayOfMonth(draft.month) : "";
   const allAccountsSelected = accounts.length > 0 && draft.accounts.length === accounts.length;
   const allStatusesSelected = statuses.length > 0 && draft.statuses.length === statuses.length;
+  const narrowedScopes = Number(!allAccountsSelected) + Number(Boolean(statuses.length) && !allStatusesSelected) + Number(Boolean(draft.search));
   const compactSummary = [
     `${draft.start.split("-").reverse().join("/")} – ${draft.end.split("-").reverse().join("/")}`,
     allAccountsSelected ? "Tất cả tài khoản" : `${draft.accounts.length}/${accounts.length} tài khoản`,
@@ -115,12 +117,14 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
   }
 
   return (
-    <form className="command-bar panel" onSubmit={apply}>
+    <form className="command-bar panel" aria-label="Phạm vi báo cáo" onSubmit={apply}>
       {/* Mở sẵn toàn bộ bộ lọc ngốn gần 300px trên mọi màn hình, đẩy số liệu xuống dưới nếp
           gấp. Mặc định chỉ hiện một dòng tóm tắt phạm vi đang xem; bấm mới mở ra để chỉnh. */}
       <div className="filter-head">
-        <button className="filter-toggle" type="button" aria-expanded={filtersOpen} aria-controls="report-filters" onClick={() => setFiltersOpen((open) => !open)}>
-          <span><strong>Phạm vi báo cáo</strong><small>{compactSummary}</small></span>
+        <button className="filter-toggle" type="button" aria-expanded={filtersOpen} aria-controls={filterBodyId} onClick={() => setFiltersOpen((open) => !open)}>
+          <SlidersHorizontal size={18} aria-hidden="true" />
+          <span className="filter-summary"><strong>Phạm vi báo cáo</strong><small>{compactSummary}</small></span>
+          {narrowedScopes ? <span className="filter-count" aria-label={`${narrowedScopes} nhóm bộ lọc đang thu hẹp`}>{narrowedScopes}</span> : null}
           <span className="filter-toggle-action" aria-hidden="true">{filtersOpen ? "Thu gọn" : "Chỉnh sửa"}</span>
         </button>
         <div className="segmented" role="group" aria-label="Khoảng thời gian nhanh">
@@ -132,7 +136,7 @@ function FilterForm({ accounts, directory, statuses, showSearch = false, actions
         {actions}
       </div>
       {filtersOpen ? <button className="mobile-filter-overlay" type="button" aria-label="Đóng bộ lọc" onClick={() => setFiltersOpen(false)} /> : null}
-      <div id="report-filters" className={`filter-body${filtersOpen ? " is-open" : ""}`}>
+      <div id={filterBodyId} className={`filter-body${filtersOpen ? " is-open" : ""}`}>
         <div className="mobile-filter-sheet-head">
           <span><SlidersHorizontal size={18} aria-hidden="true" /><strong>Bộ lọc báo cáo</strong></span>
           <button type="button" onClick={() => setFiltersOpen(false)} aria-label="Đóng bộ lọc"><X size={18} aria-hidden="true" /></button>

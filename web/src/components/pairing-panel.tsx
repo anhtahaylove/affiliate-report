@@ -1,6 +1,6 @@
 "use client";
 
-import { Cloud, ShieldCheck, Wifi } from "lucide-react";
+import { CheckCircle2, Cloud, QrCode, ShieldCheck, Smartphone, Wifi } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   loadPairingStatus,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { ImportOverlapWarning } from "@/components/import-overlap-warning";
 import { errorMessage } from "@/lib/format";
+import styles from "@/components/pages/imports.module.css";
 
 /** Hybrid Pairing: LAN là đường nhanh nhất; cloud là relay ciphertext khi hai máy khác mạng. */
 export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTep?: () => void }) {
@@ -91,27 +92,30 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
   const cloud = status.mode === "cloud";
   const visibleError = requestError || status.error || "";
   const overlapWarnings = status.result?.warnings ?? [];
+  const phaseIndex = status.result ? 4 : status.phase === "importing" ? 3 : status.phase === "uploading" || status.phase === "ready" ? 2 : status.enabled ? 1 : 0;
+  const transferSteps = ["Kết nối", "Quét mã", "Chọn tệp", "Nhập dữ liệu", "Hoàn tất"];
 
   return (
-    <section className="panel pairing-panel" aria-labelledby="pairing-title">
-      <div className="pairing-head">
+    <section className={`${styles.pairingPanel} pairing-panel`} aria-labelledby="pairing-title">
+      <div className={`${styles.pairingHead} pairing-head`}>
         <div>
+          <span className={styles.sourceKicker}><Smartphone size={15} aria-hidden="true" /> Điện thoại</span>
           <h2 id="pairing-title">Gửi tệp từ điện thoại</h2>
           <p className="subtle">
-            Quét một mã dùng một lần rồi chọn file Excel vừa xuất từ TikTok. Dữ liệu được nhập vào
+            Quét mã dùng một lần rồi chọn file Excel vừa xuất từ TikTok. Dữ liệu được nhập vào
             {account ? ` tài khoản ${account}` : " tài khoản đang chọn"} bằng cùng quy trình chống trùng trên máy tính.
           </p>
         </div>
         {status.enabled ? (
-          <button type="button" className="danger-link" onClick={tat} disabled={busy !== null}>
+          <button type="button" className={styles.stopPairing} onClick={tat} disabled={busy !== null}>
             {busy === "stop" ? "Đang tắt…" : "Tắt ghép cặp"}
           </button>
         ) : null}
       </div>
 
-      {visibleError ? <p className="notice error" role="alert">{visibleError}</p> : null}
+      {visibleError ? <p className={styles.pairingError} role="alert">{visibleError}</p> : null}
       {!visibleError && status.message ? (
-        <p className={`pairing-message ${status.result ? "is-success" : ""}`} role="status">{status.message}</p>
+        <p className={`${styles.pairingMessage} pairing-message ${status.result ? styles.pairingSuccess : ""}`} role="status">{status.message}</p>
       ) : null}
       <ImportOverlapWarning
         warnings={overlapWarnings}
@@ -119,36 +123,39 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
       />
 
       {!status.enabled ? (
-        <fieldset className="pairing-mode-picker" disabled={busy !== null || !account}>
+        <fieldset className={`${styles.modePicker} pairing-mode-picker`} disabled={busy !== null || !account}>
           <legend>Chọn cách kết nối</legend>
-          <button type="button" className="pairing-choice" onClick={() => void bat("lan")}>
+          <button type="button" className={`${styles.modeChoice} pairing-choice`} onClick={() => void bat("lan")}>
             <Wifi aria-hidden="true" size={21} strokeWidth={1.8} />
             <span>
-              <strong>Cùng Wi-Fi</strong>
-              <small>Nhanh nhất · tệp đi thẳng tới máy tính</small>
+              <span className={styles.modeTitle}><strong>Cùng Wi-Fi</strong><em>Khuyên dùng</em></span>
+              <small>Nhanh nhất · tệp đi thẳng tới máy tính, không qua Internet</small>
             </span>
-            <span className="pairing-choice-action">{busy === "lan" ? "Đang tạo…" : "Tạo mã"}</span>
+            <span className={`${styles.modeAction} pairing-choice-action`}>{busy === "lan" ? "Đang tạo…" : "Tạo mã QR"}</span>
           </button>
-          <button type="button" className="pairing-choice" onClick={() => void bat("cloud")}>
+          <button type="button" className={`${styles.modeChoice} pairing-choice`} onClick={() => void bat("cloud")}>
             <Cloud aria-hidden="true" size={21} strokeWidth={1.8} />
             <span>
               <strong>Khác mạng</strong>
-              <small>Dùng khi điện thoại không cùng Wi-Fi với máy tính</small>
+              <small>Dùng Cloud Relay khi điện thoại đang ở 4G/5G hoặc mạng khác</small>
             </span>
-            <span className="pairing-choice-action">{busy === "cloud" ? "Đang kết nối…" : "Tạo mã"}</span>
+            <span className={`${styles.modeAction} pairing-choice-action`}>{busy === "cloud" ? "Đang kết nối…" : "Tạo mã QR"}</span>
           </button>
         </fieldset>
       ) : null}
 
       {status.enabled && status.qr_svg ? (
-        <div className="pairing-body">
-          <div className="pairing-qr" aria-label={`Mã QR ghép cặp ${cloud ? "qua cloud" : "cùng Wi-Fi"}`} dangerouslySetInnerHTML={{ __html: status.qr_svg }} />
-          <div className="pairing-meta">
-            <div className="pairing-active-mode">
+        <div className={`${styles.pairingBody} pairing-body`}>
+          <div className={styles.qrFrame}>
+            <span><QrCode size={16} aria-hidden="true" /> Quét bằng camera điện thoại</span>
+            <div className={`${styles.pairingQr} pairing-qr`} aria-label={`Mã QR ghép cặp ${cloud ? "qua cloud" : "cùng Wi-Fi"}`} dangerouslySetInnerHTML={{ __html: status.qr_svg }} />
+          </div>
+          <div className={`${styles.pairingMeta} pairing-meta`}>
+            <div className={`${styles.activeMode} pairing-active-mode`}>
               {cloud ? <Cloud aria-hidden="true" size={18} /> : <Wifi aria-hidden="true" size={18} />}
               <strong>{cloud ? "Khác mạng" : "Cùng Wi-Fi"}</strong>
             </div>
-            <p>
+            <p className={styles.expiry}>
               Mã còn hiệu lực <strong>{phut}:{giay}</strong> và chỉ dùng được <strong>một lần</strong>.
             </p>
             <p className="hint">
@@ -157,13 +164,24 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
                 : "Điện thoại phải cùng Wi-Fi với máy tính; tệp không đi qua Internet."}
             </p>
             {cloud ? (
-              <p className="pairing-relay"><ShieldCheck aria-hidden="true" size={17} /> Đường truyền: đã mã hóa qua máy chủ trung chuyển</p>
+              <p className={`${styles.relayStatus} pairing-relay`}><ShieldCheck aria-hidden="true" size={17} /> Đường truyền: đã mã hóa qua máy chủ trung chuyển</p>
             ) : status.url ? (
               <p className="hint">Không quét được mã? Mở địa chỉ này trên trình duyệt điện thoại: <code className="pairing-url">{status.url}</code></p>
             ) : null}
             {status.message ? <p className="pairing-progress" role="status" aria-live="polite">{status.message}</p> : null}
           </div>
         </div>
+      ) : null}
+
+      {status.enabled ? (
+        <ol className={styles.transferSteps} aria-label="Tiến trình nhận tệp từ điện thoại">
+          {transferSteps.map((step, index) => (
+            <li key={step} data-state={index < phaseIndex ? "done" : index === phaseIndex ? "active" : "pending"} aria-current={index === phaseIndex ? "step" : undefined}>
+              <span>{index < phaseIndex ? <CheckCircle2 size={14} aria-hidden="true" /> : index + 1}</span>
+              {step}
+            </li>
+          ))}
+        </ol>
       ) : null}
     </section>
   );

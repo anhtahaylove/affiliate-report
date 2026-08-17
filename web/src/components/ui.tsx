@@ -13,13 +13,13 @@ export function isOwner(user: CurrentUser | null) {
 }
 
 export function Notice({ text }: { text: string }) {
-  return <section className="notice" role="alert">{text}</section>;
+  return <section data-slot="alert" data-tone="danger" className="notice" role="alert">{text}</section>;
 }
 
 /** Khung xương giữ đúng chỗ nội dung sắp hiện, thay cho một dòng chữ "Đang tải…" làm nhảy layout. */
 export function Skeleton({ rows = 4, tall = false, label }: { rows?: number; tall?: boolean; label: string }) {
   return (
-    <div className="skeleton-grid" role="status" aria-busy="true" aria-label={label}>
+    <div data-slot="loading-state" className="skeleton-grid" role="status" aria-busy="true" aria-label={label}>
       <div className="skeleton-row">
         {Array.from({ length: rows }, (_, index) => <div className="skeleton" key={index} />)}
       </div>
@@ -30,15 +30,17 @@ export function Skeleton({ rows = 4, tall = false, label }: { rows?: number; tal
 }
 
 export function StateCard({ text }: { text: string }) {
-  return <section className="section panel"><p className="empty">{text}</p></section>;
+  return <section data-slot="empty-state" className="section panel"><p className="empty">{text}</p></section>;
 }
 
 export function Metric({ title, value, hint, tone }: { title: string; value: string; hint: string; tone?: "good" | "warning" | "critical" }) {
-  return <article className="metric panel"><span>{title}</span><strong data-tone={tone}>{value}</strong><small>{hint}</small></article>;
+  return <article data-slot="metric" className="metric panel"><span>{title}</span><strong data-tone={tone}>{value}</strong><small>{hint}</small></article>;
 }
 
 export function StatusBadge({ status }: { status: string | null | undefined }) {
-  return <span className="status-badge" data-status={status ?? "unknown"}>{statusLabel(status)}</span>;
+  const normalized = status?.toLowerCase() ?? "unknown";
+  const tone = normalized === "settled" ? "success" : normalized === "pending" ? "warning" : normalized === "ineligible" ? "danger" : "neutral";
+  return <span data-slot="badge" data-tone={tone} className="status-badge" data-status={normalized}>{statusLabel(status)}</span>;
 }
 
 /**
@@ -79,9 +81,11 @@ export function ConfirmDialog({
   const ready = !confirmation || phrase.trim() === confirmation;
   return (
     <dialog
+      data-slot="dialog"
       className="confirm-dialog"
       ref={ref}
       aria-labelledby={`${id}-title`}
+      aria-busy={busy || undefined}
       onClose={() => setPhrase("")}
       onCancel={(event) => {
         event.preventDefault();

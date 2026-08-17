@@ -1,16 +1,17 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogIn, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings, Shield, Target, UploadCloud, Users, WifiOff, X, XCircle, type LucideIcon } from "lucide-react";
+import { BarChart3, ChevronDown, CircleDollarSign, Command, Database, FileSpreadsheet, Home, LogIn, LogOut, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Settings, Shield, Target, UploadCloud, Users, WifiOff, X, XCircle, type LucideIcon } from "lucide-react";
 import { apiUrl, CurrentUser, exitApplication, logout, type MetaResponse } from "@/lib/api";
 import { ConfirmDialog } from "@/components/ui";
 import { BottomSheet } from "@/components/primitives";
 import { errorMessage, roleLabel } from "@/lib/format";
 import { routeIsActive } from "@/lib/navigation";
+import { cn } from "@/lib/cn";
+import styles from "./app-shell.module.css";
 
 type NavItem = { href: string; label: string; desc: string; icon: LucideIcon; roles?: Array<CurrentUser["role"]>; mobilePrimary?: boolean; sharedDeploymentOnly?: boolean };
 
@@ -64,7 +65,7 @@ function allowedItems(user: CurrentUser) {
 function NavLink({ item, active, onClick, compact = false, iconOnly = false }: { item: NavItem; active: boolean; onClick?: () => void; compact?: boolean; iconOnly?: boolean }) {
   const Icon = item.icon;
   return (
-    <Link href={item.href} aria-current={active ? "page" : undefined} aria-label={iconOnly ? item.label : undefined} title={iconOnly ? item.label : undefined} onClick={onClick} className={compact ? "mobile-nav-link" : undefined}>
+    <Link href={item.href} aria-current={active ? "page" : undefined} aria-label={iconOnly ? item.label : undefined} title={iconOnly ? item.label : undefined} onClick={onClick} className={compact ? "mobile-nav-link" : undefined} data-active={active || undefined}>
       <Icon className="nav-icon" size={compact ? 20 : 18} aria-hidden="true" />
       <span><strong>{item.label}</strong>{compact ? null : <small>{item.desc}</small>}</span>
     </Link>
@@ -78,7 +79,11 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
   const primaryMobile = allItems.filter((item) => item.mobilePrimary).slice(0, 3);
   const moreItems = allItems.filter((item) => !primaryMobile.some((primary) => primary.href === item.href));
   const moreActive = moreItems.some((item) => routeIsActive(pathname, item.href));
+  const settingsItems = groups.find((group) => group.title === "Hệ thống")?.items ?? [];
+  const settingsActive = pathname.startsWith("/settings/");
+  const currentSetting = settingsItems.find((item) => routeIsActive(pathname, item.href));
   const [moreOpen, setMoreOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [exitError, setExitError] = useState("");
   const [askExit, setAskExit] = useState(false);
@@ -86,6 +91,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
   const [commandQuery, setCommandQuery] = useState("");
   const [savingSidebar, setSavingSidebar] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const sharedDeployment = isSharedDeployment(user);
   const commandItems = allItems.filter((item) => `${item.label} ${item.desc}`.toLocaleLowerCase("vi").includes(commandQuery.trim().toLocaleLowerCase("vi")));
 
@@ -132,15 +138,15 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
   }
 
   return (
-    <main className={`cockpit-shell${collapsed ? " sidebar-collapsed" : ""}`}>
+    <div className={cn("cockpit-shell", styles.shell, collapsed && "sidebar-collapsed")}>
       <aside className="sidebar" aria-label="Điều hướng chính">
         <div className="sidebar-brand">
-          <Image className="brand-mark" src="/icon-192.png" alt="" width={38} height={38} priority />
+          <span className="brand-mark" aria-hidden="true" />
           <div>
             <strong>Affiliate Report</strong>
             <span>{appVersion ? `Phiên bản ${appVersion}` : "Báo cáo vận hành"}</span>
           </div>
-          <button className="sidebar-collapse" type="button" onClick={() => void toggleSidebar()} disabled={savingSidebar} aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"} title={collapsed ? "Mở rộng" : "Thu gọn"}>
+          <button className={cn("sidebar-collapse", styles.sidebarCollapse)} type="button" onClick={() => void toggleSidebar()} disabled={savingSidebar} aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"} title={collapsed ? "Mở rộng" : "Thu gọn"}>
             {collapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
           </button>
         </div>
@@ -161,22 +167,40 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
         </div>
       </aside>
 
-      <section className="cockpit-main">
-        <header className="cockpit-header">
-          {heading}
-          <button className="command-trigger" type="button" onClick={() => setCommandOpen(true)} aria-label="Mở tìm kiếm nhanh">
-            <Search size={16} aria-hidden="true" /><span>Tìm nhanh</span><kbd>Ctrl K</kbd>
-          </button>
-          {sharedDeployment ? (
-            <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
-              <Shield size={16} aria-hidden="true" />
-              <span className="user-email" title={user.email}>{user.email}</span>
-              <strong>{roleLabel(user.role)}</strong>
+      <main className="cockpit-main">
+        <div className="workspace-frame">
+          <header className="cockpit-header">
+            {heading}
+            <div className="header-actions">
+              <button className={cn("command-trigger", styles.commandTrigger)} type="button" onClick={() => setCommandOpen(true)} aria-label="Mở tìm kiếm nhanh">
+                <Search size={16} aria-hidden="true" /><span>Tìm nhanh</span><kbd>Ctrl K</kbd>
+              </button>
+              {sharedDeployment ? (
+                <div className="user-menu" role="group" aria-label="Tài khoản hiện tại">
+                  <Shield size={16} aria-hidden="true" />
+                  <span className="user-email" title={user.email}>{user.email}</span>
+                  <strong>{roleLabel(user.role)}</strong>
+                </div>
+              ) : null}
             </div>
+          </header>
+          {settingsActive && settingsItems.length ? (
+            <>
+              <nav className={styles.settingsNav} aria-label="Các mục cài đặt">
+                <span className={styles.settingsLabel}>Cài đặt</span>
+                <div>
+                  {settingsItems.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} />)}
+                </div>
+              </nav>
+              <button ref={settingsButtonRef} className={styles.settingsSwitcher} type="button" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>
+                <span><Settings size={18} aria-hidden="true" /><span><small>Cài đặt</small><strong>{currentSetting?.label ?? "Chọn mục"}</strong></span></span>
+                <ChevronDown size={18} aria-hidden="true" />
+              </button>
+            </>
           ) : null}
-        </header>
-        {children}
-      </section>
+          <div className="workspace-content">{children}</div>
+        </div>
+      </main>
 
       <nav className="mobile-bottom-nav" aria-label="Điều hướng nhanh mobile">
         {primaryMobile.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} compact />)}
@@ -193,21 +217,27 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
         </div>
       </BottomSheet>
 
+      <BottomSheet open={settingsOpen} onOpenChange={setSettingsOpen} restoreFocusRef={settingsButtonRef} title="Cài đặt" description="Chọn khu vực cài đặt cần quản lý.">
+        <nav className={styles.settingsSheet} aria-label="Các mục cài đặt trên mobile">
+          {settingsItems.map((item) => <NavLink key={item.href} item={item} active={routeIsActive(pathname, item.href)} onClick={() => setSettingsOpen(false)} />)}
+        </nav>
+      </BottomSheet>
+
       <Dialog.Root open={commandOpen} onOpenChange={setCommandOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="sheet-overlay command-overlay" />
-          <Dialog.Content className="command-palette" aria-describedby="command-description">
+          <Dialog.Content className={cn("command-palette", styles.commandPalette)} aria-describedby="command-description">
             <Dialog.Title><Command size={18} aria-hidden="true" />Đi đến nhanh</Dialog.Title>
             <Dialog.Description id="command-description">Tìm trang hoặc hành động bạn có quyền truy cập.</Dialog.Description>
-            <label className="command-search"><Search size={18} aria-hidden="true" /><span className="sr-only">Tìm trang</span><input value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Nhập tên trang…" /></label>
-            <div className="command-results">
+            <label className={cn("command-search", styles.commandSearch)}><Search size={18} aria-hidden="true" /><span className="sr-only">Tìm trang</span><input value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder="Nhập tên trang…" /></label>
+            <div className={cn("command-results", styles.commandResults)}>
               {commandItems.map((item) => {
                 const Icon = item.icon;
                 return <Link key={item.href} href={item.href} aria-current={routeIsActive(pathname, item.href) ? "page" : undefined} onClick={() => setCommandOpen(false)}><Icon size={18} aria-hidden="true" /><span><strong>{item.label}</strong><small>{item.desc}</small></span></Link>;
               })}
               {!commandItems.length ? <p className="empty">Không tìm thấy mục phù hợp.</p> : null}
             </div>
-            <Dialog.Close className="command-close" aria-label="Đóng"><X size={18} aria-hidden="true" /></Dialog.Close>
+            <Dialog.Close className={cn("command-close", styles.commandClose)} aria-label="Đóng"><X size={18} aria-hidden="true" /></Dialog.Close>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
@@ -222,7 +252,7 @@ export function AppShell({ user, appVersion, runtimePlatform, heading, children,
       >
         <p>Ứng dụng sẽ đóng hoàn toàn. Bạn có thể mở lại từ Desktop hoặc Start Menu bất cứ lúc nào.</p>
       </ConfirmDialog>
-    </main>
+    </div>
   );
 }
 

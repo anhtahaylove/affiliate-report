@@ -1,25 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, CurrentUser, dailyReportExportUrl, loadCurrentUser, loadMeta, loadUiPreferences, saveUiPreferences, type MetaResponse, type UiPreferences } from "@/lib/api";
+import dynamic from "next/dynamic";
+import { useMemo } from "react";
+import { dailyReportExportUrl } from "@/lib/api";
 import { AppShell, ConnectionErrorCard, SignInCard } from "@/components/app-shell";
 import { FilterBar, useUrlFilters } from "@/components/filters";
 import { Notice, canWrite, isOwner } from "@/components/ui";
 import { UpdateBanner } from "@/components/update-banner";
-import { DashboardHome } from "@/components/pages/dashboard";
-import { AnalyticsPage } from "@/components/pages/analytics";
-import { OrdersPage } from "@/components/pages/orders";
-import { ImportsPage } from "@/components/pages/imports";
-import { TargetsPage } from "@/components/pages/targets";
-import { AccountsPage } from "@/components/pages/accounts";
-import { DataSettingsPage } from "@/components/pages/data-settings";
-import { AndroidUpdateSettings, UpdateSettingsPage } from "@/components/pages/update-settings";
-import { UsersSettingsPage } from "@/components/pages/users-settings";
-import { SyncSettingsPage } from "@/components/pages/sync-settings";
-import { applyThemePreference, ThemePreferences, type Theme } from "@/components/theme-toggle";
-import { errorMessage } from "@/lib/format";
+import { DashboardFirstRun } from "@/components/pages/dashboard-first-run";
+import { ThemePreferences, type Theme } from "@/components/theme-toggle";
 import { SavedViews } from "@/components/saved-views";
 import { createAccountDirectory } from "@/lib/account-directory";
+import { PageHeader } from "@/components/ui-system";
+import { useOperationsBootstrap } from "@/components/use-operations-bootstrap";
+
+function RouteLoading() {
+  return <section className="panel loading-state" aria-live="polite"><span className="skeleton-line short" /><span className="skeleton-line" /><span className="skeleton-line" /><span className="sr-only">Đang tải nội dung trang…</span></section>;
+}
+
+const AnalyticsPage = dynamic(() => import("@/components/pages/analytics").then((module) => module.AnalyticsPage), { loading: RouteLoading, ssr: false });
+const DashboardHome = dynamic(() => import("@/components/pages/dashboard").then((module) => module.DashboardHome), { loading: RouteLoading, ssr: false });
+const OrdersPage = dynamic(() => import("@/components/pages/orders").then((module) => module.OrdersPage), { loading: RouteLoading, ssr: false });
+const ImportsPage = dynamic(() => import("@/components/pages/imports").then((module) => module.ImportsPage), { loading: RouteLoading, ssr: false });
+const TargetsPage = dynamic(() => import("@/components/pages/targets").then((module) => module.TargetsPage), { loading: RouteLoading, ssr: false });
+const AccountsPage = dynamic(() => import("@/components/pages/accounts").then((module) => module.AccountsPage), { loading: RouteLoading, ssr: false });
+const DataSettingsPage = dynamic(() => import("@/components/pages/data-settings").then((module) => module.DataSettingsPage), { loading: RouteLoading, ssr: false });
+const AndroidUpdateSettings = dynamic(() => import("@/components/pages/update-settings").then((module) => module.AndroidUpdateSettings), { loading: RouteLoading, ssr: false });
+const UpdateSettingsPage = dynamic(() => import("@/components/pages/update-settings").then((module) => module.UpdateSettingsPage), { loading: RouteLoading, ssr: false });
+const UsersSettingsPage = dynamic(() => import("@/components/pages/users-settings").then((module) => module.UsersSettingsPage), { loading: RouteLoading, ssr: false });
+const SyncSettingsPage = dynamic(() => import("@/components/pages/sync-settings").then((module) => module.SyncSettingsPage), { loading: RouteLoading, ssr: false });
 
 type RouteKind = "dashboard" | "analytics" | "orders" | "imports" | "targets" | "accounts" | "preferences" | "data" | "sync" | "update" | "users";
 
@@ -39,48 +48,7 @@ const routeMeta: Record<RouteKind, { label: string; title: string; copy: string;
 
 export function OperationsPage({ route }: { route: RouteKind }) {
   const filters = useUrlFilters();
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [metaData, setMetaData] = useState<MetaResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  // 401 chỉ nổi lên ở bản triển khai OIDC khi phiên hết hạn — bản cài một danh tính không
-  // bao giờ trả 401 (xem app-shell.tsx). Mọi lỗi khác (offline, backend chết, 500…) là vấn
-  // đề kết nối, không phải "chưa đăng nhập", nên tách riêng để không hiện nhầm nút Đăng nhập.
-  const [connectionError, setConnectionError] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [preferences, setPreferences] = useState<UiPreferences | null>(null);
-  // Nút "Thử lại" trên ConnectionErrorCard tăng số này thay vì gọi thẳng một hàm tải dùng
-  // chung — effect bên dưới phụ thuộc reloadToken nên tự chạy lại khi nó đổi, đúng khuôn
-  // React khuyến nghị (effect chỉ phản ứng theo dependency, không bị gọi trực tiếp từ nơi
-  // khác) và không dính react-hooks/set-state-in-effect. Cách này cũng thay cho việc nạp lại
-  // toàn bộ tài liệu, mà guard tĩnh account-directory-static.test.mjs đã cấm ở mọi nơi trừ
-  // trang Cập nhật vì nó từng làm mất trạng thái người dùng.
-  const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [currentUser, meta, uiPreferences] = await Promise.all([loadCurrentUser(), loadMeta(), loadUiPreferences()]);
-        setUser(currentUser);
-        setMetaData(meta);
-        setPreferences(uiPreferences);
-        applyThemePreference(uiPreferences.theme);
-        setConnectionError("");
-        setAuthError("");
-      } catch (reason) {
-        if (reason instanceof ApiError && reason.status === 401) setAuthError(reason.message || "Phiên đăng nhập đã hết hạn.");
-        else setConnectionError(errorMessage(reason, "Không thể tải cấu hình ứng dụng."));
-      } finally {
-        setLoading(false);
-      }
-    }
-    void load();
-  }, [reloadToken]);
-  const retry = useCallback(() => setReloadToken((token) => token + 1), []);
-
-  const refreshAccountMetadata = useCallback(async () => {
-    const refreshed = await loadMeta();
-    setMetaData(refreshed);
-  }, []);
+  const { authError, connectionError, loading, metaData, preferences, refreshAccountMetadata, retry, updatePreferences, user } = useOperationsBootstrap();
   const accountDirectory = useMemo(
     () => createAccountDirectory(metaData?.account_items, metaData?.accounts),
     [metaData],
@@ -91,21 +59,26 @@ export function OperationsPage({ route }: { route: RouteKind }) {
   if (connectionError || !user) return <ConnectionErrorCard message={connectionError || "Không thể tải cấu hình ứng dụng."} onRetry={retry} />;
   if (!preferences || !metaData) return <ConnectionErrorCard message="Không thể tải cấu hình ứng dụng." onRetry={retry} />;
   const pageMeta = routeMeta[route];
-  async function updatePreferences(changes: Partial<Pick<UiPreferences, "theme" | "sidebar_collapsed" | "dashboard_layout">>) {
-    const updated = await saveUiPreferences(changes);
-    setPreferences(updated);
-    applyThemePreference(updated.theme);
-  }
-  const shellProps = { user, appVersion: metaData.app_version ?? "", runtimePlatform: metaData.runtime_platform, collapsed: preferences.sidebar_collapsed, onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }) };
+  const shellProps = {
+    user,
+    appVersion: metaData.app_version ?? "",
+    runtimePlatform: metaData.runtime_platform,
+    collapsed: preferences.sidebar_collapsed,
+    onCollapsedChange: (collapsed: boolean) => updatePreferences({ sidebar_collapsed: collapsed }),
+    heading: <PageHeader title={pageMeta.title} description={pageMeta.copy} />,
+  };
   if (pageMeta.needsWrite && !canWrite(user)) return <AppShell {...shellProps}><Notice text="Bạn không có quyền nhập dữ liệu. Hãy liên hệ chủ sở hữu để được cấp quyền." /></AppShell>;
   if (pageMeta.needsOwner && !isOwner(user)) return <AppShell {...shellProps}><Notice text="Chỉ chủ sở hữu được truy cập trang này." /></AppShell>;
 
   return (
-    <AppShell {...shellProps} heading={<div className="page-heading"><h1>{pageMeta.title}</h1><p className="subtle">{pageMeta.copy}</p></div>}>
+    <AppShell {...shellProps}>
       {metaData.runtime_platform !== "android" ? <UpdateBanner capability={metaData.capabilities.update_check} onUpdatePage={route === "update"} /> : null}
       {(["dashboard", "analytics", "orders"] as RouteKind[]).includes(route) ? <SavedViews route={route as "dashboard" | "analytics" | "orders"} /> : null}
       {pageMeta.filters ? <FilterBar accounts={metaData.accounts} directory={accountDirectory} statuses={route === "targets" ? [] : metaData.statuses} showSearch={pageMeta.search} actions={route === "dashboard" ? <a className="button-link secondary-link" download="affiliate-daily-report.xlsx" href={dailyReportExportUrl({ accounts: filters.accounts, statuses: filters.statuses, start: filters.start, end: filters.end })}>Xuất báo cáo ngày</a> : null} /> : null}
-      {route === "dashboard" ? <DashboardHome user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} preferences={preferences} onPreferencesChange={updatePreferences} /> : null}
+      {route === "dashboard" ? metaData.accounts.length
+        ? <DashboardHome user={user} filters={filters} accounts={metaData.accounts} directory={accountDirectory} preferences={preferences} onPreferencesChange={updatePreferences} />
+        : <DashboardFirstRun user={user} setup={{ hasAccounts: false, hasImports: false, hasTarget: false }} />
+        : null}
       {route === "analytics" ? <AnalyticsPage filters={filters} directory={accountDirectory} /> : null}
       {route === "orders" ? <OrdersPage filters={filters} directory={accountDirectory} /> : null}
       {route === "imports" ? <ImportsPage user={user} accounts={metaData.accounts} directory={accountDirectory} maxUploadMb={metaData.max_upload_mb} /> : null}

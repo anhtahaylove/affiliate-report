@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, FileCheck2, FileSpreadsheet, ShieldAlert, Upload } from "lucide-react";
 import { CurrentUser, ImportHistoryRow, ImportWarning, RejectedRow, UndoImportPreview, loadImportHistory, previewUndoImport, undoImport, uploadExport, visibleRejectedRows } from "@/lib/api";
 import { RecentImports } from "@/components/recent-imports";
 import { PairingPanel } from "@/components/pairing-panel";
@@ -10,6 +11,7 @@ import { ConfirmDialog, canWrite, isOwner } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { errorMessage, integer } from "@/lib/format";
 import type { AccountDirectory } from "@/lib/account-directory";
+import styles from "./imports.module.css";
 
 type FileOutcome = "imported" | "duplicate" | "skipped" | "failed";
 
@@ -64,6 +66,15 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
     void load();
   }, [refreshHistory]);
   const hasSuccessfulResult = results.some((result) => result.outcome === "imported" || result.outcome === "duplicate");
+  const invalidFiles = fileQueue.filter((file) => !EXPORT_FILENAME_RE.test(file.name)).length;
+  const completedWithWarnings = results.some((result) => result.warnings.length || result.rejectedTotal || result.outcome === "failed" || result.outcome === "skipped");
+  const importSteps = [
+    { label: "Tài khoản", state: selectedAccount ? "done" : "active" },
+    { label: "Nguồn tệp", state: fileQueue.length ? "done" : selectedAccount ? "active" : "pending" },
+    { label: "Kiểm tra", state: busy || results.length ? "done" : fileQueue.length ? "active" : "pending" },
+    { label: "Nhập", state: results.length ? "done" : busy ? "active" : "pending" },
+    { label: "Kết quả", state: results.length ? "active" : "pending" },
+  ];
 
   async function submit() {
     setResults([]);
@@ -141,66 +152,115 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
   }
 
   return (
-    <div className="content-grid imports-workflow-page">
-      <section className="section panel">
-        <div className="section-heading">
+    <div className={`${styles.pageGrid} imports-workflow-page`}>
+      <section className={styles.workflow}>
+        <div className={styles.sectionHeading}>
           <div>
             <p className="section-label">Nhập dữ liệu</p>
-            <h2>Chọn tài khoản và tệp cần nhập</h2>
-            <p>Tối đa {integer.format(maxUploadMb)} MB mỗi tệp. {EXPORT_FILENAME_HINT}</p>
+            <h2>Đưa file TikTok vào đúng tài khoản</h2>
+            <p>Từng bước rõ ràng, chống nhập trùng và cảnh báo khi order + SKU có dấu hiệu nằm nhầm account.</p>
           </div>
         </div>
-        {canWrite(user) ? <PairingPanel account={selectedAccount} onNhanTep={refreshHistory} /> : null}
-        {!accounts.length ? <div className="guided-empty-state" role="status"><div><p className="section-label">Chưa có tài khoản khả dụng</p><h3>{isOwner(user) ? "Tạo tài khoản trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp tài khoản"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một tài khoản để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi tài khoản được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo tài khoản đầu tiên</Link> : null}</div> : <>
-        <div className="upload-form">
-          <div className="field">
-            <label htmlFor="import-account">Tài khoản TikTok</label>
-            <select id="import-account" value={selectedAccount} onChange={(event) => setAccount(event.target.value)} disabled={busy}>{accounts.map((item) => <option key={item} value={item}>{directory.label(item)}</option>)}</select>
-          </div>
-          <div className="field dropzone">
-            <span className="field-label">Tệp Excel đã xuất từ TikTok</span>
-            <div className="file-picker">
-              <input className="sr-only" id="import-files" aria-label="File Excel đã xuất từ TikTok" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} disabled={busy} />
-              <label className="file-picker-button" htmlFor="import-files">Chọn tệp Excel</label>
-              <span>{fileQueue.length ? `${integer.format(fileQueue.length)} tệp đã chọn` : "Chưa chọn tệp"}</span>
+
+        <ol className={styles.stepper} aria-label="Các bước nhập dữ liệu">
+          {importSteps.map((step, index) => (
+            <li key={step.label} data-state={step.state} aria-current={step.state === "active" ? "step" : undefined}>
+              <span>{step.state === "done" ? <Check size={14} aria-hidden="true" /> : index + 1}</span>
+              <strong>{step.label}</strong>
+            </li>
+          ))}
+        </ol>
+
+        {!accounts.length ? <div className={`${styles.emptyState} guided-empty-state`} role="status"><div><p className="section-label">Chưa có tài khoản khả dụng</p><h3>{isOwner(user) ? "Tạo tài khoản trước khi nhập dữ liệu" : "Liên hệ chủ sở hữu để được cấp tài khoản"}</h3><p>{isOwner(user) ? "Mỗi tệp TikTok phải được gắn với một tài khoản để chống trùng và lập báo cáo đúng phạm vi." : "Bạn chưa có phạm vi tài khoản được phép nhập. Hệ thống đã khóa chọn tệp và thao tác gửi."}</p></div>{isOwner(user) ? <Link className="button-link" href="/accounts">Tạo tài khoản đầu tiên</Link> : null}</div> : <div className={styles.importStages}>
+          <section className={styles.stage} aria-labelledby="import-account-title">
+            <div className={styles.stageIndex}>1</div>
+            <div className={styles.stageBody}>
+              <div className={styles.stageHeading}><div><h3 id="import-account-title">Chọn tài khoản nhận dữ liệu</h3><p>Đây là phạm vi dùng để chống trùng và tổng hợp báo cáo.</p></div></div>
+              <div className={`${styles.accountField} field`}>
+                <label htmlFor="import-account">Tài khoản TikTok</label>
+                <select id="import-account" value={selectedAccount} onChange={(event) => setAccount(event.target.value)} disabled={busy}>{accounts.map((item) => <option key={item} value={item}>{directory.label(item)}</option>)}</select>
+              </div>
             </div>
-            <span>Có thể chọn nhiều tệp; hệ thống sẽ nhập lần lượt và tự chống trùng.</span>
-          </div>
+          </section>
+
+          <section className={styles.stage} aria-labelledby="import-source-title">
+            <div className={styles.stageIndex}>2</div>
+            <div className={styles.stageBody}>
+              <div className={styles.stageHeading}><div><h3 id="import-source-title">Chọn nguồn tệp</h3><p>Dùng file trên máy hoặc nhận trực tiếp từ điện thoại qua LAN/Cloud Pairing.</p></div></div>
+              <div className={styles.sourceGrid}>
+                <div className={styles.localSource}>
+                  <span className={styles.sourceKicker}><FileSpreadsheet size={15} aria-hidden="true" /> Trên thiết bị này</span>
+                  <div className={`${styles.dropzone} field dropzone`}>
+                    <span className="field-label">Tệp Excel đã xuất từ TikTok</span>
+                    <div className={`${styles.filePicker} file-picker`}>
+                      <input className="sr-only" id="import-files" aria-label="File Excel đã xuất từ TikTok" type="file" multiple accept=".xlsx" onChange={(event) => setFiles(event.target.files)} disabled={busy} />
+                      <label className={styles.filePickerButton} htmlFor="import-files"><Upload size={17} aria-hidden="true" /> Chọn tệp Excel</label>
+                      <span>{fileQueue.length ? `${integer.format(fileQueue.length)} tệp đã chọn` : "Chưa chọn tệp"}</span>
+                    </div>
+                    <span>Tối đa {integer.format(maxUploadMb)} MB/tệp. Có thể chọn nhiều file để nhập tuần tự.</span>
+                  </div>
+                  <p className={styles.filenameHint}>{EXPORT_FILENAME_HINT}</p>
+                </div>
+                {canWrite(user) ? <PairingPanel account={selectedAccount} onNhanTep={refreshHistory} /> : null}
+              </div>
+            </div>
+          </section>
+
           {fileQueue.length ? (
-            <div className="import-queue" aria-live="polite">
-              <div className="record-title"><strong>Tệp đã chọn</strong><span>{busy ? `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} đã xử lý` : `${integer.format(fileQueue.length)} tệp`}</span></div>
-              <ol>
-                {fileQueue.map((file, index) => (
-                  <li key={`${file.name}-${file.lastModified}`} data-state={index < processedFiles ? "done" : file.name === currentFile ? "active" : "pending"}>
-                    <span>{file.name}</span>
-                    <small>{fileSizeText(file.size)} · {EXPORT_FILENAME_RE.test(file.name) ? "Sẵn sàng" : "Sẽ bỏ qua"}</small>
-                  </li>
-                ))}
-              </ol>
-            </div>
+            <section className={styles.stage} aria-labelledby="import-review-title">
+              <div className={styles.stageIndex}>3</div>
+              <div className={styles.stageBody}>
+                <div className={styles.stageHeading}>
+                  <div><h3 id="import-review-title">Kiểm tra hàng đợi</h3><p>Xác nhận tên và kích thước trước khi nhập vào {directory.label(selectedAccount)}.</p></div>
+                  <span className={styles.queueCount}>{busy ? `${integer.format(processedFiles)}/${integer.format(fileQueue.length)} đã xử lý` : `${integer.format(fileQueue.length)} tệp`}</span>
+                </div>
+                {invalidFiles ? <p className={styles.queueWarning} role="alert"><ShieldAlert size={17} aria-hidden="true" /> {integer.format(invalidFiles)} tệp không đúng tên export và sẽ được bỏ qua.</p> : null}
+                <div className={`${styles.importQueue} import-queue`} aria-live="polite">
+                  <ol>
+                    {fileQueue.map((file, index) => (
+                      <li key={`${file.name}-${file.lastModified}`} data-state={index < processedFiles ? "done" : file.name === currentFile ? "active" : "pending"}>
+                        <span className={styles.fileStateIcon}>{index < processedFiles ? <Check size={14} aria-hidden="true" /> : <FileCheck2 size={15} aria-hidden="true" />}</span>
+                        <span>{file.name}</span>
+                        <small>{fileSizeText(file.size)} · {EXPORT_FILENAME_RE.test(file.name) ? "Sẵn sàng" : "Sẽ bỏ qua"}</small>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                <p className={styles.safetyNote}><ShieldAlert size={17} aria-hidden="true" /> Sau khi đọc file, hệ thống so order + SKU với các account khác và cảnh báo overlap bất thường. File vẫn được lưu để không làm mất dữ liệu.</p>
+                <div className={styles.importActionBar}>
+                  <div><strong>Sẵn sàng nhập vào {directory.label(selectedAccount)}</strong><span>Kiểm tra lại account trước khi tiếp tục.</span></div>
+                  <button className="primary" type="button" onClick={() => void submit()} disabled={busy || !selectedAccount || !fileQueue.length}>{busy ? `Đang nhập ${integer.format(processedFiles + 1)}/${integer.format(fileQueue.length)}…` : "Nhập dữ liệu"}</button>
+                </div>
+              </div>
+            </section>
           ) : null}
-          <button className="primary" type="button" onClick={() => void submit()} disabled={busy || !selectedAccount || !fileQueue.length}>{busy ? "Đang nhập…" : "Nhập dữ liệu"}</button>
-          {message ? <p className="upload-result" role="status">{message}</p> : null}
+
+          {message ? <p className={`${styles.uploadResult} upload-result`} role="status">{message}</p> : null}
           {results.length ? (
-            <ol className="import-results" aria-label="Kết quả nhập theo từng file">
-              {results.map((result) => (
-                <li key={result.file} className="import-result" data-outcome={result.outcome}>
-                  <div className="record-title"><strong>{result.file}</strong><span className="status-badge" data-outcome={result.outcome}>{OUTCOME_LABELS[result.outcome]}</span></div>
-                  <span>{result.detail}</span>
-                  <ImportOverlapWarning warnings={result.warnings} />
-                  {result.rejectedTotal ? (
-                    <details>
-                      <summary>{integer.format(result.rejectedTotal)} dòng bị từ chối{result.rejectedTotal > result.rejectedRows.length ? ` (hiện ${integer.format(result.rejectedRows.length)} dòng đầu)` : ""}</summary>
-                      <ul>{result.rejectedRows.map((row) => <li key={`${result.file}-${row.row_number}`}>Dòng {integer.format(row.row_number)}: {row.reason}</li>)}</ul>
-                    </details>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
+            <section className={styles.stage} aria-labelledby="import-result-title">
+              <div className={styles.stageIndex}>4</div>
+              <div className={styles.stageBody}>
+                <div className={styles.stageHeading}><div><h3 id="import-result-title">Kết quả nhập</h3><p>{completedWithWarnings ? "Đã hoàn tất, có mục cần kiểm tra." : "Tất cả tệp đã được xử lý thành công."}</p></div></div>
+                <ol className={`${styles.importResults} import-results`} aria-label="Kết quả nhập theo từng file">
+                  {results.map((result) => (
+                    <li key={result.file} className={`${styles.importResult} import-result`} data-outcome={result.outcome}>
+                      <div className={styles.resultHeading}><strong>{result.file}</strong><span className="status-badge" data-outcome={result.outcome}>{OUTCOME_LABELS[result.outcome]}</span></div>
+                      <span>{result.detail}</span>
+                      <ImportOverlapWarning warnings={result.warnings} />
+                      {result.rejectedTotal ? (
+                        <details className={styles.rejectedDetails}>
+                          <summary>{integer.format(result.rejectedTotal)} dòng bị từ chối{result.rejectedTotal > result.rejectedRows.length ? ` (hiện ${integer.format(result.rejectedRows.length)} dòng đầu)` : ""}</summary>
+                          <ul>{result.rejectedRows.map((row) => <li key={`${result.file}-${row.row_number}`}>Dòng {integer.format(row.row_number)}: {row.reason}</li>)}</ul>
+                        </details>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+                {hasSuccessfulResult ? <nav className={`${styles.postActions} post-import-actions`} aria-label="Bước tiếp theo sau khi nhập"><Link className="button-link" href="/">Xem Dashboard</Link><Link className="button-link secondary-link" href="/targets">Đặt mục tiêu tháng</Link></nav> : null}
+              </div>
+            </section>
           ) : null}
-          {hasSuccessfulResult ? <nav className="post-import-actions" aria-label="Bước tiếp theo sau khi nhập"><Link className="button-link" href="/">Xem Dashboard</Link><Link className="button-link secondary-link" href="/targets">Đặt mục tiêu tháng</Link></nav> : null}
-        </div>
-        </>}
+        </div>}
       </section>
       <RecentImports rows={history} directory={directory} onUndo={(row) => void startUndo(row)} />
 

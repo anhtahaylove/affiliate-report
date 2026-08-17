@@ -23,6 +23,17 @@ const viewports = [
 ] as const;
 
 test("mọi route không tràn ngang, không trùng id và giữ đúng cấu trúc responsive", async ({ page }) => {
+  await page.route("**/api/v1/admin/update", (route) => route.fulfill({
+    json: {
+      current_version: "2.2.0",
+      latest_version: "2.2.0",
+      available: false,
+      installable: false,
+      release_url: null,
+      message: "Bạn đang dùng bản mới nhất.",
+    },
+  }));
+
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
 

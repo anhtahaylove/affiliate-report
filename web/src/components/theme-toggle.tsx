@@ -5,6 +5,7 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useState } from "react";
 import type { UiPreferences } from "@/lib/api";
 import { errorMessage } from "@/lib/format";
+import styles from "./pages/settings-commerce.module.css";
 
 export type Theme = UiPreferences["theme"];
 
@@ -49,25 +50,25 @@ export function ThemePreferences({ value, onChange }: { value: Theme; onChange: 
   }
 
   return (
-    <section className="section panel preference-panel" aria-labelledby="appearance-heading" aria-busy={saving}>
-      <div className="section-heading">
+    <section className={`${styles.preference} section ${styles.section} panel preference-panel ${styles.preferencePanel}`} aria-labelledby="appearance-heading" aria-busy={saving}>
+      <div className={`section-heading ${styles.sectionHeading}`}>
         <div>
-          <p className="section-label">Cá nhân hóa</p>
+          <p className={`section-label ${styles.sectionLabel}`}>Cá nhân hóa</p>
           <h2 id="appearance-heading">Chế độ màu</h2>
           <p>Tuỳ chọn được lưu theo người dùng và chỉ đặt tại Cài đặt để tránh đổi nhầm khi đang vận hành.</p>
         </div>
-        <span className="preference-save-state" aria-live="polite">{saving ? "Đang lưu…" : "Tự động lưu"}</span>
+        <span className={`preference-save-state`} aria-live="polite">{saving ? "Đang lưu…" : "Tự động lưu"}</span>
       </div>
-      <RadioGroup.Root className="theme-preference-grid" value={value} onValueChange={(theme) => void select(theme as Theme)} aria-label="Chọn chế độ giao diện">
+      <RadioGroup.Root className={`theme-preference-grid ${styles.themePreferenceGrid}`} value={value} onValueChange={(theme) => void select(theme as Theme)} aria-label="Chọn chế độ giao diện">
         {(Object.keys(LABELS) as Theme[]).map((item) => (
-          <RadioGroup.Item className="theme-preference-card" value={item} key={item} disabled={saving}>
-            <span className="theme-preference-icon"><ThemeIcon theme={item} /></span>
+          <RadioGroup.Item className={`theme-preference-card ${styles.themePreferenceCard}`} value={item} key={item} disabled={saving}>
+            <span className={`theme-preference-icon ${styles.themePreferenceIcon}`}><ThemeIcon theme={item} /></span>
             <span><strong>{LABELS[item].title}</strong><small>{LABELS[item].description}</small></span>
-            <span className="theme-radio-dot" aria-hidden="true" />
+            <span className={`theme-radio-dot ${styles.themeRadioDot}`} aria-hidden="true" />
           </RadioGroup.Item>
         ))}
       </RadioGroup.Root>
-      {error ? <p className="filter-error" role="alert">{error}</p> : null}
+      {error ? <p className={`filter-error`} role="alert">{error}</p> : null}
     </section>
   );
 }

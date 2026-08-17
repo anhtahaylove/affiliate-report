@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CalendarClock, Copy, Save, Target } from "lucide-react";
 import { CurrentUser, MonthlyKpiRow, TargetRow, copyPreviousTargets, loadMonthlyKpi, loadTargets, saveTarget } from "@/lib/api";
 import { UrlFilters } from "@/components/filters";
 import { canWrite } from "@/components/ui";
@@ -8,6 +9,7 @@ import { invalidateApiCache } from "@/lib/use-api";
 import { achievementTone, errorMessage, formatMoney, integer, percent } from "@/lib/format";
 import { AccountIdentity } from "@/components/account-identity";
 import type { AccountDirectory } from "@/lib/account-directory";
+import styles from "./targets.module.css";
 
 function previousMonthOf(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -27,6 +29,7 @@ export function TargetsPage({ user, filters, accounts, directory }: { user: Curr
   const [saving, setSaving] = useState("");
   const [copying, setCopying] = useState(false);
   const [message, setMessage] = useState("");
+  const [focusedAccount, setFocusedAccount] = useState("");
   const scopedAccounts = filters.accounts.length ? accounts.filter((account) => filters.accounts.includes(account)) : accounts;
   const allowedAccounts = user.role === "owner" ? ["ALL", ...scopedAccounts] : scopedAccounts;
   const previousMonth = previousMonthOf(filters.month);
@@ -79,53 +82,72 @@ export function TargetsPage({ user, filters, accounts, directory }: { user: Curr
   }
   const targetMap = new Map(targets.map((target) => [target.account, target]));
   const kpiMap = new Map(kpi.map((row) => [row.account, row]));
+  const mobileAccount = allowedAccounts.includes(focusedAccount) ? focusedAccount : allowedAccounts[0] ?? "";
   return (
-    <section className="section panel wide targets-workflow-page">
-      <div className="section-heading">
+    <section className={`${styles.page} targets-workflow-page`}>
+      <div className={styles.heading}>
         <div>
           <p className="section-label">Mục tiêu hoa hồng mỗi ngày (KPI)</p>
           <h2>Lập mục tiêu tháng {monthLabel(filters.month)}</h2>
           <p className="subtle">Tiến độ tính trên phạm vi đang lọc: {filters.start.split("-").reverse().join("/")} – {filters.end.split("-").reverse().join("/")}.</p>
         </div>
-        {canWrite(user) ? <button type="button" onClick={() => void copyPrevious()} disabled={copying}>{copying ? "Đang chép…" : `Chép từ ${monthLabel(previousMonth)}`}</button> : <span className="read-only">Chỉ xem</span>}
+        {canWrite(user) ? <button className={styles.copyButton} type="button" onClick={() => void copyPrevious()} disabled={copying}><Copy size={16} aria-hidden="true" /> {copying ? "Đang chép…" : `Chép KPI từ ${monthLabel(previousMonth)}`}</button> : <span className={styles.readOnly}>Chỉ xem</span>}
       </div>
-      <div className="target-context panel-muted">
-        <strong>Lưu ý</strong>
-        <span>Nếu tháng {monthLabel(previousMonth)} có dữ liệu, nút chép sẽ tạo KPI còn thiếu và giữ nguyên KPI đã nhập cho tháng hiện tại.</span>
+
+      <div className={styles.context}>
+        <CalendarClock size={18} aria-hidden="true" />
+        <div><strong>Sao chép an toàn</strong><span>Chỉ tạo KPI còn thiếu từ tháng {monthLabel(previousMonth)}; KPI đã nhập cho tháng này luôn được giữ nguyên.</span></div>
       </div>
-      <div className="target-planner-grid">
+
+      <div className={styles.mobileAccountPicker} role="group" aria-label="Chọn tài khoản để chỉnh mục tiêu">
+        {allowedAccounts.map((account) => <button key={account} type="button" aria-pressed={mobileAccount === account} onClick={() => setFocusedAccount(account)}>{directory.label(account)}</button>)}
+      </div>
+
+      <div className={styles.planner} role="table" aria-label={`Mục tiêu tháng ${monthLabel(filters.month)}`}>
+        <div className={styles.plannerHeader} role="row">
+          <span role="columnheader">Tài khoản</span>
+          <span role="columnheader">Hoa hồng thực tế</span>
+          <span role="columnheader">KPI/ngày</span>
+          <span role="columnheader">KPI tháng</span>
+          <span role="columnheader">Tiến độ</span>
+          <span role="columnheader">Điều chỉnh</span>
+        </div>
         {allowedAccounts.map((account) => {
           const target = targetMap.get(account);
           const row = kpiMap.get(account);
           const achievement = row?.target_achievement;
           const draft = drafts[account] ?? "";
           return (
-            <article className="target-card" key={account}>
-              <div className="record-title">
-                <div>
-                  <AccountIdentity directory={directory} code={account} />
-                  <span>{account === "ALL" ? "Mục tiêu mặc định cho toàn bộ tài khoản" : "Mục tiêu riêng theo tài khoản"}</span>
+            <article className={`${styles.plannerRow} target-card`} key={account} role="row" data-mobile-active={mobileAccount === account}>
+              <div className={styles.accountCell} role="cell">
+                <div className={styles.accountIdentity}>
+                  <span className={styles.targetIcon}><Target size={16} aria-hidden="true" /></span>
+                  <div>
+                   <AccountIdentity directory={directory} code={account} />
+                    <span>{account === "ALL" ? "Mục tiêu tổng độc lập" : "Mục tiêu riêng theo tài khoản"}</span>
+                  </div>
                 </div>
-                <span className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</span>
               </div>
-              <dl className="target-metrics">
-                <div><dt>Hoa hồng thực tế</dt><dd>{formatMoney(row?.actual_commission)}</dd></div>
-                <div><dt>KPI/ngày hiện tại</dt><dd>{formatMoney(target?.daily_target_commission)}</dd></div>
-                <div><dt>KPI tháng</dt><dd>{formatMoney(row?.monthly_target)}</dd></div>
-                <div><dt>Chênh lệch</dt><dd className="tone-text" data-tone={row?.gap == null ? undefined : row.gap < 0 ? "critical" : "good"}>{row?.gap == null ? "—" : row.gap < 0 ? `Còn thiếu ${formatMoney(Math.abs(row.gap))}` : `Vượt mục tiêu ${formatMoney(row.gap)}`}</dd></div>
-              </dl>
-              <div className="target-edit-row">
-                <div className="field">
+              <div className={styles.metricCell} role="cell"><span>Hoa hồng thực tế</span><strong>{formatMoney(row?.actual_commission)}</strong></div>
+              <div className={styles.metricCell} role="cell"><span>KPI/ngày hiện tại</span><strong>{formatMoney(target?.daily_target_commission)}</strong></div>
+              <div className={styles.metricCell} role="cell"><span>KPI tháng</span><strong>{formatMoney(row?.monthly_target)}</strong></div>
+              <div className={styles.progressCell} role="cell">
+                <div><span>Tiến độ</span><strong className="tone-text" data-tone={achievementTone(achievement)}>{percent(achievement)}</strong></div>
+                <progress max={1} value={Math.min(1, Math.max(0, achievement ?? 0))} aria-label={`Tiến độ mục tiêu ${directory.get(account).accessibleName}`} />
+                <span className="tone-text" data-tone={row?.gap == null ? undefined : row.gap < 0 ? "critical" : "good"}>{row?.gap == null ? "Chưa có KPI" : row.gap < 0 ? `Còn thiếu ${formatMoney(Math.abs(row.gap))}` : `Vượt ${formatMoney(row.gap)}`}</span>
+              </div>
+              <div className={styles.editCell} role="cell">
+                <div className={`${styles.targetField} field`}>
                   <label htmlFor={`target-${account}`}>KPI/ngày mới</label>
                   <input id={`target-${account}`} type="number" min="0" step="1" value={draft} onChange={(event) => setDrafts((current) => ({ ...current, [account]: event.target.value }))} disabled={!canWrite(user) || saving === account} aria-label={`KPI ngày ${directory.get(account).accessibleName}`} />
                 </div>
-                <button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}>{saving === account ? "Đang lưu…" : "Lưu"}</button>
+                <button type="button" onClick={() => void save(account)} disabled={!canWrite(user) || saving === account}><Save size={15} aria-hidden="true" /> {saving === account ? "Đang lưu…" : "Lưu"}</button>
               </div>
             </article>
           );
         })}
       </div>
-      {message ? <p className="upload-result" role={/^(Đã lưu|Đã chép|Tháng )/.test(message) ? "status" : "alert"}>{message}</p> : null}
+      {message ? <p className={`${styles.message} upload-result`} role={/^(Đã lưu|Đã chép|Tháng )/.test(message) ? "status" : "alert"}>{message}</p> : null}
     </section>
   );
 }

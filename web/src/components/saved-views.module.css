@@ -1,0 +1,32 @@
+@theme inline {
+  --color-background: var(--color-page); --color-surface: var(--surface-primary); --color-surface-soft: var(--surface-secondary);
+  --color-foreground: var(--text-primary); --color-muted-foreground: var(--text-secondary); --color-border: var(--border-subtle); --color-accent: var(--interactive-primary);
+  --color-success: var(--status-success-text); --color-warning: var(--status-warning-text); --color-danger: var(--status-danger-text);
+  --font-sans: var(--font-app);
+}
+
+.savedViewsBar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 12px; padding: 10px 12px; }
+.savedViewsMobileToggle { display: none; }
+.savedViewsContent { display: contents; }
+.savedViewPicker, .savedViewCreate { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.savedViewPicker { flex: 1 1 360px; }
+.savedViewPicker label { font-weight: 800; }
+.savedViewPicker select { min-width: min(240px, 100%); }
+.savedViewCreate { flex: 1 1 480px; justify-content: flex-end; }
+.savedViewCreate > label { display: flex; align-items: center; gap: 5px; font-size: .83rem; color: var(--ink-soft); }
+.savedViewCreate input[aria-label] { flex: 1 1 180px; }
+.savedViewCreate button { display: inline-flex; align-items: center; gap: 6px; }
+
+@media (max-width: 860px) {
+  .savedViewsBar { display: grid; gap: 0; padding: 0; overflow: hidden; }
+  .savedViewsMobileToggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 9px 12px; border: 0; border-radius: 0; background: transparent; color: var(--ink); text-align: left; }
+  .savedViewsMobileToggle > span { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; }
+  .savedViewsMobileToggle small { overflow: hidden; color: var(--ink-soft); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+  .savedViewsMobileToggle > svg { flex: 0 0 auto; transition: transform 180ms ease-out; }
+  .savedViewsMobileToggle[aria-expanded="true"] > svg { transform: rotate(180deg); }
+  .savedViewsContent { display: none; gap: 10px; padding: 0 12px 12px; border-top: 1px solid var(--line); }
+  .savedViewsContent.isOpen { display: grid; }
+  .savedViewPicker { padding-top: 12px; }
+  .savedViewCreate { justify-content: stretch; }
+  .savedViewCreate > * { flex: 1 1 auto; }
+}

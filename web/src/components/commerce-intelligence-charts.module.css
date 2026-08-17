@@ -1,0 +1,14 @@
+.chart {
+  min-width: 0;
+  margin: 12px 0 0;
+}
+
+.chart :global(.recharts-responsive-container) {
+  min-width: 0;
+}
+
+@media (max-width: 420px) {
+  .chart {
+    margin-inline: -8px;
+  }
+}

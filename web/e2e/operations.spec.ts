@@ -28,7 +28,7 @@ test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async
 
   await test.step("dashboard hiện đúng tổng hoa hồng", async () => {
     await page.goto(`/${SCOPE}`);
-    const commission = page.locator("article.pulse-metric", { hasText: "Hoa hồng thực tế" });
+    const commission = page.locator('[data-testid="dashboard-metric"]', { hasText: "Hoa hồng thực tế" });
     await expect(commission.locator("strong")).toContainText("40.000");
   });
 
@@ -53,6 +53,6 @@ test("nhập file, đọc số liệu rồi hoàn tác lần nhập đó", async
   await test.step("dữ liệu trở về rỗng", async () => {
     await page.goto(`/orders/${SCOPE}`);
     await expect(page.getByRole("heading", { level: 2 })).toContainText("0 đơn trong bộ lọc");
-    await expect(page.getByText("Không có đơn phù hợp", { exact: false })).toBeVisible();
+    await expect(page.getByText("Không có đơn phù hợp", { exact: true })).toBeVisible();
   });
 });
