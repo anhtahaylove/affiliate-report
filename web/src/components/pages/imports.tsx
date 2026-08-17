@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CurrentUser, ImportHistoryRow, RejectedRow, UndoImportPreview, loadImportHistory, previewUndoImport, undoImport, uploadExport, visibleRejectedRows } from "@/lib/api";
+import { CurrentUser, ImportHistoryRow, ImportWarning, RejectedRow, UndoImportPreview, loadImportHistory, previewUndoImport, undoImport, uploadExport, visibleRejectedRows } from "@/lib/api";
 import { RecentImports } from "@/components/recent-imports";
 import { PairingPanel } from "@/components/pairing-panel";
+import { ImportOverlapWarning } from "@/components/import-overlap-warning";
 import { ConfirmDialog, canWrite, isOwner } from "@/components/ui";
 import { invalidateApiCache } from "@/lib/use-api";
 import { errorMessage, integer } from "@/lib/format";
@@ -18,6 +19,7 @@ type FileResult = {
   detail: string;
   rejectedTotal: number;
   rejectedRows: RejectedRow[];
+  warnings: ImportWarning[];
 };
 
 const OUTCOME_LABELS: Record<FileOutcome, string> = {
@@ -77,7 +79,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
       setCurrentFile(file.name);
       setMessage(`Đang xử lý file ${integer.format(index + 1)}/${integer.format(queued.length)}: ${file.name}`);
       if (!EXPORT_FILENAME_RE.test(file.name)) {
-        collected.push({ file: file.name, outcome: "skipped", detail: EXPORT_FILENAME_HINT, rejectedTotal: 0, rejectedRows: [] });
+        collected.push({ file: file.name, outcome: "skipped", detail: EXPORT_FILENAME_HINT, rejectedTotal: 0, rejectedRows: [], warnings: [] });
         setProcessedFiles(index + 1);
         setResults([...collected]);
         continue;
@@ -93,9 +95,10 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
             : `${integer.format(result.inserted)} dòng mới · ${integer.format(result.updated)} cập nhật · ${integer.format(result.unchanged)} trùng · tổng ${integer.format(imported)} dòng`,
           rejectedTotal: result.rejected,
           rejectedRows: visibleRejectedRows(result.rejected_rows ?? []),
+          warnings: result.warnings ?? [],
         });
       } catch (reason) {
-        collected.push({ file: file.name, outcome: "failed", detail: errorMessage(reason, "Nhập dữ liệu thất bại."), rejectedTotal: 0, rejectedRows: [] });
+        collected.push({ file: file.name, outcome: "failed", detail: errorMessage(reason, "Nhập dữ liệu thất bại."), rejectedTotal: 0, rejectedRows: [], warnings: [] });
       }
       setProcessedFiles(index + 1);
       setResults([...collected]);
@@ -184,6 +187,7 @@ export function ImportsPage({ user, accounts, directory, maxUploadMb }: { user: 
                 <li key={result.file} className="import-result" data-outcome={result.outcome}>
                   <div className="record-title"><strong>{result.file}</strong><span className="status-badge" data-outcome={result.outcome}>{OUTCOME_LABELS[result.outcome]}</span></div>
                   <span>{result.detail}</span>
+                  <ImportOverlapWarning warnings={result.warnings} />
                   {result.rejectedTotal ? (
                     <details>
                       <summary>{integer.format(result.rejectedTotal)} dòng bị từ chối{result.rejectedTotal > result.rejectedRows.length ? ` (hiện ${integer.format(result.rejectedRows.length)} dòng đầu)` : ""}</summary>

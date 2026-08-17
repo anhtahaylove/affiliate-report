@@ -1137,6 +1137,7 @@ def create_app(engine: Engine | None = None, auth: AuthService | None = None) ->
             "unchanged": int(result.get("unchanged", 0)),
             "rejected": int(result.get("rejected", 0)),
             "rejected_rows": result.get("rejected_rows", []),
+            "warnings": result.get("warnings", []),
         }
 
     # --- Ghép cặp điện thoại ---------------------------------------------------------------

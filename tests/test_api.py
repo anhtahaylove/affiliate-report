@@ -496,9 +496,40 @@ def test_import_requires_account_and_imports_xlsx(tmp_path):
         "unchanged": 0,
         "rejected": 0,
         "rejected_rows": [],
+        "warnings": [],
     }
     assert duplicate.json()["duplicate"] is True
     assert duplicate.json()["inserted"] == 0
+
+
+def test_import_api_returns_cross_account_overlap_warning(tmp_path):
+    client, _ = api(tmp_path)
+    rows = [raw_export_row(**{"ID đơn hàng": f"O{index}", "ID SKU": f"S{index}"}) for index in range(25)]
+    data = xlsx_bytes(rows)
+
+    first = client.post(
+        "/api/v1/imports",
+        data={"account": "CHIISTORE"},
+        files={"file": ("affiliate_orders_source.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    second = client.post(
+        "/api/v1/imports",
+        data={"account": "EMLINHNOIY"},
+        files={"file": ("affiliate_orders_target.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+
+    assert first.status_code == 200
+    assert first.json()["warnings"] == []
+    assert second.status_code == 200
+    assert second.json()["warnings"][0] | {"message": "ignored"} == {
+        "code": "cross_account_overlap",
+        "severity": "warning",
+        "other_account": "CHIISTORE",
+        "overlap_count": 25,
+        "incoming_count": 25,
+        "overlap_ratio": 1.0,
+        "message": "ignored",
+    }
 
 
 def test_import_rejects_file_when_stream_crosses_size_limit(tmp_path, monkeypatch):

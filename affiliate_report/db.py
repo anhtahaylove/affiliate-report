@@ -420,6 +420,8 @@ def _ensure_account(conn, account: str) -> None:
 
 IMPORT_BATCH_SIZE = 1000
 _LOOKUP_CHUNK = 500
+CROSS_ACCOUNT_OVERLAP_RATIO = 0.80
+CROSS_ACCOUNT_OVERLAP_MIN_KEYS = 20
 
 
 def _current_versions(conn, business_keys) -> dict[str, tuple[int, str, int]]:
@@ -440,6 +442,63 @@ def _current_versions(conn, business_keys) -> dict[str, tuple[int, str, int]]:
         for row in conn.execute(stmt):
             found[row.business_key] = (row.id, row.normalized_hash, row.version)
     return found
+
+
+def _cross_account_overlap_warnings(conn, account: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cảnh báo khi một file gần như là snapshot đã được gắn cho account khác.
+
+    Dedup vẫn phải scope theo account: hai affiliate account hợp lệ có thể dùng cùng order id,
+    nên cảnh báo này không được tự gộp hoặc chặn import. So sánh đúng grain order + SKU và chỉ
+    báo khi tỷ lệ đủ cao; file nhỏ chỉ báo nếu toàn bộ key trùng để tránh nhiễu từ vài va chạm.
+    """
+    incoming = {
+        (str(row.get("ID đơn hàng") or ""), str(row.get("ID SKU") or ""))
+        for row in rows
+        if not row.get("_rejected") and row.get("ID đơn hàng") and row.get("ID SKU")
+    }
+    if not incoming:
+        return []
+
+    matches: dict[str, set[tuple[str, str]]] = {}
+    order_ids = sorted({order_id for order_id, _ in incoming})
+    for offset in range(0, len(order_ids), _LOOKUP_CHUNK):
+        stmt = select(
+            order_line_versions.c.account,
+            order_line_versions.c.order_id,
+            order_line_versions.c.sku_id,
+        ).where(
+            order_line_versions.c.is_current.is_(True),
+            order_line_versions.c.account != account,
+            order_line_versions.c.order_id.in_(order_ids[offset : offset + _LOOKUP_CHUNK]),
+        )
+        for existing_account, order_id, sku_id in conn.execute(stmt):
+            key = (str(order_id or ""), str(sku_id or ""))
+            if key in incoming:
+                matches.setdefault(str(existing_account), set()).add(key)
+
+    warnings: list[dict[str, Any]] = []
+    incoming_count = len(incoming)
+    for other_account, keys in matches.items():
+        overlap_count = len(keys)
+        overlap_ratio = overlap_count / incoming_count
+        enough_evidence = overlap_count >= CROSS_ACCOUNT_OVERLAP_MIN_KEYS or overlap_count == incoming_count
+        if overlap_ratio < CROSS_ACCOUNT_OVERLAP_RATIO or not enough_evidence:
+            continue
+        percent = f"{overlap_ratio * 100:.1f}".replace(".", ",")
+        warnings.append({
+            "code": "cross_account_overlap",
+            "severity": "warning",
+            "other_account": other_account,
+            "overlap_count": overlap_count,
+            "incoming_count": incoming_count,
+            "overlap_ratio": round(overlap_ratio, 4),
+            "message": (
+                f"{overlap_count}/{incoming_count} dòng đơn hàng + SKU ({percent}%) cũng đang tồn tại trong "
+                f"{other_account}. Có thể bạn đã chọn nhầm tài khoản hoặc đang nhập hai snapshot "
+                "của cùng một affiliate account."
+            ),
+        })
+    return sorted(warnings, key=lambda item: (-item["overlap_ratio"], -item["overlap_count"], item["other_account"]))
 
 
 def _write_plans(conn, plans: list[dict[str, Any]]) -> None:
@@ -496,6 +555,8 @@ def import_rows(
         if old_batch:
             return {"batch_id": old_batch["id"], "duplicate": True, "inserted": 0, "updated": 0, "unchanged": 0, "rejected": 0}
 
+        overlap_warnings = _cross_account_overlap_warnings(conn, account, rows)
+
         conn.execute(delete(sync_tombstones).where(
             sync_tombstones.c.entity_type == "import_batch",
             sync_tombstones.c.entity_key == import_batch_sync_id(account, sha),
@@ -519,6 +580,7 @@ def import_rows(
             "unchanged": 0,
             "rejected": 0,
             "rejected_rows": [],
+            "warnings": overlap_warnings,
         }
         current_by_key = _current_versions(conn, hashes_by_key)
         plans: list[dict[str, Any]] = []

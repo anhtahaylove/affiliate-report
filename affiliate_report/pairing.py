@@ -207,11 +207,15 @@ class PairingRunner:
         self._server: Any = None
         self._thread: Any = None
         self._hen: Any = None
+        self._last_result: dict[str, Any] | None = None
+        self._last_message = ""
         self._lock = threading.Lock()
 
     def bat(self, account: str, *, ttl: float = TOKEN_TTL_SECONDS) -> PairingSession:
         with self._lock:
             self._khoi_dong()
+            self._last_result = None
+            self._last_message = ""
             phien = self.state.bat(account, ttl=ttl)
             self._hen_don(ttl)
             return phien
@@ -246,7 +250,16 @@ class PairingRunner:
     def trang_thai(self) -> dict[str, Any]:
         phien = self.state.session
         if phien is None or not self.state.dang_bat():
-            return {"enabled": False, "so_lan_nhan": self.state.so_lan_nhan}
+            result: dict[str, Any] = {"enabled": False, "so_lan_nhan": self.state.so_lan_nhan}
+            if self._last_result is not None:
+                result.update(
+                    {
+                        "mode": "lan",
+                        "message": self._last_message,
+                        "result": self._last_result,
+                    }
+                )
+            return result
         url = dia_chi_ghep_cap(self.state)
         if not phien.qr_svg:
             phien.qr_svg = ma_qr_svg(url)
@@ -259,6 +272,14 @@ class PairingRunner:
             "so_lan_nhan": self.state.so_lan_nhan,
         }
 
+    def _nhan_va_luu_ket_qua(self, account: str, filename: str, data: bytes) -> dict[str, Any]:
+        """Lưu kết quả import để desktop đọc lại sau khi listener dùng một lần tự đóng."""
+        result = self._nhan_tep(account, filename, data)
+        with self._lock:
+            self._last_result = result
+            self._last_message = "Đã nhận và nhập file từ điện thoại."
+        return result
+
     # --- phần điều khiển uvicorn ---------------------------------------------------------
 
     def _khoi_dong(self) -> None:
@@ -266,7 +287,11 @@ class PairingRunner:
             return
         import uvicorn
 
-        app = create_pair_app(state=self.state, nhan_tep=self._nhan_tep, max_upload_mb=self._max_upload_mb)
+        app = create_pair_app(
+            state=self.state,
+            nhan_tep=self._nhan_va_luu_ket_qua,
+            max_upload_mb=self._max_upload_mb,
+        )
         port = self.state.port or _cong_trong()
         self.state.port = port
         self._server = uvicorn.Server(

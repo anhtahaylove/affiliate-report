@@ -100,8 +100,18 @@ def test_envelope_rejects_non_xlsx_and_size_mismatch() -> None:
 def test_runner_uses_only_hashes_at_relay_and_imports_exact_plaintext() -> None:
     relay = RelayHarness()
     imported: list[tuple[str, str, bytes]] = []
+    warning = {
+        "code": "cross_account_overlap",
+        "severity": "warning",
+        "other_account": "SHOP1",
+        "overlap_count": 24,
+        "incoming_count": 25,
+        "overlap_ratio": 0.96,
+        "message": "24/25 đơn và SKU đã có trong SHOP1.",
+    }
     runner = CloudPairingRunner(
-        nhan_tep=lambda account, filename, data: imported.append((account, filename, data)) or {"inserted": 3},
+        nhan_tep=lambda account, filename, data: imported.append((account, filename, data))
+        or {"inserted": 3, "warnings": [warning]},
         max_upload_mb=20,
         endpoints=("https://relay.example",),
         client_factory=relay.factory,
@@ -137,7 +147,7 @@ def test_runner_uses_only_hashes_at_relay_and_imports_exact_plaintext() -> None:
         "phase": "idle",
         "message": "Đã nhận và nhập file từ điện thoại.",
         "error": "",
-        "result": {"inserted": 3},
+        "result": {"inserted": 3, "warnings": [warning]},
     }
 
 

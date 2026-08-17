@@ -1284,6 +1284,20 @@ th[aria-sort] .sort-button span { color: var(--teal); }
 .import-result summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; }
 .import-result ul { margin: 8px 0 0; padding-left: 1.1rem; color: var(--ink-soft); }
 
+.import-overlap-warning {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--warning-line);
+  border-radius: 10px;
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+.import-overlap-warning strong,
+.import-overlap-warning span,
+.import-overlap-warning li { color: inherit; }
+.import-overlap-warning ul { margin: 0; }
+
 .status-badge[data-outcome="imported"] { border-color: var(--accent-line); background: var(--teal-soft); color: var(--accent-strong); }
 .status-badge[data-outcome="duplicate"] { border-color: var(--line); background: var(--surface-soft); color: var(--ink-soft); }
 .status-badge[data-outcome="skipped"] { border-color: var(--warning-line); background: var(--warning-soft); color: var(--warning-text); }
@@ -2090,6 +2104,7 @@ td, th, .metric strong, .import-item span, .backup-item small {
   background: var(--teal-soft); color: var(--accent-strong); font-size: 0.86rem;
 }
 .pairing-message.is-success { border-color: var(--success-line); background: var(--success-soft); color: var(--success); }
+.pairing-panel > .import-overlap-warning { margin-top: 12px; }
 
 .pairing-mode-picker {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;

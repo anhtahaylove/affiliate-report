@@ -140,6 +140,17 @@ export type UploadResponse = {
   unchanged: number;
   rejected: number;
   rejected_rows?: RejectedRow[];
+  warnings?: ImportWarning[];
+};
+
+export type ImportWarning = {
+  code: "cross_account_overlap" | string;
+  severity: "warning" | string;
+  other_account?: string;
+  overlap_count?: number;
+  incoming_count?: number;
+  overlap_ratio?: number;
+  message: string;
 };
 
 export type RejectedRow = {
@@ -843,6 +854,15 @@ export async function loadImportHistory(limit = 10, accounts?: string[]) {
 
 export type PairingMode = "lan" | "cloud";
 
+export type PairingImportResult = {
+  duplicate?: boolean;
+  inserted?: number;
+  updated?: number;
+  unchanged?: number;
+  rejected?: number;
+  warnings?: ImportWarning[];
+};
+
 export type PairingStatus = {
   enabled: boolean;
   mode?: PairingMode;
@@ -855,7 +875,7 @@ export type PairingStatus = {
   message?: string;
   error?: string;
   relay_host?: string;
-  result?: Record<string, unknown> | null;
+  result?: PairingImportResult | null;
 };
 
 export async function loadPairingStatus() {

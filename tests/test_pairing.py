@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from affiliate_report.pairing import (
     PairingError,
+    PairingRunner,
     PairingState,
     create_pair_app,
     dia_chi_ghep_cap,
@@ -53,6 +54,37 @@ def test_token_dung_duoc_thi_tep_di_vao_duong_nhap_san_co(state, client, da_nhan
 
     assert r.status_code == 200
     assert da_nhan == [("CHIISTORE", "a.xlsx", 4)]
+
+
+def test_lan_runner_cong_khai_canh_bao_overlap_sau_khi_nhan_tep() -> None:
+    warning = {
+        "code": "cross_account_overlap",
+        "severity": "warning",
+        "other_account": "SHOP1",
+        "overlap_count": 24,
+        "incoming_count": 25,
+        "overlap_ratio": 0.96,
+        "message": "24/25 đơn và SKU đã có trong SHOP1.",
+    }
+    expected = {"inserted": 25, "warnings": [warning]}
+    runner = PairingRunner(nhan_tep=lambda *_: expected, max_upload_mb=MAX_MB, port=8765)
+    app = create_pair_app(
+        state=runner.state,
+        nhan_tep=runner._nhan_va_luu_ket_qua,
+        max_upload_mb=MAX_MB,
+    )
+    session = runner.state.bat("SHOP3")
+
+    response = TestClient(app).post(f"/pair/{session.token}", files=tep("affiliate_orders.xlsx"))
+
+    assert response.status_code == 200
+    assert runner.trang_thai() == {
+        "enabled": False,
+        "mode": "lan",
+        "so_lan_nhan": 1,
+        "message": "Đã nhận và nhập file từ điện thoại.",
+        "result": expected,
+    }
 
 
 # --- Bốn trường hợp phải bị từ chối ------------------------------------------------------

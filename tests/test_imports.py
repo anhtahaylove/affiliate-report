@@ -112,6 +112,53 @@ def test_file_hash_is_scoped_to_affiliate_account():
     assert second["inserted"] == 1
 
 
+def test_import_warns_when_order_sku_keys_heavily_overlap_another_account():
+    e = engine()
+    source = [raw_row(order=f"O{index}", sku=f"S{index}", account="SOURCE") for index in range(100)]
+    incoming = [raw_row(order=f"O{index}", sku=f"S{index}", account="TARGET") for index in range(90)]
+    incoming.extend(raw_row(order=f"NEW{index}", sku=f"NS{index}", account="TARGET") for index in range(10))
+
+    import_rows(e, filename="source.xlsx", file_bytes=b"source", account="SOURCE", rows=source)
+    result = import_rows(e, filename="target.xlsx", file_bytes=b"target", account="TARGET", rows=incoming)
+
+    assert result["inserted"] == 100
+    assert result["warnings"] == [{
+        "code": "cross_account_overlap",
+        "severity": "warning",
+        "other_account": "SOURCE",
+        "overlap_count": 90,
+        "incoming_count": 100,
+        "overlap_ratio": 0.9,
+        "message": (
+            "90/100 dòng đơn hàng + SKU (90,0%) cũng đang tồn tại trong SOURCE. "
+            "Có thể bạn đã chọn nhầm tài khoản hoặc đang nhập hai snapshot của cùng một affiliate account."
+        ),
+    }]
+
+
+def test_import_overlap_warning_ignores_weak_partial_matches_but_flags_small_exact_copy():
+    e = engine()
+    source = [raw_row(order=f"O{index}", sku=f"S{index}", account="SOURCE") for index in range(100)]
+    partial = [raw_row(order=f"O{index}", sku=f"S{index}", account="PARTIAL") for index in range(79)]
+    partial.extend(raw_row(order=f"NEW{index}", sku=f"NS{index}", account="PARTIAL") for index in range(21))
+    tiny = [raw_row(order="O80", sku="S80", account="TINY"), raw_row(order="O81", sku="S81", account="TINY")]
+
+    import_rows(e, filename="source.xlsx", file_bytes=b"source", account="SOURCE", rows=source)
+    partial_result = import_rows(e, filename="partial.xlsx", file_bytes=b"partial", account="PARTIAL", rows=partial)
+    tiny_result = import_rows(e, filename="tiny.xlsx", file_bytes=b"tiny", account="TINY", rows=tiny)
+
+    assert partial_result["warnings"] == []
+    assert tiny_result["warnings"][0] | {"message": "ignored"} == {
+        "code": "cross_account_overlap",
+        "severity": "warning",
+        "other_account": "SOURCE",
+        "overlap_count": 2,
+        "incoming_count": 2,
+        "overlap_ratio": 1.0,
+        "message": "ignored",
+    }
+
+
 def test_same_business_key_same_hash_is_unchanged_on_new_file():
     e = engine()
     rows = [raw_row()]

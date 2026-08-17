@@ -9,6 +9,7 @@ import {
   type PairingMode,
   type PairingStatus,
 } from "@/lib/api";
+import { ImportOverlapWarning } from "@/components/import-overlap-warning";
 import { errorMessage } from "@/lib/format";
 
 /** Hybrid Pairing: LAN là đường nhanh nhất; cloud là relay ciphertext khi hai máy khác mạng. */
@@ -89,6 +90,7 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
   const giay = String(conLai % 60).padStart(2, "0");
   const cloud = status.mode === "cloud";
   const visibleError = requestError || status.error || "";
+  const overlapWarnings = status.result?.warnings ?? [];
 
   return (
     <section className="panel pairing-panel" aria-labelledby="pairing-title">
@@ -111,6 +113,10 @@ export function PairingPanel({ account, onNhanTep }: { account: string; onNhanTe
       {!visibleError && status.message ? (
         <p className={`pairing-message ${status.result ? "is-success" : ""}`} role="status">{status.message}</p>
       ) : null}
+      <ImportOverlapWarning
+        warnings={overlapWarnings}
+        footer="File đã được nhập để không làm mất dữ liệu. Hãy kiểm tra tài khoản đang chọn trước khi dùng báo cáo tổng."
+      />
 
       {!status.enabled ? (
         <fieldset className="pairing-mode-picker" disabled={busy !== null || !account}>
